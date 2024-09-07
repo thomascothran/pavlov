@@ -1,0 +1,11 @@
+{:paths ["src" "resources"]
+ :deps {org.clojure/clojure {:mvn/version "1.11.1"}}
+ :aliases
+ {:test
+  {:extra-paths ["test"]
+   :extra-deps {org.clojure/test.check {:mvn/version "1.1.1"}
+                lambdaisland/kaocha {:mvn/version "1.91.1392"}}}
+  :build {:deps {io.github.clojure/tools.build
+                 {:mvn/version "0.9.6"}
+                 slipset/deps-deploy {:mvn/version "0.2.0"}}
+          :ns-default build}}}
