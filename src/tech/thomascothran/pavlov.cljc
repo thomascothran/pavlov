@@ -18,15 +18,20 @@
 
   ;; returns a triple of next event, active-bthreads, parked-bthreads
 
-  [bthreads last-event]
-  (let [bids (mapv #(proto/bid % last-event) bthreads)
-        blocked (into #{} (mapcat proto/block) bids)
-        requested (into []
-                        (comp (mapcat proto/request)
-                              (remove blocked))
-                        bids)
-        #_#_waiting (mapv second bids)]
-    (first requested)))
+  ;; single arity is startup.
+  ;; listener -> map of event type -> bthreads.
+  ([bthreads]
+   {::event {:type ::init-event}
+    ::registry {::init-event (into #{} bthreads)}})
+  ([bthread-registry event]
+   (let [bthreads (get bthread-registry (:type event))
+         bids (mapv #(proto/bid % event) bthreads)
+         blocked (into #{} (mapcat proto/block) bids)
+         requested (into []
+                         (comp (mapcat proto/request)
+                               (remove blocked))
+                         bids)]
+     {::event (first requested)})))
 
 #_(defprotocol Program
     :extend-via-metadata true
