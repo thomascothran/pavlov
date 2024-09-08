@@ -1,27 +1,26 @@
 (ns tech.thomascothran.pavlov-test
   (:require [clojure.test :refer [deftest is testing]]
-            [tech.thomascothran.pavlov.proto :as proto]
+            [tech.thomascothran.pavlov.bthread.proto :as bthread]
+            [tech.thomascothran.pavlov.bthread.defaults]
+            [tech.thomascothran.pavlov.bid.defaults]
             [tech.thomascothran.pavlov :as b]))
 
 (def x-request
-  (with-meta {:name :x-request}
-    {`proto/bid (constantly [#{:x}])}))
+  {:request #{:x}})
 
 (def block-x
-  (with-meta {:name :block-x}
-    {`proto/bid (constantly [#{} #{} #{:x}])}))
+  {:block #{:x}})
 
 (def y-request
   (with-meta {:name :y-request}
-    {`proto/bid (constantly [#{:y}])}))
+    {`bthread/bid (constantly {:request #{:y}})}))
 
 (def nil-request
-  (with-meta {}
-    {`proto/bid (constantly [])}))
+  {})
 
 (def x-waiting-on-y
-  (with-meta {}
-    {`proto/bid (constantly [#{:x} #{:y}])}))
+  {:wait-on #{:y}
+   :request #{:x}})
 
 (deftest init-next-state
   (testing "Given we initialize with two bthreads
@@ -63,12 +62,19 @@
                   (get ::b/event))))))
 
 (deftest test-next-event-waiting
-  (testing "Given that an event is not waiting on an event
+  (testing "Given that a bthread is not waiting on an event
     When the next state is requested
     Then it is not triggered"
     (is (-> {:some-event [x-waiting-on-y]}
             (b/next-state {:type :another-event})
             (get ::b/event)
-            nil?))))
+            nil?)))
+  (testing "Given that a bthread returns a wait
+    When the next state is calculated
+    Then it is added to the registry"
+    (is (= {:y #{x-waiting-on-y}}
+           (-> {:some-event [x-waiting-on-y]}
+               (b/next-state {:type :another-event})
+               (get ::b/registry))))))
 
 

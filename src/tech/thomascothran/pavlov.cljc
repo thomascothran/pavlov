@@ -1,12 +1,26 @@
 (ns tech.thomascothran.pavlov
-  (:require [tech.thomascothran.pavlov.proto :as proto]))
+  (:require [tech.thomascothran.pavlov.bid.proto :as bid]
+            [tech.thomascothran.pavlov.bthread.proto :as b]))
 
-(extend-protocol proto/Bid
-  #?(:clj clojure.lang.PersistentVector
-     :cljs PersistentVector)
-  (request [this] (first this))
-  (wait [this] (second this))
-  (block [this] (when (<= 3 (count this)) (nth this 2))))
+(defn- bid-reducer
+  [bthreads event]
+  (reduce (fn [acc bthread]
+            (let [bid (b/bid bthread event)]
+              (assoc acc bthread
+                     {::request (bid/request bid)
+                      ::wait-on (bid/wait-on bid)
+                      ::block   (bid/block bid)})))
+          {}
+          bthreads))
+
+(defn- new-registry
+  "Takes a map of bthreads -> their bids "
+  [bids]
+  (reduce (fn [acc [bthread {:keys [request
+                                    wait-on]
+                             :as bids}]] ;; add bthread to all bids
+            (-> acc
+                (update)))))
 
 (defn next-state
   ;; TODO you are going to need the last event
@@ -16,8 +30,6 @@
 
   ;; is ... this the program?
 
-  ;; returns a triple of next event, active-bthreads, parked-bthreads
-
   ;; single arity is startup.
   ;; listener -> map of event type -> bthreads.
   ([bthreads]
@@ -25,13 +37,17 @@
     ::registry {::init-event (into #{} bthreads)}})
   ([bthread-registry event]
    (let [bthreads (get bthread-registry (:type event))
-         bids (mapv #(proto/bid % event) bthreads)
-         blocked (into #{} (mapcat proto/block) bids)
-         requested (into []
-                         (comp (mapcat proto/request)
-                               (remove blocked))
-                         bids)]
-     {::event (first requested)})))
+         bids (bid-reducer bthreads event)
+         _ (def bids bids)
+         blocked (into #{} (mapcat ::block) (vals bids))
+         requested
+         (into []
+               (comp (mapcat ::request)
+                     (remove blocked))
+               (vals bids))]
+
+     {::event (first requested)
+      ::bthread-registry {}})))
 
 #_(defprotocol Program
     :extend-via-metadata true
