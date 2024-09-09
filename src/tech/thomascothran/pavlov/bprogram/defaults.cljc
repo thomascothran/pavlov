@@ -41,12 +41,14 @@
   [bthreads]
   (let [!state (atom {::event->handlers {}
                       ::bthread-queue [] ;; bthreads triggered but not
-                      ::handlers []      ;; run
+                      ::handlers  {}     ;; run
                       ::bthreads bthreads
                       ::last-event nil})]
     (with-meta {:!state !state}
       {`bprogram/attach-handlers!
-       #(swap! !state update ::handlers into %)
+       (fn [_ handler]
+         (swap! !state update ::handlers
+                assoc (bprogram/id handler) handler))
 
        `bprogram/submit-event!
        (fn [this event]

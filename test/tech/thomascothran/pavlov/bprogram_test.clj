@@ -23,13 +23,22 @@
   {:wait-on #{:y}
    :request #{:x}})
 
+;; This knows too much about the internals ...
 (deftest init-next-state
   (testing "Given we initialize with two bthreads
     When we get the next state
     Then it emits an init-event as the event
     And it has mapped all the bthreads to the init event"
     (let [program (bp-defaults/make-program [x-request y-request])
+          !a (atom [])
+          _ (bprogram/attach-handlers!
+             program
+             (reify bprogram/Handler
+               (bprogram/id [_] 1)
+               (bprogram/handle [_ event]
+                 (swap! !a conj event))))
           _ (bprogram/start! program)
+
           result (bp-defaults/next-state [x-request y-request])]
       (is (= {:type ::bp-defaults/init-event}
              (get result ::bp-defaults/event)))
