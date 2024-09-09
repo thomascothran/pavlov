@@ -1,6 +1,7 @@
 (ns tech.thomascothran.pavlov
   (:require [tech.thomascothran.pavlov.bid.proto :as bid]
-            [tech.thomascothran.pavlov.bthread.proto :as b]))
+            [tech.thomascothran.pavlov.bthread.proto :as b]
+            [tech.thomascothran.pavlov.bprogram :as bprogram]))
 
 (defn- bid-reducer
   [bthreads event]
@@ -21,33 +22,6 @@
                              :as bids}]] ;; add bthread to all bids
             (-> acc
                 (update)))))
-
-(defn next-state
-  ;; TODO you are going to need the last event
-  ;; and the blocked threads, and you're going
-  ;; to need to return the next event and the
-  ;; parked threads
-
-  ;; is ... this the program?
-
-  ;; single arity is startup.
-  ;; listener -> map of event type -> bthreads.
-  ([bthreads]
-   {::event {:type ::init-event}
-    ::registry {::init-event (into #{} bthreads)}})
-  ([bthread-registry event]
-   (let [bthreads (get bthread-registry (:type event))
-         bids (bid-reducer bthreads event)
-         _ (def bids bids)
-         blocked (into #{} (mapcat ::block) (vals bids))
-         requested
-         (into []
-               (comp (mapcat ::request)
-                     (remove blocked))
-               (vals bids))]
-
-     {::event (first requested)
-      ::bthread-registry {}})))
 
 #_(defprotocol Program
     :extend-via-metadata true
