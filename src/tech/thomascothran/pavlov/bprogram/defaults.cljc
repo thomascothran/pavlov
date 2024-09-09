@@ -43,7 +43,7 @@
                       ::bthread-queue [] ;; bthreads triggered but not
                       ::handlers  {}     ;; run
                       ::bthreads bthreads
-                      ::last-event nil})]
+                      ::started false})]
     (with-meta {:!state !state}
       {`bprogram/attach-handlers!
        (fn [_ handler]
@@ -53,8 +53,13 @@
        `bprogram/submit-event!
        (fn [this event]
          (doseq [handler (::handlers this)]
-           (bprogram/handle handler event))
-         (swap! !state ::last-event event))
+           (bprogram/handle handler event)))
 
        `bprogram/start!
-       #(swap! !state merge (next-state bthreads)  %)})))
+       (fn start! [_]
+         (swap! !state (fn [state]
+                         (let [bthreads (get state ::bthreads)]
+                           (-> state
+                               (merge (next-state bthreads))
+                               (assoc ::started true))))))})))
+

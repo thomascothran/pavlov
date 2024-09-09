@@ -45,6 +45,8 @@
       (is (= {::bp-defaults/init-event #{x-request y-request}}
              (get result ::bp-defaults/event->handlers))))))
 
+(keys @(:!state p))
+
 (deftest test-next-event
   (testing "Given one bthread requesting a single event
       When we decide the next event
