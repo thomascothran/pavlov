@@ -1,65 +1,44 @@
 (ns tech.thomascothran.pavlov.bprogram.defaults
   (:require [tech.thomascothran.pavlov.bprogram.proto
              :refer [BidCollector] :as bprogram]
+            [tech.thomascothran.pavlov.bprogram.defaults.internal.state
+             :as state]
             [tech.thomascothran.pavlov.bid.proto :as bid]
             [tech.thomascothran.pavlov.bthread.proto :as bthread]))
 
-(defn- bid-reducer
-  [bthreads event]
-  (reduce (fn [acc bthread]
-            (let [bid (bthread/bid bthread event)]
-              (assoc acc bthread
-                     {::request (bid/request bid)
-                      ::wait-on (bid/wait-on bid)
-                      ::block   (bid/block bid)})))
-          {}
-          bthreads))
-
-(def bid-collector
-  (reify BidCollector
-    (collect [_ bthreads event]
-      (bid-reducer bthreads event))))
-
-(defn next-state
-  ([bthreads]
-   {::event {:type ::init-event}
-    ::event->handlers {::init-event (into #{} bthreads)}})
-  ([bthread-registry event]
-   (let [bthreads (get bthread-registry (:type event))
-         bids     (bprogram/collect bid-collector bthreads event)
-         blocked  (into #{} (mapcat ::block) (vals bids))
-         requested
-         (into []
-               (comp (mapcat ::request)
-                     (remove blocked))
-               (vals bids))]
-
-     {::event (first requested)
-      ::event->handlers {}})))
-
 (defn make-program
   [bthreads]
-  (let [!state (atom {::event->handlers {}
-                      ::bthread-queue [] ;; bthreads triggered but not
-                      ::handlers  {}     ;; run
-                      ::bthreads bthreads
-                      ::started false})]
+  (let [!state (atom {:event->handlers {}
+                      :bthread-queue []
+                      :handlers  {}
+                      :bthreads bthreads})]
     (with-meta {:!state !state}
       {`bprogram/attach-handlers!
        (fn [_ handler]
-         (swap! !state update ::handlers
+         (swap! !state update :handlers
                 assoc (bprogram/id handler) handler))
 
-       `bprogram/submit-event!
-       (fn [this event]
-         (doseq [handler (::handlers this)]
-           (bprogram/handle handler event)))
+       `bprogram/submit-event! ;; watch out -- concurrency
+       (fn [this event]        ;; bug here. Use a concurrent queue
+         (let [state @!state
+               handlers (get state :handlers)
+               event->handlers (get state :event->handlers)
+               result (state/next-state event->handlers event)
+               next-event (get result :event)
+               next-event->handlers (get result :event->handlers)]
+           (swap! !state assoc-in
+                  [:!state :event->handlers]
+                  next-event->handlers)
+           (doseq [[_id handler] handlers]
+             (bprogram/handle handler event))
+           (when next-event (recur this next-event))))
 
        `bprogram/start!
-       (fn start! [_]
-         (swap! !state (fn [state]
-                         (let [bthreads (get state ::bthreads)]
-                           (-> state
-                               (merge (next-state bthreads))
-                               (assoc ::started true))))))})))
+       (fn start! [this]
+         (swap! !state
+                (fn [state]
+                  (let [bthreads (get state :bthreads)]
+                    (-> state
+                        (merge (state/next-state bthreads))))))
+         (bprogram/submit-event! this {:type :pavlov/init-event}))})))
 
