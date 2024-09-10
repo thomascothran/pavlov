@@ -76,21 +76,25 @@
              @!produced-events)))))
 
 (deftest test-simple-wait
-  (let [bthreads [{:request #{:x} :wait-on #{::bp-defaults/init}}]
-        program (bp-defaults/make-program bthreads)
+  (testing "Given that a bthread is waiting on one event and requesting another
+    When the event it is waiting on occurs
+    The request should be cancelled "
+    (let [bthreads [{:request #{:x}}
+                    {:request #{:z} :wait-on #{:x}}]
+          program (bp-defaults/make-program bthreads)
 
-        !a (atom [])
+          !a (atom [])
 
-        _ (bprogram/attach-handlers!
-           program
-           (reify bprogram/Handler
-             (bprogram/id [_] 1)
-             (bprogram/handle [_ event]
-               (swap! !a conj event))))
-        _ (bprogram/start! program)]
+          _ (bprogram/attach-handlers!
+             program
+             (reify bprogram/Handler
+               (bprogram/id [_] 1)
+               (bprogram/handle [_ event]
+                 (swap! !a conj event))))
+          _ (bprogram/start! program)]
 
-    (is (= @!a [{:type :pavlov/init-event}
-                {:type :x}]))))
+      (is (= @!a [{:type :pavlov/init-event}
+                  {:type :x}])))))
 
 #_(deftest test-next-event
     (testing "Given one bthread requesting a single event

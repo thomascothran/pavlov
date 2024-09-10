@@ -44,12 +44,12 @@
                (vals bids))
          next-event-type (first requested)]
 
+     (clojure.pprint/pprint {:bthreads bthreads
+                             :event-type event-type
+                             :bthread-registry bthread-registry})
+
      {:event (when next-event-type {:type next-event-type})
+      ;; TODO you have to find ALL the unblocked bthreads
+      ;; and you have to remove their other waits.
       :event->handlers (dissoc bthread-registry event-type)})))
-
-;; if the thread is waiting on the event and it is not waiting
-;; on any other event, then it is released... what does this mean?
-
-;; if the thread is waiting on this and other events, it's waits
-;; on others are removed
 
