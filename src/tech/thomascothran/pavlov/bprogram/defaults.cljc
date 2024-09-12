@@ -1,10 +1,7 @@
 (ns tech.thomascothran.pavlov.bprogram.defaults
-  (:require [tech.thomascothran.pavlov.bprogram.proto
-             :refer [BidCollector] :as bprogram]
+  (:require [tech.thomascothran.pavlov.bprogram.proto :as bprogram]
             [tech.thomascothran.pavlov.bprogram.defaults.internal.state
-             :as state]
-            [tech.thomascothran.pavlov.bid.proto :as bid]
-            [tech.thomascothran.pavlov.bthread.proto :as bthread]))
+             :as state]))
 
 (defn make-program
   [bthreads]
