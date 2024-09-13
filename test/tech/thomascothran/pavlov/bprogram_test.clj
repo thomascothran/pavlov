@@ -8,28 +8,22 @@
             [tech.thomascothran.pavlov.bprogram.proto :as bprogram]))
 
 (def x-request
-  {:request #{:x}})
+  (bthread/seq [{:request #{:x}}]))
 
 (def block-x
   {:block #{:x}})
 
 (def y-request
-  (with-meta {:name :y-request}
-    {`bthread.proto/bid (constantly {:request #{:y}})}))
-
-(def nil-request
-  {})
-
-(def x-waiting-on-y
-  {:wait-on #{:y}
-   :request #{:x}})
+  (bthread/seq
+   [(with-meta {:name :y-request}
+      {`bthread.proto/bid (constantly {:request #{:y}})})]))
 
 (deftest init-next-state
-  (testing "Given we initialize with two bthreads
+  (testing "Given we initialize with a bthread
     When we get the next state
     Then it emits an init-event as the event
     And it runs the next event up"
-    (let [program (bp-defaults/make-program [x-request y-request])
+    (let [program (bp-defaults/make-program [x-request])
           !produced-events (atom [])
           _ (bprogram/attach-handlers!
              program
@@ -61,8 +55,9 @@
   (testing "Given we initialize with a bthreads that should wait
     Then it emits an init-event as the event
     And it does not emit the waiting request"
-    (let [program (bp-defaults/make-program [{:wait-on #{:x}
-                                              :request #{:y}}])
+    (let [program (bp-defaults/make-program
+                   [(bthread/seq [{:wait-on #{:x}
+                                   :request #{:y}}])])
           !produced-events (atom [])
           _ (bprogram/attach-handlers!
              program
@@ -80,8 +75,9 @@
     When we run the program 
     The events should be run in sequence"
     (let [bthreads [(bthread/seq [{:request #{:x}}
+
                                   {:request #{:y}}
-                                  {:request #{:x}}])]
+                                  {:request #{:z}}])]
           program (bp-defaults/make-program bthreads)
 
           !produced-events (atom [])
@@ -104,8 +100,8 @@
   (testing "Given that a bthread is waiting on one event and requesting another
     When the event it is waiting on occurs
     The request should be cancelled "
-    (let [bthreads [{:request #{:x}}
-                    {:request #{:z} :wait-on #{:x}}]
+    (let [bthreads [(bthread/seq [{:request #{:x}}])
+                    (bthread/seq [{:request #{:z} :wait-on #{:x}}])]
           program (bp-defaults/make-program bthreads)
 
           !a (atom [])

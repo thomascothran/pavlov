@@ -5,7 +5,7 @@
 
 (defn make-program
   [bthreads]
-  (let [!state (atom {:event->handlers {}
+  (let [!state (atom {:event->bthread {}
                       :bthread-queue []
                       :handlers  {}
                       :bthreads bthreads})]
@@ -19,13 +19,14 @@
        (fn [this event]        ;; bug here. Use a concurrent queue
          (let [state @!state
                handlers (get state :handlers)
-               event->handlers (get state :event->handlers)
-               result (state/next-state event->handlers event)
+               event->bthread (get state :event->bthread)
+               result (state/next-state event->bthread event)
                next-event (get result :event)
-               next-event->handlers (get result :event->handlers)]
+               next-event->bthread (get result :event->bthread)]
+
            (swap! !state assoc-in
-                  [:!state :event->handlers]
-                  next-event->handlers)
+                  [:event->bthread]
+                  next-event->bthread)
            (doseq [[_id handler] handlers]
              (bprogram/handle handler event))
            (when next-event (recur this next-event))))

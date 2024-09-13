@@ -16,3 +16,9 @@
   (wait-on [this] (get this :wait-on #{}))
   (block [this] (get this :block #{})))
 
+(extend-protocol proto/Bid
+  nil
+  (request [_])
+  (wait-on [_])
+  (block [_]))
+

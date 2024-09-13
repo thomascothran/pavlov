@@ -5,3 +5,7 @@
   #?(:clj clojure.lang.APersistentMap
      :cljs cljs.core.PersistentHashMap)
   (bid [this _event] this))
+
+(extend-protocol bthread/BThread
+  nil
+  (bid [this _event] this))

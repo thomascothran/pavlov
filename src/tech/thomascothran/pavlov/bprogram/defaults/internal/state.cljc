@@ -45,13 +45,12 @@
       bthread-registry)))
 
 (defn next-state
-  ([bthreads]
+  ([event->bthread]
    {:event {:type :pavlov/init-event}
-    :active-bthreads #{bthreads}
-    :event->handlers {:pavlov/init-event (into #{} bthreads)}})
-  ([bthread-registry event]
+    :event->bthread {:pavlov/init-event (into #{} event->bthread)}})
+  ([event->bthread event]
    (let [event-type (:type event)
-         bthreads (get bthread-registry event-type)
+         bthreads (get event->bthread event-type)
          bthread->bid (bprogram/collect bid-collector bthreads event)
          bids (vals bthread->bid)
          blocked  (into #{} (mapcat :block) bids)
@@ -64,9 +63,9 @@
          waits (new-waits bthread->bid)
          new-event->handlers
          (merge-with into
-                     (remove-old-waits bthread-registry event-type)
+                     (remove-old-waits event->bthread event-type)
                      waits)]
 
      {:event (when next-event-type {:type next-event-type})
-      :event->handlers new-event->handlers})))
+      :event->bthread new-event->handlers})))
 
