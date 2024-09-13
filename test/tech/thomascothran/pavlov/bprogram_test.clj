@@ -75,6 +75,7 @@
       (is (= [{:type :pavlov/init-event}
               {:type :y}]
              @!produced-events))))
+
   (testing "Given we have several bthreads in a row
     When we run the program 
     The events should be run in sequence"
@@ -135,7 +136,6 @@
                (bprogram/handle [_ event]
                  (swap! !a conj event))))
           _ (bprogram/start! program)]
-      (def a @!a)
       (is (= @!a [{:type :pavlov/init-event}
                   {:type :x}
                   {:type :y}])))))
