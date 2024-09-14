@@ -103,4 +103,3 @@
               {:type :y}
               {:type :pavlov/terminate}]
              (seq out-queue))))))
-
