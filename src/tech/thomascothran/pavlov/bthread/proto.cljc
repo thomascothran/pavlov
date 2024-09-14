@@ -3,5 +3,7 @@
 (defprotocol BThread
   :extend-via-metadata true
   (bid [this last-event]
-    "Returns a bid"))
+    "Returns a bid")
+  (priority [this]
+    "Returns a numeric value for priority"))
 

@@ -9,12 +9,15 @@
 (defn seq
   "Make a bthread from a sequence. Items in the sequence
   must be bthreads. If nil is received, the bthread stops."
-  [xs]
-  (let [xs' (volatile! xs)]
-    (reify proto/BThread
-      (bid [_ event]
-        (when-let [x (first @xs')]
-          (let [bid' (bid x event)]
-            (vreset! xs' (rest @xs'))
-            bid'))))))
+  ([xs] (seq xs {:priority 0}))
+  ([xs opts]
+   (let [priority (get opts :priority)
+         xs' (volatile! xs)]
+     (reify proto/BThread
+       (priority [_] priority)
+       (bid [_ event]
+         (when-let [x (first @xs')]
+           (let [bid' (bid x event)]
+             (vreset! xs' (rest @xs'))
+             bid')))))))
 

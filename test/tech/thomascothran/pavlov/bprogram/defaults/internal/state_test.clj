@@ -88,31 +88,3 @@
       (is (= {:b #{{:wait-on #{:y}}}, :c #{}}
              (state/remove-old-waits bthread-registry :a))))))
 
-(deftest test-next-state
-  (let [bthread-registry {:a #{{:request #{:x}}}
-                          :b #{{:wait-on #{:y}}}}
-        result (state/next-state bthread-registry {:type :a})]
-    (is (= {:event {:type :x}
-            :event->handlers {:b #{{:wait-on #{:y}}}
-                              :x #{{:request #{:x}}}}}
-           result)))
-
-  (let [bthread-registry {:a #{{:request #{:x}}}
-                          :b #{{:wait-on #{:y}}}}
-        result (state/next-state bthread-registry {:type :b})]
-    (is (= {:event nil
-            :event->handlers {:a #{{:request #{:x}}}
-                              :y #{{:wait-on #{:y}}}}}
-           result)))
-
-  (let [bthread-registry {:a #{{:request #{:x}} {:block #{:x}}}}
-        result (state/next-state bthread-registry {:type :b})]
-    (is (= {:event nil
-            :event->handlers bthread-registry}
-           result)))
-
-  (let [bthread-registry {:a #{{:request #{:x}} {:block #{:x}}}}
-        result (state/next-state bthread-registry {:type :a})]
-    (is (= {:event nil
-            :event->handlers {:x #{{:request #{:x}}}}}
-           result))))

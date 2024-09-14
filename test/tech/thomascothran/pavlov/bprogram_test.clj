@@ -1,6 +1,5 @@
 (ns tech.thomascothran.pavlov.bprogram-test
   (:require [clojure.test :refer [deftest is testing]]
-            [tech.thomascothran.pavlov.bthread.proto :as bthread.proto]
             [tech.thomascothran.pavlov.bthread :as bthread]
             [tech.thomascothran.pavlov.bthread.defaults]
             [tech.thomascothran.pavlov.bprogram.defaults :as bp-defaults]
@@ -10,47 +9,31 @@
 (def x-request
   (bthread/seq [{:request #{:x}}]))
 
-(def block-x
-  {:block #{:x}})
-
-(def y-request
-  (bthread/seq
-   [(with-meta {:name :y-request}
-      {`bthread.proto/bid (constantly {:request #{:y}})})]))
-
 (deftest init-next-state
   (testing "Given we initialize with a bthread
     When we get the next state
     Then it emits an init-event as the event
     And it runs the next event up"
     (let [program (bp-defaults/make-program [x-request])
-          !produced-events (atom [])
-          _ (bprogram/attach-handlers!
-             program
-             (reify bprogram/Handler
-               (bprogram/id [_] 1)
-               (bprogram/handle [_ event]
-                 (swap! !produced-events conj event))))
-          _ (bprogram/start! program)]
+          _ (bprogram/start! program)
+          out-queue (bprogram/out-queue program)
+          _ (bprogram/stop! program)]
 
       (is (= [{:type :pavlov/init-event}
-              {:type :x}]
-             @!produced-events))))
+              {:type :x}
+              {:type :pavlov/terminate}]
+             (seq out-queue)))))
 
   (testing "Given we initialize with no bthreads
     Then it emits an init-event as the event "
     (let [program (bp-defaults/make-program [])
-          !produced-events (atom [])
-          _ (bprogram/attach-handlers!
-             program
-             (reify bprogram/Handler
-               (bprogram/id [_] 1)
-               (bprogram/handle [_ event]
-                 (swap! !produced-events conj event))))
-          _ (bprogram/start! program)]
+          _ (bprogram/start! program)
+          out-queue (bprogram/out-queue program)
+          _ (bprogram/stop! program)]
 
-      (is (= [{:type :pavlov/init-event}]
-             @!produced-events))))
+      (is (= [{:type :pavlov/init-event}
+              {:type :pavlov/terminate}]
+             (seq out-queue)))))
 
   (testing "Given we initialize with a bthreads that should wait
     Then it emits an init-event as the event
@@ -58,18 +41,14 @@
     (let [program (bp-defaults/make-program
                    [(bthread/seq [{:wait-on #{:x}
                                    :request #{:y}}])])
-          !produced-events (atom [])
-          _ (bprogram/attach-handlers!
-             program
-             (reify bprogram/Handler
-               (bprogram/id [_] 1)
-               (bprogram/handle [_ event]
-                 (swap! !produced-events conj event))))
-          _ (bprogram/start! program)]
+          _ (bprogram/start! program)
+          out-queue (bprogram/out-queue program)
+          _ (bprogram/stop! program)]
 
       (is (= [{:type :pavlov/init-event}
-              {:type :y}]
-             @!produced-events))))
+              {:type :y}
+              {:type :pavlov/terminate}]
+             (seq out-queue)))))
 
   (testing "Given we have several bthreads in a row
     When we run the program 
@@ -80,42 +59,35 @@
                                   {:request #{:z}}])]
           program (bp-defaults/make-program bthreads)
 
-          !produced-events (atom [])
-
-          _ (bprogram/attach-handlers!
-             program
-             (reify bprogram/Handler
-               (bprogram/id [_] 1)
-               (bprogram/handle [_ event]
-                 (swap! !produced-events conj event))))
-          _ (bprogram/start! program)]
+          _ (bprogram/start! program)
+          out-queue (bprogram/out-queue program)
+          _ (bprogram/stop! program)]
 
       (is (= [{:type :pavlov/init-event}
               {:type :x}
               {:type :y}
-              {:type :z}]
-             @!produced-events)))))
+              {:type :z}
+              {:type :pavlov/terminate}]
+             (seq out-queue))))))
 
 (deftest test-simple-wait
   (testing "Given that a bthread is waiting on one event and requesting another
     When the event it is waiting on occurs
     The request should be cancelled "
-    (let [bthreads [(bthread/seq [{:request #{:x}}])
+    (let [bthreads [(bthread/seq [{:request #{:x}}] {:priority 1})
                     (bthread/seq [{:request #{:z} :wait-on #{:x}}])]
+
           program (bp-defaults/make-program bthreads)
 
-          !a (atom [])
+          _         (bprogram/start! program)
+          out-queue (bprogram/out-queue program)
+          _         (bprogram/stop! program)]
 
-          _ (bprogram/attach-handlers!
-             program
-             (reify bprogram/Handler
-               (bprogram/id [_] 1)
-               (bprogram/handle [_ event]
-                 (swap! !a conj event))))
-          _ (bprogram/start! program)]
+      (is (= [{:type :pavlov/init-event}
+              {:type :x}
+              {:type :pavlov/terminate}]
+             (seq out-queue)))))
 
-      (is (= @!a [{:type :pavlov/init-event}
-                  {:type :x}]))))
   (testing "Multiple waits in a row"
     (let [bthreads [(bthread/seq [{:wait-on #{:x}}
                                   {:request #{:y}}])
@@ -123,16 +95,12 @@
 
           program (bp-defaults/make-program bthreads)
 
-          !a (atom [])
-
-          _ (bprogram/attach-handlers!
-             program
-             (reify bprogram/Handler
-               (bprogram/id [_] 1)
-               (bprogram/handle [_ event]
-                 (swap! !a conj event))))
-          _ (bprogram/start! program)]
-      (is (= @!a [{:type :pavlov/init-event}
-                  {:type :x}
-                  {:type :y}])))))
+          _         (bprogram/start! program)
+          out-queue (bprogram/out-queue program)
+          _         (bprogram/stop! program)]
+      (is (= [{:type :pavlov/init-event}
+              {:type :x}
+              {:type :y}
+              {:type :pavlov/terminate}]
+             (seq out-queue))))))
 
