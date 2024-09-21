@@ -54,7 +54,6 @@
    (let [event-type (:type event)
          bthreads (get event->bthread event-type)
          bthread->bid (bprogram/collect bid-collector bthreads event)
-         ;; Move the following into the bid collector
          bids (sort-by :priority > (vals bthread->bid))
          blocked  (into #{} (mapcat :block) bids)
          requested (into [] (comp (mapcat :request)
@@ -67,10 +66,14 @@
                      (remove-old-waits event->bthread event-type)
                      waits)]
 
-     (tap> [:next-state {:bids bids
+     (tap> [:next-state {:event event
+                         :bids bids
                          :blocked blocked
                          :requested requested
-                         :next-event-type next-event-type}])
+                         :next-event-type next-event-type
+                         :event->bthread event->bthread
+                         :bthread->bid bthread->bid
+                         :waits waits}])
      {:event (when next-event-type {:type next-event-type})
       :event->bthread new-event->handlers})))
 

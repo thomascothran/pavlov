@@ -3,8 +3,16 @@
   (:require [tech.thomascothran.pavlov.bthread.proto :as proto]))
 
 (defn bid
-  [bthread event]
-  (proto/bid bthread event))
+  ([bthread]
+   (some-> (proto/bid bthread)
+           (vary-meta assoc :pavlov/bthread bthread)))
+  ([bthread event]
+   (some-> (proto/bid bthread event)
+           (vary-meta assoc :pavlov/bthread bthread))))
+
+(defn priority
+  [bthread]
+  (proto/priority bthread))
 
 (defn seq
   "Make a bthread from a sequence. Items in the sequence
@@ -15,6 +23,12 @@
          xs' (volatile! xs)]
      (reify proto/BThread
        (priority [_] priority)
+       (bid
+         [_]
+         (when-let [x (first @xs')]
+           (let [bid' (bid x)]
+             (vreset! xs' (rest @xs'))
+             bid')))
        (bid [_ event]
          (when-let [x (first @xs')]
            (let [bid' (bid x event)]
@@ -47,6 +61,10 @@
          acc (volatile! init)]
      (reify proto/BThread
        (priority [_] priority)
+       (bid [_]
+         (let [bid (f @acc nil)]
+           (vreset! acc bid)
+           bid))
        (bid [_ event]
          (let [bid (f @acc event)]
            (vreset! acc bid)

@@ -1,4 +1,5 @@
-(ns tech.thomascothran.pavlov.bprogram.proto)
+(ns tech.thomascothran.pavlov.bprogram.proto
+  (:refer-clojure :exclude [pop conj]))
 
 (defprotocol BidCollector
   :extend-via-metadata true
@@ -26,10 +27,3 @@
   :extend-via-metadata true
   (conj [this event])
   (pop [this]))
-
-(comment
-  (import [java.util.concurrent LinkedBlockingQueue])
-  (let [q (LinkedBlockingQueue.)
-        _ (.offer q :a)
-        _ (.offer q :b)]
-    (seq q)))

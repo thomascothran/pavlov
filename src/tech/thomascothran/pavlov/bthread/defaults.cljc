@@ -4,8 +4,12 @@
 (extend-protocol bthread/BThread
   #?(:clj clojure.lang.APersistentMap
      :cljs cljs.core.PersistentHashMap)
-  (bid [this _event] this))
+  (bid
+    ([this] this)
+    ([this _event] this))
+  (priority [this] (get this :priority 0)))
 
 (extend-protocol bthread/BThread
   nil
-  (bid [this _event] this))
+  (bid [this _event] this)
+  (priority [_] 0))
