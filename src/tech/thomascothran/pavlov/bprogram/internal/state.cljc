@@ -106,20 +106,18 @@
   (merge-with #(into (or %1 #{}) %2)
               previous new))
 
-(defn step
-  "Return the next state based on the event"
-  [state event]
-  (let [last-event event
-        next-event' (next-event state)
-
-        {new-bthread->bid :bthread->bid
-         new-waits        :waits
-         new-requests     :requests
-         new-blocks       :blocks}
-        (notify-bthreads! state last-event)
-
-        bthread->bid (into (:bthread->bid state) new-bthread->bid)
-
+;; Can waits, requests, blocks get stuck?
+;; I think so -- if you have two waits in
+;; a bid; one gets removed, the other doesn't
+;; bids can show up on multiple waits...
+(defn next-state
+  [{:keys [state last-event next-event]}
+   {new-bthread->bid :bthread->bid
+    new-waits        :waits
+    new-requests     :requests
+    new-blocks       :blocks}]
+  (let [bthread->bid (into (:bthread->bid state)
+                           new-bthread->bid)
         waits (-> (:waits state)
                   (dissoc last-event)
                   (merge-event->bthreads new-waits))
@@ -129,9 +127,21 @@
         blocks   (-> (:blocks state)
                      (dissoc last-event)
                      (merge-event->bthreads new-blocks))]
-    {:last-event event
-     :next-event next-event'
+    {:last-event last-event
+     :next-event next-event
      :waits waits
      :requests requests
      :blocks blocks
      :bthread->bid bthread->bid}))
+
+(defn step
+  "Return the next state based on the event"
+  [state event]
+  (let [next-event' (next-event state)
+        notification-results
+        (notify-bthreads! state event)]
+    (next-state {:state state
+                 :last-event event
+                 :next-event next-event'}
+                notification-results)))
+
