@@ -95,44 +95,58 @@
              :last-event nil}
             bthreads)))
 
-(merge-with #(into (or %1 #{}) %2)
-            {:a #{:b :c}} {:a #{:d}})
-
-(merge-with #(into (or %1 #{}) %2)
-            {:a nil} {:a #{:d}})
-
 (defn- merge-event->bthreads
   [previous new]
   (merge-with #(into (or %1 #{}) %2)
               previous new))
 
-;; Can waits, requests, blocks get stuck?
-;; I think so -- if you have two waits in
-;; a bid; one gets removed, the other doesn't
-;; bids can show up on multiple waits...
+(defn- remove-triggered-bthreads
+  [triggered-bthreads event->threads]
+  (into {}
+        (map (fn [[event bthreads]]
+               [event (->> bthreads
+                           (remove (or triggered-bthreads #{}))
+                           (into #{}))]))
+        event->threads))
+
 (defn next-state
   [{:keys [state last-event next-event]}
    {new-bthread->bid :bthread->bid
     new-waits        :waits
     new-requests     :requests
     new-blocks       :blocks}]
-  (let [bthread->bid (into (:bthread->bid state)
-                           new-bthread->bid)
+  (let [triggered-bthreads
+        (into #{}
+              (mapcat #(get % (event/type last-event)))
+              [(get state :waits)
+               (get state :requests)])
+
+        rm-triggered-bthreads
+        #(remove-triggered-bthreads triggered-bthreads %)
+
         waits (-> (:waits state)
                   (dissoc last-event)
-                  (merge-event->bthreads new-waits))
+                  (merge-event->bthreads new-waits)
+                  rm-triggered-bthreads)
         requests (-> (:requests state)
                      (dissoc last-event)
-                     (merge-event->bthreads new-requests))
+                     (merge-event->bthreads new-requests)
+                     rm-triggered-bthreads)
         blocks   (-> (:blocks state)
                      (dissoc last-event)
-                     (merge-event->bthreads new-blocks))]
+                     (merge-event->bthreads new-blocks)
+                     rm-triggered-bthreads)
+
+        next-bthread->bid
+        (-> (:bthread->bid state)
+            (#(apply dissoc % triggered-bthreads))
+            (into new-bthread->bid))]
     {:last-event last-event
      :next-event next-event
      :waits waits
      :requests requests
      :blocks blocks
-     :bthread->bid bthread->bid}))
+     :bthread->bid next-bthread->bid}))
 
 (defn step
   "Return the next state based on the event"

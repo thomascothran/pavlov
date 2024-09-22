@@ -4,4 +4,4 @@
 
 (defn type
   [event]
-  (proto/type event))
+  (when event (proto/type event)))

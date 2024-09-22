@@ -131,8 +131,14 @@
   (let [bthread-a (b/seq [{:request #{:a}}])
         state (s/init [bthread-a])
         next-state (s/step state {:type :a})]
-    (is (nil? (get-in next-state
-                      [:requests :a])))))
+    (is (= #{}
+           (get-in next-state [:requests :a])))))
+
+(deftest test-step-removes-terminated-bthreads
+  (let [bthread-a (b/seq [{:request #{:a}}])
+        state (s/init [bthread-a])
+        next-state (s/step state {:type :a})]
+    (is (nil? (get-in next-state [:bthread->bid bthread-a])))))
 
 (deftest test-step
   (let [bid-a {:request #{:a} :priority 1}
