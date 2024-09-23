@@ -63,7 +63,7 @@
 (defn notify-bthreads!
   "Notify the bthreads, returning a map of the
  
-  - `bthreads->bids`: only the new bids. The caller has
+  - `bthread->bid`: only the new bids. The caller has
     to merge this into the bthreads to bids
   - `requests`: the new requests
   - `waits`: the new waits
@@ -73,11 +73,11 @@
     (reduce (fn [acc bthread]
               (let [bid (b/bid bthread)]
                 (-> acc
-                    (assoc-in [:bthreads->bids bthread] bid)
+                    (assoc-in [:bthread->bid bthread] bid)
                     (assoc-events bthread bid :requests)
                     (assoc-events bthread bid :waits)
                     (assoc-events bthread bid :blocks))))
-            {:bthreads->bids {}}
+            {:bthread->bid {}}
             bthreads)))
 
 (defn init
@@ -126,16 +126,16 @@
 
         waits (-> (:waits state)
                   (dissoc last-event)
-                  (merge-event->bthreads new-waits)
-                  rm-triggered-bthreads)
+                  rm-triggered-bthreads
+                  (merge-event->bthreads new-waits))
         requests (-> (:requests state)
                      (dissoc last-event)
-                     (merge-event->bthreads new-requests)
-                     rm-triggered-bthreads)
+                     rm-triggered-bthreads
+                     (merge-event->bthreads new-requests))
         blocks   (-> (:blocks state)
                      (dissoc last-event)
-                     (merge-event->bthreads new-blocks)
-                     rm-triggered-bthreads)
+                     rm-triggered-bthreads
+                     (merge-event->bthreads new-blocks))
 
         next-bthread->bid
         (-> (:bthread->bid state)

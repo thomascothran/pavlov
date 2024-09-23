@@ -121,7 +121,7 @@
 
     (is (= {request-bthread-ab {:request #{:b}}
             wait-bthread-d {:request #{:d}}}
-           (:bthreads->bids result)))
+           (:bthread->bid result)))
 
     (is (= {:d #{wait-bthread-d}
             :b #{request-bthread-ab}}
@@ -131,14 +131,23 @@
   (let [bthread-a (b/seq [{:request #{:a}}])
         state (s/init [bthread-a])
         next-state (s/step state {:type :a})]
-    (is (= #{}
-           (get-in next-state [:requests :a])))))
+    (is (= #{} (get-in next-state [:requests :a]))))
+  (let [bthread-a (b/seq [{:request #{:a}}])
+        bthread-b (b/seq [{:wait-on #{:a}}
+                          {:request #{:b}}])
+        state (s/init [bthread-a bthread-b])
+        next-state (s/step state {:type :a})]
+    (is (not (= bthread-a bthread-b)))
+    (is (= #{} (get-in next-state [:requests :a])))
+    (is (= #{bthread-b}
+           (get-in next-state [:requests :b])))))
 
 (deftest test-step-removes-terminated-bthreads
   (let [bthread-a (b/seq [{:request #{:a}}])
         state (s/init [bthread-a])
         next-state (s/step state {:type :a})]
-    (is (nil? (get-in next-state [:bthread->bid bthread-a])))))
+    (is (nil? (get-in next-state [:bthread->bid bthread-a])))
+    (is (sorted? (get next-state :bthread->bid)))))
 
 (deftest test-step
   (let [bid-a {:request #{:a} :priority 1}
