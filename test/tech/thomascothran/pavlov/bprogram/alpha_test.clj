@@ -12,10 +12,10 @@
 
          (bthread/seq (repeat 4 {:request #{:good-evening}}))
          (bthread/seq (interleave
-                       (repeat 10 {:wait-on #{:good-morning}
-                                   :block #{:good-evening}})
-                       (repeat 10 {:wait-on #{:good-evening}
-                                   :block #{:good-morning}})))]
+                       (repeat {:wait-on #{:good-morning}
+                                :block #{:good-evening}})
+                       (repeat {:wait-on #{:good-evening}
+                                :block #{:good-morning}})))]
         program   (bpa/make-program! bthreads)
         out-queue (:out-queue program)
         stop-p @(bp/stop! program)]
