@@ -39,19 +39,28 @@
 (defn next-event
   "The winning bid will request a new event"
   [state]
-  (let [blocked-event-types (blocked state)]
-    (->> (seq (:bthread->bid state))
-         (remove #(= #{}
-                     (set/difference
-                      (into #{}
-                            (map event/type)
-                            (bid/request (second %)))
-                      blocked-event-types)))
-         first
-         second
-         bid/request
-         (remove (comp blocked-event-types event/type))
-         first)))
+  (let [blocked-event-types (blocked state)
+        is-blocked?
+        (fn [[_bthread bid]]
+          (= #{}
+             (set/difference (into #{}
+                                   (map event/type)
+                                   (bid/request bid))
+                             blocked-event-types)))
+
+        result
+        (->> (seq (:bthread->bid state))
+             (remove is-blocked?)
+             first
+             second
+             bid/request
+             (remove (comp blocked-event-types event/type))
+             first)]
+    (tap> [::next-event
+           {:blocked-event-types blocked-event-types
+            :state state
+            :result result}])
+    result))
 
 (defn bthreads-to-notify
   "Given an event, return the bthreads to notify"
@@ -69,6 +78,9 @@
   - `waits`: the new waits
   - `blocks`: the new blocks"
   [state event]
+  (tap> [::notify-bthreads!
+         {:state state
+          :event event}])
   (let [bthreads (bthreads-to-notify state event)]
     (reduce (fn [acc bthread]
               (let [bid (b/bid bthread)]
@@ -83,17 +95,20 @@
 (defn init
   "Initiate the state"
   [bthreads]
-  (let [bid-set (make-bid-map)]
-    (reduce (fn [acc bthread]
-              (let [bid (b/bid bthread)]
-                (-> acc
-                    (update :bthread->bid into {bthread bid})
-                    (assoc-events bthread bid :requests)
-                    (assoc-events bthread bid :waits)
-                    (assoc-events bthread bid :blocks))))
-            {:bthread->bid bid-set
-             :last-event nil}
-            bthreads)))
+  (let [bid-set (make-bid-map)
+        state
+        (reduce (fn [acc bthread]
+                  (let [bid (b/bid bthread)]
+                    (-> acc
+                        (update :bthread->bid into {bthread bid})
+                        (assoc-events bthread bid :requests)
+                        (assoc-events bthread bid :waits)
+                        (assoc-events bthread bid :blocks))))
+                {:bthread->bid bid-set
+                 :last-event nil}
+                bthreads)
+        next-event' (next-event state)]
+    (assoc state :next-event next-event')))
 
 (defn- merge-event->bthreads
   [previous new]
@@ -110,14 +125,20 @@
         event->threads))
 
 (defn next-state
-  [{:keys [state last-event next-event]}
+  [{:keys [state last-event event]}
    {new-bthread->bid :bthread->bid
     new-waits        :waits
     new-requests     :requests
     new-blocks       :blocks}]
+  (tap> [::next-state
+         {:last-event last-event
+          :event event
+          :new-blocks new-blocks
+          :state state}])
+
   (let [triggered-bthreads
         (into #{}
-              (mapcat #(get % (event/type last-event)))
+              (mapcat #(get % (event/type event)))
               [(get state :waits)
                (get state :requests)])
 
@@ -125,37 +146,41 @@
         #(remove-triggered-bthreads triggered-bthreads %)
 
         waits (-> (:waits state)
-                  (dissoc last-event)
+                  (dissoc event)
                   rm-triggered-bthreads
                   (merge-event->bthreads new-waits))
         requests (-> (:requests state)
-                     (dissoc last-event)
+                     (dissoc event)
                      rm-triggered-bthreads
                      (merge-event->bthreads new-requests))
         blocks   (-> (:blocks state)
-                     (dissoc last-event)
+                     (dissoc event)
                      rm-triggered-bthreads
                      (merge-event->bthreads new-blocks))
 
         next-bthread->bid
         (-> (:bthread->bid state)
             (#(apply dissoc % triggered-bthreads))
-            (into new-bthread->bid))]
-    {:last-event last-event
-     :next-event next-event
-     :waits waits
-     :requests requests
-     :blocks blocks
-     :bthread->bid next-bthread->bid}))
+            (into new-bthread->bid))
+
+        next-state
+        {:last-event event
+         :waits waits
+         :requests requests
+         :blocks blocks
+         :bthread->bid next-bthread->bid}]
+    (assoc next-state :next-event (next-event next-state))))
 
 (defn step
   "Return the next state based on the event"
+  ;; Have to take the new event here, since
+  ;; it can come from the queue
   [state event]
-  (let [next-event' (next-event state)
+  (let [last-event (:last-event state)
         notification-results
         (notify-bthreads! state event)]
     (next-state {:state state
-                 :last-event event
-                 :next-event next-event'}
+                 :last-event last-event
+                 :event event}
                 notification-results)))
 

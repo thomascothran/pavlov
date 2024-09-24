@@ -10,7 +10,7 @@
           (pop [this] (.take this))))
 
 (defn- -submit-event!
-  [this event]        ;; bug here. Use a concurrent queue
+  [this event]
   (let [!state (get this :!state)
         state @!state
         handlers (get state :handlers)
@@ -20,6 +20,8 @@
         next-event->bthread (get result :event->bthread)
         out-queue (get this :out-queue)]
 
+    ;; instead this needs to take the top BID and work through
+    ;; all the bids, leaving the blocked ones in a queue
     (swap! !state assoc-in
            [:event->bthread]
            next-event->bthread)

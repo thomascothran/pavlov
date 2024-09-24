@@ -103,3 +103,24 @@
               {:type :y}
               {:type :pavlov/terminate}]
              (seq out-queue))))))
+
+(deftest good-morning-and-evening
+  (let [bthreads
+        [(bthread/seq (repeat 3 {:request #{:good-morning}}))
+         (bthread/seq (repeat 3 {:request #{:good-evening}}))
+         (bthread/seq (interleave
+                       (repeat 10 {:wait-on #{:good-morning}
+                                   :block #{:good-evening}})
+                       (repeat 10 {:wait-on #{:good-evening}
+                                   :block #{:good-morning}})))]
+        program (bp-defaults/make-program bthreads)
+        _         (bprogram/start! program)
+        out-queue (bprogram/out-queue program)
+        _         (Thread/sleep 1000)
+        _         (bprogram/stop! program)]
+    (def out-queue out-queue)
+    (def program program)
+    (is (= "?"
+           (seq out-queue)))))
+
+

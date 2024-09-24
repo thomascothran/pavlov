@@ -73,7 +73,10 @@
 
     (is (= expected-bids
            (into {} (:bthread->bid state)))
-        "Should have the expected bids")))
+        "Should have the expected bids")
+    (is (= {:type :a}
+           (:next-event state))
+        "Should queue up the next event")))
 
 (deftest test-blocked
   (let [bthread-a {:request #{{:type :a}} :block #{:d}}
@@ -132,6 +135,7 @@
         state (s/init [bthread-a])
         next-state (s/step state {:type :a})]
     (is (= #{} (get-in next-state [:requests :a]))))
+
   (let [bthread-a (b/seq [{:request #{:a}}])
         bthread-b (b/seq [{:wait-on #{:a}}
                           {:request #{:b}}])
@@ -153,7 +157,7 @@
   (let [bid-a {:request #{:a} :priority 1}
         bid-b {:request #{:b} :priority 0}
         state (s/init [bid-a bid-b])
-        next-state (s/step state nil)]
+        next-state (s/step state {:type :a})]
     (is (= :a (:next-event next-state)))))
 
 
