@@ -10,7 +10,6 @@
 #?(:clj (extend-protocol bprogram/BProgramQueue
           LinkedBlockingQueue
           (conj [this event]
-            (tap> [::conj {:event event}])
             (.put this event))
           (pop [this] (.take this))))
 
@@ -21,12 +20,6 @@
         next-state (reset! !state (state/step state event))
         next-event (get next-state :next-event)
         out-queue (get program :out-queue)]
-
-    (tap> [::submit-event!
-           {:event event
-            :next-event next-event
-            :state state
-            :next-state next-state}])
 
     (bprogram/conj out-queue event)
     (when next-event
@@ -49,10 +42,7 @@
   [program]
   (let [in-queue (:in-queue program)
         stopped (:stopped program)]
-    (tap> [::run! {:in-queue in-queue
-                   :program program}])
     (loop [next-event' (next-event program)]
-      (tap> [::run!-loop {:next-event next-event'}])
       (if (= :pavlov/terminate (event/type next-event'))
         #?(:clj (deliver stopped true)
            :cljs (.resolve stopped true))

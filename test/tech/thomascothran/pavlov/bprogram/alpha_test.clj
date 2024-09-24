@@ -18,7 +18,7 @@
                                 :block #{:good-morning}})))]
         program   (bpa/make-program! bthreads)
         out-queue (:out-queue program)
-        stop-p @(bp/stop! program)]
+        _         @(bp/stop! program)]
     (is (= (interleave (repeat 4 :good-morning)
                        (repeat 4 :good-evening))
            (seq out-queue)))))
