@@ -56,10 +56,6 @@
              bid/request
              (remove (comp blocked-event-types event/type))
              first)]
-    (tap> [::next-event
-           {:blocked-event-types blocked-event-types
-            :state state
-            :result result}])
     result))
 
 (defn bthreads-to-notify
@@ -78,9 +74,6 @@
   - `waits`: the new waits
   - `blocks`: the new blocks"
   [state event]
-  (tap> [::notify-bthreads!
-         {:state state
-          :event event}])
   (let [bthreads (bthreads-to-notify state event)]
     (reduce (fn [acc bthread]
               (let [bid (b/bid bthread)]
@@ -130,11 +123,6 @@
     new-waits        :waits
     new-requests     :requests
     new-blocks       :blocks}]
-  (tap> [::next-state
-         {:last-event last-event
-          :event event
-          :new-blocks new-blocks
-          :state state}])
 
   (let [triggered-bthreads
         (into #{}
@@ -173,8 +161,6 @@
 
 (defn step
   "Return the next state based on the event"
-  ;; Have to take the new event here, since
-  ;; it can come from the queue
   [state event]
   (let [last-event (:last-event state)
         notification-results

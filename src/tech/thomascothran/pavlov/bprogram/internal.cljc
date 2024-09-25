@@ -1,4 +1,4 @@
-(ns tech.thomascothran.pavlov.bprogram.alpha
+(ns tech.thomascothran.pavlov.bprogram.internal
   (:refer-clojure :exclude [run!])
   (:require [tech.thomascothran.pavlov.bprogram.proto :as bprogram]
             [tech.thomascothran.pavlov.event :as event]

@@ -1,9 +1,9 @@
-(ns tech.thomascothran.pavlov.bprogram.alpha-test
+(ns tech.thomascothran.pavlov.bprogram.internal-test
   (:require [clojure.test :refer [deftest testing is]]
             [tech.thomascothran.pavlov.bthread :as bthread]
             [tech.thomascothran.pavlov.defaults]
             [tech.thomascothran.pavlov.bprogram.proto :as bp]
-            [tech.thomascothran.pavlov.bprogram.alpha :as bpa]))
+            [tech.thomascothran.pavlov.bprogram.internal :as bpi]))
 
 (deftest good-morning-and-evening
   (let [bthreads
@@ -16,7 +16,7 @@
                                 :block #{:good-evening}})
                        (repeat {:wait-on #{:good-evening}
                                 :block #{:good-morning}})))]
-        program   (bpa/make-program! bthreads)
+        program   (bpi/make-program! bthreads)
         out-queue (:out-queue program)
         _         @(bp/stop! program)]
     (is (= (interleave (repeat 4 :good-morning)
