@@ -35,10 +35,11 @@ To understand behavioral programming, the following resources are useful:
 ## Roadmap
 
 1. Implement canonical examples in the test suite
-2. Firm up APIs
-3. ClojureScript support
-4. Opt-in parallelization
-5. Documentation
+2. Abstract event sources and sinks
+3. Firm up APIs
+4. ClojureScript support
+5. Opt-in parallelization
+6. Documentation
 
 ## License
 

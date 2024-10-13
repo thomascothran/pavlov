@@ -2,4 +2,5 @@
   (:refer-clojure :exclude [type]))
 
 (defprotocol Event
-  (type [event]))
+  (type [event])
+  (terminal? [event]))

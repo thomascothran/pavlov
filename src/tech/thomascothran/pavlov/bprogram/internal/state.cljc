@@ -76,7 +76,11 @@
   [state event]
   (let [bthreads (bthreads-to-notify state event)]
     (reduce (fn [acc bthread]
-              (let [bid (b/bid bthread)]
+              (let [bid (b/bid bthread event)]
+                (tap> [::notify-bthreads!-reduce
+                       {:bthread bthread
+                        :bid bid
+                        :event event}])
                 (-> acc
                     (assoc-in [:bthread->bid bthread] bid)
                     (assoc-events bthread bid :requests)
@@ -165,6 +169,8 @@
   (let [last-event (:last-event state)
         notification-results
         (notify-bthreads! state event)]
+    #_(tap> [::step {:event event
+                     :notification-results notification-results}])
     (next-state {:state state
                  :last-event last-event
                  :event event}

@@ -19,16 +19,24 @@
         state @!state
         next-state (reset! !state (state/step state event))
         next-event (get next-state :next-event)
-        out-queue (get program :out-queue)]
+        out-queue (get program :out-queue)
+        terminate? (event/terminal? next-event)
+        recur?    (and next-event (not terminate?))]
 
-    (bprogram/conj out-queue event)
-    (when next-event
-      (recur program next-event))))
+    (when event
+      (bprogram/conj out-queue event))
+    (if recur?
+      (recur program next-event)
+      (when terminate?
+        #?(:clj (deliver (:stopped program) true)
+           :cljs (.resolve (:stopped program) true))
+        (bprogram/conj out-queue next-event)))))
 
 (defn- stop!
   [program]
   (bprogram/submit-event! program
-                          {:type :pavlov/terminate})
+                          {:type :pavlov/terminate
+                           :terminal true})
   (get program :stopped))
 
 (defn- next-event
@@ -40,15 +48,26 @@
 
 (defn- run!
   [program]
-  (let [in-queue (:in-queue program)
+  (let [killed (:killed program)
+        in-queue (:in-queue program)
         stopped (:stopped program)]
     (loop [next-event' (next-event program)]
-      (if (= :pavlov/terminate (event/type next-event'))
+      (if (event/terminal? next-event')
         #?(:clj (deliver stopped true)
            :cljs (.resolve stopped true))
-        (do
-          (handle-event! program next-event')
+        (when-not #?(:clj (realized? killed)
+                     :cljs false)
+          (when next-event'
+            (handle-event! program next-event'))
           (recur (bprogram/pop in-queue)))))))
+
+(defn kill!
+  [{:keys [killed stopped]}]
+  #?(:clj (do (deliver killed true)
+              (deliver stopped true))
+     :cljs (throw (js/Error. "Kill not implemented in cljs")))
+
+  killed)
 
 (defn make-program!
   ([bthreads]
@@ -60,13 +79,13 @@
   ([bthreads in-queue out-queue]
    (let [!state (atom (state/init bthreads))
 
-         stopped #?(:clj (promise)
-                    :cljs (js/Promise.))
-
          program
          (with-meta {:!state !state
                      :in-queue in-queue
-                     :stopped stopped
+                     :stopped #?(:clj (promise)
+                                 :cljs (js/Promise.))
+                     :killed #?(:clj (promise)
+                                :cljs (js/Promise.))
                      :out-queue out-queue}
 
            {`bprogram/submit-event!
@@ -74,6 +93,8 @@
               (bprogram/conj in-queue event))
 
             `bprogram/stop! stop!
+
+            `bprogram/kill! kill!
 
             `bprogram/out-queue (fn [this] (get this :out-queue))})]
      #?(:clj (do (future (run! program))

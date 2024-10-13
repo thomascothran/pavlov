@@ -4,9 +4,13 @@
 (extend-protocol event/Event
   #?(:clj clojure.lang.Keyword
      :cljs Keyword)
-  (type [event] event))
+  (type [event] event)
+  (terminal? [event]
+    (= event :pavlov/terminate)))
 
 (extend-protocol event/Event
   #?(:clj clojure.lang.APersistentMap
      :cljs PersistentHashMap)
-  (type [event] (:type event)))
+  (type [event] (:type event))
+  (terminal? [event]
+    (:terminal event)))
