@@ -16,12 +16,22 @@
 (defn- handle-event!
   [program event]
   (let [!state (get program :!state)
+        logger (get program :logger)
         state @!state
         next-state (reset! !state (state/step state event))
         next-event (get next-state :next-event)
         out-queue (get program :out-queue)
         terminate? (event/terminal? next-event)
         recur?    (and next-event (not terminate?))]
+
+    (when logger
+      (logger [::handle-event!
+               {:event event
+                :next-event next-event
+                :state state
+                :bids (set (vals (:bthread->bid state)))
+                :next-bids (set (vals (:bthread->bid next-state)))
+                :next-state next-state}]))
 
     (when event
       (bprogram/conj out-queue event))
@@ -75,9 +85,10 @@
                      :cljs [])
          out-queue #?(:clj (LinkedBlockingQueue.)
                       :cljs [])]
-     (make-program! bthreads in-queue out-queue)))
-  ([bthreads in-queue out-queue]
-   (let [!state (atom (state/init bthreads))
+     (make-program! bthreads in-queue out-queue nil)))
+  ([bthreads in-queue out-queue opts]
+   (let [!state  (atom (state/init bthreads))
+         logger  (get opts :logger)
 
          program
          (with-meta {:!state !state
@@ -86,7 +97,8 @@
                                  :cljs (js/Promise.))
                      :killed #?(:clj (promise)
                                 :cljs (js/Promise.))
-                     :out-queue out-queue}
+                     :out-queue out-queue
+                     :logger logger}
 
            {`bprogram/submit-event!
             (fn [_this event]
