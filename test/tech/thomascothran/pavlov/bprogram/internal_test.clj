@@ -52,10 +52,13 @@
     (into #{} (map #(conj % player)) paths)))
 
 (defn make-winning-bthreads
+  "for a winning path (e.g., three diagonal squares
+  selected by the same player), emit a win event
+  and terminate the pogram."
   [path-events]
   (bthread/reduce
    (fn [{:keys [remaining-events] :as acc} event]
-     (if event
+     (if event ;; event is nil on initialization
        (let [event-type (event/type event)]
          (if (= remaining-events #{event-type})
            {:request #{{:type [(last event-type) :wins]
@@ -63,11 +66,14 @@
             :remaining-events #{}}
            (update acc :remaining-events disj event-type)))
        acc))
+   ;; Initial value
    {:remaining-events (set path-events)
     :wait-on (into #{}
                    (map (fn [event] {:type event}))
                    path-events)}))
 
+;; Note that we test our behavioral threads in isolation
+;; from the bprogram.
 (deftest test-winning-bthreads
   (testing "Given a bthread that watches a crossing win pattern for player x
     When that crossing pattern is filled in by player x
