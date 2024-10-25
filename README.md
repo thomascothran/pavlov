@@ -32,6 +32,94 @@ To understand behavioral programming, the following resources are useful:
     (bp/make-program [add-hot add-cold alt-temp]))
 ```
 
+## Bthreads
+
+A bthread is a unit of behavior that produces a `bid` each time it is called. Bthreads are sequential and stateful. They can run in parallel and be parked when they are waiting on events.
+
+The bid a bthread produces can request events, wait on events, or block events in other bthreads. Bthreads do not directly know about each other.
+
+There are two main functions to create bthreads.
+
+- `b/seq`: turn a sequence of bids into a bthread
+- `b/reduce`: turn a reducing function and a starting value into a bthread
+
+##
+
+## Recipes
+
+### Request a simple event
+
+The simplest way to specify an event is as a keyword:
+
+```clojure
+(b/seq [{:request {:a}}])
+```
+
+This bthread requests an event of type `:a` then halts
+
+### Add more data to an event
+
+Events can also be maps.
+
+For example:
+
+```clojure
+{:type :submit
+ :form {:first-name "Thomas"}
+```
+
+### Compound events
+
+Events need not be an atomic type.
+
+For example, if you are playing tic tac toe, you may have `:x` select the center of the board:
+
+```clojure
+{:type [1 1 :x]}
+```
+
+### Block until
+
+Combine `:wait` and `:block`:
+
+```clojure
+{:wait-on #{:b}
+ :block #{:c}
+```
+
+Event `:c` is blocked until `:b` occurs.
+
+### Cancel when
+
+Combine `:wait-on` and `:request`:
+
+```clojure
+(def bthread-one
+  (b/seq [{:wait-on #{:b}
+           :request #{:a}}]))
+
+(def bthread-two
+  (b/seq [{:block #{:a}
+           :wait-on #{:c}}])
+
+```
+
+`bthread-two` blocks event `:a`.
+
+If event `:c` occurs first, then `:a`'s request will succeed. (Assuming it is not blocked by other threads.)
+
+However, if event `:b` occurs before event `:c`, then `:a` is cancelled.
+
+### Terminate the bprogram
+
+When `:c` occurs, close the program.
+
+```clojure
+(b/seq [{:wait-on #{:c}}
+        {:terminate true
+         :type :finis}])
+```
+
 ## Roadmap
 
 1. Implement canonical examples in the test suite
