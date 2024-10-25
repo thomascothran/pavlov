@@ -14,7 +14,9 @@
     (if (seq event-types)
       (reduce (fn [requests requested-event]
                 (update-in requests [request-type
-                                     (event/type requested-event)]
+                                     (if :requests
+                                       (event/type requested-event)
+                                       requested-event)]
                            #(into #{bthread} %)))
               state
               event-types)
@@ -33,29 +35,38 @@
   [state]
   (into #{}
         (comp (map second)
-              (mapcat bid/block))
+              (mapcat bid/block)
+              (map event/type))
         (:bthread->bid state)))
+
+(defn is-blocked?
+  [blocked-events bid]
+  (= #{}
+     (set/difference (into #{}
+                           (map event/type)
+                           (bid/request bid))
+                     blocked-events)))
 
 (defn next-event
   "The winning bid will request a new event"
   [state]
   (let [blocked-event-types (blocked state)
-        is-blocked?
-        (fn [[_bthread bid]]
-          (= #{}
-             (set/difference (into #{}
-                                   (map event/type)
-                                   (bid/request bid))
-                             blocked-event-types)))
+        eligible-bthreads
+        (->> (seq (:bthread->bid state))
+             (remove (comp (partial is-blocked? blocked-event-types)
+                           second)))
 
         result
-        (->> (seq (:bthread->bid state))
-             (remove is-blocked?)
+        (->> eligible-bthreads
              first
              second
              bid/request
              (remove (comp blocked-event-types event/type))
              first)]
+    (tap> [::next-event
+           {:blocked-event-types blocked-event-types
+            :eligible-bthreads eligible-bthreads
+            :result result}])
     result))
 
 (defn bthreads-to-notify
@@ -77,10 +88,6 @@
   (let [bthreads (bthreads-to-notify state event)]
     (reduce (fn [acc bthread]
               (let [bid (b/bid bthread event)]
-                (tap> [::notify-bthreads!-reduce
-                       {:bthread bthread
-                        :bid bid
-                        :event event}])
                 (-> acc
                     (assoc-in [:bthread->bid bthread] bid)
                     (assoc-events bthread bid :requests)
@@ -122,7 +129,7 @@
         event->threads))
 
 (defn next-state
-  [{:keys [state last-event event]}
+  [{:keys [state event]}
    {new-bthread->bid :bthread->bid
     new-waits        :waits
     new-requests     :requests
@@ -169,8 +176,6 @@
   (let [last-event (:last-event state)
         notification-results
         (notify-bthreads! state event)]
-    #_(tap> [::step {:event event
-                     :notification-results notification-results}])
     (next-state {:state state
                  :last-event last-event
                  :event event}

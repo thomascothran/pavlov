@@ -4,7 +4,9 @@
             [tech.thomascothran.pavlov.defaults]
             [tech.thomascothran.pavlov.bprogram.proto :as bp]
             [tech.thomascothran.pavlov.bprogram.internal :as bpi]
-            [tech.thomascothran.pavlov.event.proto :as event]))
+            [tech.thomascothran.pavlov.event.proto :as event]
+            [tech.thomascothran.pavlov.bid.proto :as bid])
+  (:import [java.util.concurrent LinkedBlockingQueue]))
 
 (deftest good-morning-and-evening
   (let [bthreads
@@ -70,7 +72,8 @@
    {:remaining-events (set path-events)
     :wait-on (into #{}
                    (map (fn [event] {:type event}))
-                   path-events)}))
+                   path-events)}
+   {:priority 1})) ;; overrides other bids
 
 ;; Note that we test our behavioral threads in isolation
 ;; from the bprogram.
@@ -90,7 +93,9 @@
       (is (= #{{:type [:x :wins] :terminal true}} (:request bid3))
           "Request a win when all the winning moves have been made"))))
 
-(deftest tic-tac-toe
+;; Let's see if it can detect a win!
+;; We'll ignore player moves for now.
+(deftest tic-tac-toe-simple-win
   (let [bthreads (mapv make-winning-bthreads winning-event-set)
         events   [{:type [0 0 :o]}
                   {:type [1 1 :o]}
@@ -103,4 +108,115 @@
     (is (= (conj events {:terminal true, :type [:o :wins]})
            (take 5 (seq out-queue))))))
 
+;; Now we need to handle moves.
+;; But we need some rules.
+;; First, you can't pick the same square
+(defn make-no-double-placement-bthreads
+  "You can't pick another player's square!"
+  []
+  (for [x-coordinate [0 1 2]
+        y-coordinate [0 1 2]
+        player [:x :o]]
+    (bthread/seq
+     [{:wait-on #{[x-coordinate y-coordinate player]}}
+      {:block #{[x-coordinate y-coordinate (if (= player :x) :o :x)]}}])))
 
+(defn make-computer-picks-bthreads
+  "Without worrying about strategy, let's pick a square"
+  [player]
+  (bthread/seq
+   (for [x-coordinate [0 1 2]
+         y-coordinate [0 1 2]]
+     {:request #{{:type [x-coordinate y-coordinate player]}}})))
+
+;; But wait? Doesn't `make-computer-picks` need to account for
+;; the squares that are already occupied? 
+;;
+;; Nope! the no double placement bthread takes care of that for us.
+;;
+;; OK, but won't we have to rewrite it when we take strategy into 
+;; account, e.g., picking the winning square or blocking the other
+;; player?
+;;
+;; Nope! We can add strategies incrementally and prioritize them.
+
+(deftest test-simple-computer-picks
+  (let [bthreads
+        (reduce into [(make-computer-picks-bthreads :o)
+                      (bthread/seq             ;; should be blocked
+                       [{:type [0 0 :o]}])]
+                [(mapv make-winning-bthreads winning-event-set)
+                 (make-no-double-placement-bthreads)])
+
+        program (bpi/make-program! bthreads
+                                   (LinkedBlockingQueue.)
+                                   (LinkedBlockingQueue.)
+                                   {:logger tap>})
+
+        out-queue (:out-queue program)
+        _        (do (Thread/sleep 500)
+                     (bp/kill! program))
+        _        @(bp/stop! program)
+        out-events (seq out-queue)]
+    (def out-events out-events)
+    (is (= 4 (count out-events)))
+    (is (= #{:o} (->> out-events
+                      (take 3)
+                      (mapv (comp last event/type))
+                      set))
+        "The first three events should be o moves")
+    (is (= [:o :wins]
+           (event/type (last out-events))))))
+
+;; Great! 
+;; We were able to get our computer to make moves. 
+;; But it's just going to keep picking without waiting for
+;; the other player!
+;; We need a bthread that enforces turns.
+
+(defn make-enforce-turn-bthreads
+  []
+  (let [moves (for [x-coord [0 1 2]
+                    y-coord [0 1 2]
+                    player [:x :o]]
+                [x-coord y-coord player])
+
+        x-moves
+        (into #{}
+              (comp (filter (comp (partial = :x) last)))
+              moves)
+
+        o-moves
+        (into #{}
+              (comp (filter (comp (partial = :o) last)))
+              moves)]
+
+    (bthread/seq
+     (interleave (repeat {:wait-on x-moves
+                          :block o-moves})
+                 (repeat {:wait-on o-moves
+                          :block x-moves})))))
+
+;; Notice that this rule could be generalized.
+;; It could take the players and coordinates as parameters
+;; and then be used for *any* turn based game. Chess,
+;; checkers, poker, etc.
+
+(deftest test-taking-turns
+  ;; Problem is that blocked events
+  ;; are being represented both as a map with a :type key
+  ;; and as the type itself. Can we support both?
+  (let [bthreads
+        (reduce into [(make-computer-picks-bthreads :o)
+                      (make-enforce-turn-bthreads)]
+                [(mapv make-winning-bthreads winning-event-set)
+                 (make-no-double-placement-bthreads)])
+
+        program (bpi/make-program! bthreads
+                                   (LinkedBlockingQueue.)
+                                   (LinkedBlockingQueue.)
+                                   {:logger tap>})
+        out-queue (:out-queue program)
+        _        @(bp/stop! program)]
+    (is (nil? (seq out-queue))
+        "All o events should be blocked!")))
