@@ -21,7 +21,6 @@
         program   (bpi/make-program! bthreads)
         out-queue (:out-queue program)
         _         @(bp/stop! program)]
-    (comment (bp/kill! program))
     (is (= (interleave (repeat 4 :good-morning)
                        (repeat 4 :good-evening))
            (seq out-queue)))))
