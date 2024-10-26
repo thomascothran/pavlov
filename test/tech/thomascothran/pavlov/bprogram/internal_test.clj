@@ -158,7 +158,6 @@
                      (bp/kill! program))
         _        @(bp/stop! program)
         out-events (seq out-queue)]
-    (def out-events out-events)
     (is (= 4 (count out-events)))
     (is (= #{:o} (->> out-events
                       (take 3)
@@ -217,6 +216,8 @@
                                    (LinkedBlockingQueue.)
                                    {:logger tap>})
         out-queue (:out-queue program)
+        _        (bp/submit-event! program {:type [1 1 :x]})
         _        @(bp/stop! program)]
-    (is (nil? (seq out-queue))
-        "All o events should be blocked!")))
+
+    (is (= [{:type [1 1 :x]} {:type [0 0 :o]}]
+           (seq out-queue)))))
