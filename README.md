@@ -157,10 +157,11 @@ When `:c` occurs, close the program.
 1. Implement canonical tic tac toe example in the test suite (done)
 2. Abstract event sources and sinks
 3. Firm up APIs
-4. ClojureScript support
+4. ClojureScript support (including Squint)
 5. Opt-in parallelization
 6. Documentation
 7. Allow the creation of new bthreads to an active program
+8. Derived event types
 
 ## Further Reading
 
