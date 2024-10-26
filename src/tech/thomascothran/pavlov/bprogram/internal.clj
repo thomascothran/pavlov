@@ -4,14 +4,14 @@
             [tech.thomascothran.pavlov.event :as event]
             [tech.thomascothran.pavlov.bprogram.internal.state
              :as state])
-  #?(:clj (:import [java.util.concurrent LinkedBlockingQueue])))
+  (:import [java.util.concurrent LinkedBlockingQueue]))
 
 ;; move this elsewhere
-#?(:clj (extend-protocol bprogram/BProgramQueue
-          LinkedBlockingQueue
-          (conj [this event]
-            (.put this event))
-          (pop [this] (.take this))))
+(extend-protocol bprogram/BProgramQueue
+  LinkedBlockingQueue
+  (conj [this event]
+    (.put this event))
+  (pop [this] (.take this)))
 
 (defn- handle-event!
   [program event]
@@ -38,8 +38,7 @@
     (if recur?
       (recur program next-event)
       (when terminate?
-        #?(:clj (deliver (:stopped program) true)
-           :cljs (.resolve (:stopped program) true))
+        (deliver (:stopped program) true)
         (bprogram/conj out-queue next-event)))))
 
 (defn- stop!
@@ -63,28 +62,22 @@
         stopped (:stopped program)]
     (loop [next-event' (next-event program)]
       (if (event/terminal? next-event')
-        #?(:clj (deliver stopped true)
-           :cljs (.resolve stopped true))
-        (when-not #?(:clj (realized? killed)
-                     :cljs false)
+        (deliver stopped true)
+        (when-not (realized? killed)
           (when next-event'
             (handle-event! program next-event'))
           (recur (bprogram/pop in-queue)))))))
 
 (defn kill!
   [{:keys [killed stopped]}]
-  #?(:clj (do (deliver killed true)
-              (deliver stopped true))
-     :cljs (throw (js/Error. "Kill not implemented in cljs")))
-
+  (deliver killed true)
+  (deliver stopped true)
   killed)
 
 (defn make-program!
   ([bthreads]
-   (let [in-queue #?(:clj (LinkedBlockingQueue.)
-                     :cljs [])
-         out-queue #?(:clj (LinkedBlockingQueue.)
-                      :cljs [])]
+   (let [in-queue (LinkedBlockingQueue.)
+         out-queue (LinkedBlockingQueue.)]
      (make-program! bthreads in-queue out-queue nil)))
   ([bthreads in-queue out-queue opts]
    (let [!state  (atom (state/init bthreads))
@@ -93,10 +86,8 @@
          program
          (with-meta {:!state !state
                      :in-queue in-queue
-                     :stopped #?(:clj (promise)
-                                 :cljs (js/Promise.))
-                     :killed #?(:clj (promise)
-                                :cljs (js/Promise.))
+                     :stopped (promise)
+                     :killed (promise)
                      :out-queue out-queue
                      :logger logger}
 
@@ -109,8 +100,7 @@
             `bprogram/kill! kill!
 
             `bprogram/out-queue (fn [this] (get this :out-queue))})]
-     #?(:clj (do (future (run! program))
-                 program)
-        :cljs (throw (js/Error. "Not implemented"))))))
+     (future (run! program))
+     program)))
 
 
