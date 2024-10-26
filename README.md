@@ -6,6 +6,8 @@ Pavlov is a behavioral programming library for Clojure(Script).
 
 Behavioral programming (BP) is an event-driven programming paradigm that decomplects application behaviors.
 
+![bprogram diagram](./doc/assets/bprogram.png)
+
 ## Bthreads
 
 In BP, a unit of application behavior is a bthread. Bthreads can be run in parallel. Bthreads park until an event they are interested in occurs.
