@@ -93,7 +93,7 @@
   (deliver stopped true)
   killed)
 
-(defn- subscribe!
+(defn- listen!
   [program k listener]
   (let [listeners (get program :listeners)]
     (swap! listeners assoc k listener)))
@@ -125,7 +125,7 @@
 
             `bprogram/kill! kill!
 
-            `bprogram/subscribe! subscribe!})]
+            `bprogram/listen! listen!})]
 
      (run! program)
      program)))
