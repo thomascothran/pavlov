@@ -38,7 +38,6 @@
     (if recur?
       (recur program next-event)
       (when terminate?
-        (deliver (:stopped program) true)
         (bprogram/conj out-queue next-event)))))
 
 (defn- stop!
@@ -55,11 +54,11 @@
           deref
           (get :next-event)))
 
-(defn- run!
+(defn- run-event-loop!
   [program]
-  (let [killed (:killed program)
-        in-queue (:in-queue program)
-        stopped (:stopped program)]
+  (let [killed (get program :killed)
+        in-queue (get program :in-queue)
+        stopped (get program :stopped)]
     (loop [next-event' (next-event program)]
       (if (event/terminal? next-event')
         (deliver stopped true)
@@ -68,26 +67,53 @@
             (handle-event! program next-event'))
           (recur (bprogram/pop in-queue)))))))
 
+(defn- run-notify-loop!
+  [program]
+  (let [killed    (:killed program)
+        out-queue (:out-queue program)
+        listeners (:listeners program)]
+    (loop [event (bprogram/pop out-queue)]
+      (when-not (realized? killed)
+        (doseq [[k listener] @listeners]
+          (try (listener event)
+               (catch Throwable _
+                 (swap! listeners dissoc k))))
+        (if (event/terminal? event)
+          (deliver (get program :stopped) true)
+          (recur (bprogram/pop out-queue)))))))
+
+(defn- run!
+  [program]
+  (future (run-notify-loop! program))
+  (future (run-event-loop! program)))
+
 (defn kill!
   [{:keys [killed stopped]}]
   (deliver killed true)
   (deliver stopped true)
   killed)
 
+(defn- subscribe!
+  [program k listener]
+  (let [listeners (get program :listeners)]
+    (swap! listeners assoc k listener)))
+
 (defn make-program!
   ([bthreads]
-   (let [in-queue (LinkedBlockingQueue.)
-         out-queue (LinkedBlockingQueue.)]
-     (make-program! bthreads in-queue out-queue nil)))
-  ([bthreads in-queue out-queue opts]
+   (make-program! bthreads {}))
+  ([bthreads opts]
    (let [!state  (atom (state/init bthreads))
          logger  (get opts :logger)
+         in-queue (get opts :in-queue (LinkedBlockingQueue.))
+         out-queue (get opts :out-queue (LinkedBlockingQueue.))
+         listeners (get opts :listeners {})
 
          program
          (with-meta {:!state !state
                      :in-queue in-queue
                      :stopped (promise)
                      :killed (promise)
+                     :listeners (atom listeners)
                      :out-queue out-queue
                      :logger logger}
 
@@ -99,8 +125,9 @@
 
             `bprogram/kill! kill!
 
-            `bprogram/out-queue (fn [this] (get this :out-queue))})]
-     (future (run! program))
+            `bprogram/subscribe! subscribe!})]
+
+     (run! program)
      program)))
 
 

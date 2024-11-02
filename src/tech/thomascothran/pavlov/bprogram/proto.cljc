@@ -18,8 +18,9 @@
   (kill! [this]
     "Kill the program if possible. Will not wait for pending events to clear.")
   (submit-event! [this event] "Handle an event")
-  (out-queue [this]
-    "Returns the out queue for events that have been emitted"))
+  (subscribe! [this k f]
+    "Call `f` on each emitted event. `k` uniquely identifies
+    the subscription."))
 
 (defprotocol BProgramQueue
   :extend-via-metadata true

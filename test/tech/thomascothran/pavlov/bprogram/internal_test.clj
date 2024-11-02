@@ -18,12 +18,14 @@
                                 :block #{:good-evening}})
                        (repeat {:wait-on #{:good-evening}
                                 :block #{:good-morning}})))]
-        program   (bpi/make-program! bthreads)
-        out-queue (:out-queue program)
+        !a        (atom [])
+        listener  #(swap! !a conj %)
+        program   (bpi/make-program! bthreads
+                                     {:listeners {:test listener}})
         _         @(bp/stop! program)]
     (is (= (interleave (repeat 4 :good-morning)
                        (repeat 4 :good-evening))
-           (seq out-queue)))))
+           @!a))))
 
 (def straight-wins-paths
   (let [product
@@ -98,13 +100,15 @@
         events   [{:type [0 0 :o]}
                   {:type [1 1 :o]}
                   {:type [2 2 :o]}]
-        program  (bpi/make-program! bthreads)
+        !a        (atom [])
+        listener  #(swap! !a conj %)
+        program  (bpi/make-program! bthreads
+                                    {:listeners {:test listener}})
         _        (doseq [event events]
                    (bp/submit-event! program event))
-        out-queue (:out-queue program)
         _        @(bp/stop! program)]
     (is (= (conj events {:terminal true, :type [:o :wins]})
-           (take 5 (seq out-queue))))))
+           (take 5 @!a)))))
 
 ;; Now we need to handle moves.
 ;; But we need some rules.
@@ -146,16 +150,14 @@
                 [(mapv make-winning-bthreads winning-event-set)
                  (make-no-double-placement-bthreads)])
 
+        !a        (atom [])
+        listener  #(swap! !a conj %)
         program (bpi/make-program! bthreads
-                                   (LinkedBlockingQueue.)
-                                   (LinkedBlockingQueue.)
-                                   {:logger tap>})
+                                   {:logger tap>
+                                    :listeners {:test listener}})
 
-        out-queue (:out-queue program)
-        _        (do (Thread/sleep 500)
-                     (bp/kill! program))
         _        @(bp/stop! program)
-        out-events (seq out-queue)]
+        out-events @!a]
     (is (= 4 (count out-events)))
     (is (= #{:o} (->> out-events
                       (take 3)
@@ -209,13 +211,13 @@
                 [(mapv make-winning-bthreads winning-event-set)
                  (make-no-double-placement-bthreads)])
 
+        !a        (atom [])
+        listener  #(swap! !a conj %)
         program (bpi/make-program! bthreads
-                                   (LinkedBlockingQueue.)
-                                   (LinkedBlockingQueue.)
-                                   {:logger tap>})
-        out-queue (:out-queue program)
+                                   {:logger tap>
+                                    :listeners {:test listener}})
         _        (bp/submit-event! program {:type [1 1 :x]})
         _        @(bp/stop! program)]
 
     (is (= [{:type [1 1 :x]} {:type [0 0 :o]}]
-           (seq out-queue)))))
+           @!a))))
