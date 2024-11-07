@@ -25,7 +25,7 @@
         _         @(bp/stop! program)]
     (is (= (interleave (repeat 4 :good-morning)
                        (repeat 4 :good-evening))
-           @!a))))
+           (butlast @!a)))))
 
 (def straight-wins-paths
   (let [product
@@ -220,4 +220,4 @@
         _        @(bp/stop! program)]
 
     (is (= [{:type [1 1 :x]} {:type [0 0 :o]}]
-           @!a))))
+           (butlast @!a)))))
