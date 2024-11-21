@@ -3,7 +3,8 @@
  :aliases
  {:test {:extra-paths ["test"]
          :extra-deps {org.clojure/test.check {:mvn/version "1.1.1"}
-                      lambdaisland/kaocha {:mvn/version "1.91.1392"}}}
+                      lambdaisland/kaocha {:mvn/version "1.91.1392"}}
+         :exec-fn kaocha.runner/exec-fn}
   :dev {:extra-deps {org.clojure/clojurescript {:mvn/version "1.11.54"}
                      nrepl/nrepl {:mvn/version "1.2.0"}
                      cider/piggieback {:mvn/version "0.4.2"}
