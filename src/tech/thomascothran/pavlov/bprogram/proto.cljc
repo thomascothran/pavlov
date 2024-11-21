@@ -1,16 +1,6 @@
 (ns tech.thomascothran.pavlov.bprogram.proto
   (:refer-clojure :exclude [pop conj]))
 
-(defprotocol BidCollector
-  :extend-via-metadata true
-  (collect [this activated-bthreads event-filter]
-    "Given an event, collect all the bids"))
-
-(defprotocol Handler
-  :extend-via-metadata true
-  (id [this] "Id for the handler")
-  (handle [this event]))
-
 (defprotocol BProgram
   :extend-via-metadata true
   (stop! [this]
