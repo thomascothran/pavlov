@@ -4,6 +4,6 @@
   :extend-via-metadata true
   (start! [this])
   (stop! [this])
-  (notify! [this event])
+  (notify! [this event bthread->bid])
   (subscribe! [this key f])
   (listeners [this]))

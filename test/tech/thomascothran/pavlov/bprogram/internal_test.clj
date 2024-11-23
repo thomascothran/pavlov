@@ -18,7 +18,7 @@
                        (repeat {:wait-on #{:good-evening}
                                 :block #{:good-morning}})))]
         !a        (atom [])
-        listener  #(swap! !a conj %)
+        listener  (fn [x _] (swap! !a conj x))
         program   (bpi/make-program! bthreads
                                      {:listeners {:test listener}})
         _         @(bp/stop! program)]
@@ -100,7 +100,7 @@
                   {:type [1 1 :o]}
                   {:type [2 2 :o]}]
         !a        (atom [])
-        listener  #(swap! !a conj %)
+        listener  (fn [x _] (swap! !a conj x))
         program  (bpi/make-program! bthreads
                                     {:listeners {:test listener}})
         _        (doseq [event events]
@@ -150,7 +150,7 @@
                  (make-no-double-placement-bthreads)])
 
         !a        (atom [])
-        listener  #(swap! !a conj %)
+        listener  (fn [x _] (swap! !a conj x))
         program (bpi/make-program! bthreads
                                    {:logger tap>
                                     :listeners {:test listener}})
@@ -211,7 +211,7 @@
                  (make-no-double-placement-bthreads)])
 
         !a        (atom [])
-        listener  #(swap! !a conj %)
+        listener  (fn [x _] (swap! !a conj x))
         program (bpi/make-program! bthreads
                                    {:logger tap>
                                     :listeners {:test listener}})

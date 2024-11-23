@@ -45,9 +45,8 @@
               :next-state next-state}])
 
     (when event
-      (pub/notify! publisher
-                   (vary-meta event assoc :pavlov/bthread->bids
-                              (get state :bthread->bid))))
+      (pub/notify! publisher event (get state :bthread->bid)))
+
     (if recur?
       (recur program next-event)
       (when terminate?

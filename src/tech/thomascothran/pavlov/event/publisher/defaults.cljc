@@ -2,12 +2,12 @@
   (:require [tech.thomascothran.pavlov.event.publisher.proto :as publisher]))
 
 (defn- notify!
-  [publisher event]
+  [publisher event bthread->bid]
   (let [subscribers @(get publisher :subscribers)]
     (tap> [::notify! {:event event
                       :subscribers subscribers}])
-    (doseq [[k listener] subscribers]
-      (try (listener event)
+    (doseq [[k subscriber] subscribers]
+      (try (subscriber event bthread->bid)
            (catch #?(:clj Throwable :cljs :default) _
              (swap! subscribers dissoc k))))))
 
