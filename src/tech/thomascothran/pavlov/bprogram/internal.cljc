@@ -35,17 +35,19 @@
         recur?    (and next-event (not terminate?))
         publisher (get program :publisher)]
 
-    (tap> [::handle-event!
-           {:event event
-            :terminate? terminate?
-            :next-event next-event
-            :state state
-            :bids (set (vals (:bthread->bid state)))
-            :next-bids (set (vals (:bthread->bid next-state)))
-            :next-state next-state}])
+    #_(tap> [::handle-event!
+             {:event event
+              :terminate? terminate?
+              :next-event next-event
+              :state state
+              :bids (set (vals (:bthread->bid state)))
+              :next-bids (set (vals (:bthread->bid next-state)))
+              :next-state next-state}])
 
     (when event
-      (pub/notify! publisher event))
+      (pub/notify! publisher
+                   (vary-meta event assoc :pavlov/bthread->bids
+                              (get state :bthread->bid))))
     (if recur?
       (recur program next-event)
       (when terminate?
