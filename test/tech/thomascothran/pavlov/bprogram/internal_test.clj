@@ -4,8 +4,7 @@
             [tech.thomascothran.pavlov.defaults]
             [tech.thomascothran.pavlov.bprogram.proto :as bp]
             [tech.thomascothran.pavlov.bprogram.internal :as bpi]
-            [tech.thomascothran.pavlov.event.proto :as event])
-  (:import [java.util.concurrent LinkedBlockingQueue]))
+            [tech.thomascothran.pavlov.event.proto :as event]))
 
 (deftest good-morning-and-evening
   (let [bthreads
