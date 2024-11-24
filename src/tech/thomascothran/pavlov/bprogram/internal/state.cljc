@@ -63,10 +63,6 @@
              bid/request
              (remove (comp blocked-event-types event/type))
              first)]
-    (tap> [::next-event
-           {:blocked-event-types blocked-event-types
-            :eligible-bthreads eligible-bthreads
-            :result result}])
     result))
 
 (defn bthreads-to-notify

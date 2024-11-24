@@ -81,9 +81,9 @@
   (get program :killed))
 
 (defn- listen!
-  [program k listener]
-  (let [listeners (get program :listeners)]
-    (swap! listeners assoc k listener)))
+  [program k subscriber]
+  (let [publisher (get program :publisher)]
+    (pub/subscribe! publisher k subscriber)))
 
 (defn- submit-event!
   [program event]
@@ -108,7 +108,6 @@
                                  :cljs (js/Promise.))
                      :killed #?(:clj (promise)
                                 :cljs (js/Promise.))
-                     :listeners (atom subscribers)
                      :publisher publisher}
 
            {`bprogram/submit-event! submit-event!

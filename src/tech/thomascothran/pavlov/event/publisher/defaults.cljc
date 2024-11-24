@@ -3,10 +3,8 @@
 
 (defn- notify!
   [publisher event bthread->bid]
-  (let [subscribers @(get publisher :subscribers)]
-    (tap> [::notify! {:event event
-                      :subscribers subscribers}])
-    (doseq [[k subscriber] subscribers]
+  (let [subscribers (get publisher :subscribers)]
+    (doseq [[k subscriber] @subscribers]
       (try (subscriber event bthread->bid)
            (catch #?(:clj Throwable :cljs :default) _
              (swap! subscribers dissoc k))))))

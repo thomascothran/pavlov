@@ -26,6 +26,19 @@
                        (repeat 4 :good-evening))
            (butlast @!a)))))
 
+(deftest add-listener
+  (let [bthreads [(bthread/seq [{:wait-on #{:go}}
+                                {:request #{:some-event}}])]
+
+        !a        (atom [])
+        listener  (fn [x _] (swap! !a conj x))
+        program   (bpi/make-program! bthreads)
+        _         (bp/listen! program :test listener)
+        _         (bp/submit-event! program :go)
+        _         @(bp/stop! program)]
+    (is (= [:go :some-event]
+           (butlast  @!a)))))
+
 (def straight-wins-paths
   (let [product
         (for [x (range 3)
@@ -152,8 +165,7 @@
         !a        (atom [])
         listener  (fn [x _] (swap! !a conj x))
         program (bpi/make-program! bthreads
-                                   {:logger tap>
-                                    :listeners {:test listener}})
+                                   {:listeners {:test listener}})
 
         _        @(bp/stop! program)
         out-events @!a]
@@ -213,8 +225,7 @@
         !a        (atom [])
         listener  (fn [x _] (swap! !a conj x))
         program (bpi/make-program! bthreads
-                                   {:logger tap>
-                                    :listeners {:test listener}})
+                                   {:listeners {:test listener}})
         _        (bp/submit-event! program {:type [1 1 :x]})
         _        @(bp/stop! program)]
 
