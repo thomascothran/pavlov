@@ -8,7 +8,7 @@
   (kill! [this]
     "Kill the program if possible. Will not wait for pending events to clear.")
   (submit-event! [this event] "Handle an event")
-  (listen! [this k f]
+  (subscribe! [this k f]
     "Call `f` on each emitted event. `k` uniquely identifies
     the subscription."))
 

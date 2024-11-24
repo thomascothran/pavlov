@@ -67,7 +67,6 @@
                                        (get :!state)
                                        deref
                                        (get :next-event))]
-              (tap> [::next-event' next-event'])
               (when-not (realized? killed)
                 (when next-event'
                   (handle-event! program next-event'))
@@ -80,7 +79,7 @@
   (set-stopped! program)
   (get program :killed))
 
-(defn- listen!
+(defn- subscribe!
   [program k subscriber]
   (let [publisher (get program :publisher)]
     (pub/subscribe! publisher k subscriber)))
@@ -97,7 +96,7 @@
   ([bthreads opts]
    (let [!state  (atom (state/init bthreads))
          in-queue (get opts :in-queue #?(:clj (LinkedBlockingQueue.)))
-         subscribers (get opts :listeners {})
+         subscribers (get opts :subscribers {})
          publisher (get opts :publisher
                         (pub-default/make-publisher! {:subscribers subscribers}))
 
@@ -116,7 +115,7 @@
 
             `bprogram/kill! kill!
 
-            `bprogram/listen! listen!})]
+            `bprogram/subscribe! subscribe!})]
 
      #?(:clj (future (run-event-loop! program)))
      program)))

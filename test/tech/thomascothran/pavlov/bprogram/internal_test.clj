@@ -18,24 +18,24 @@
                        (repeat {:wait-on #{:good-evening}
                                 :block #{:good-morning}})))]
         !a        (atom [])
-        listener  (fn [x _] (swap! !a conj x))
+        subscriber  (fn [x _] (swap! !a conj x))
         program   (bpi/make-program! bthreads
-                                     {:listeners {:test listener}})
+                                     {:subscribers {:test subscriber}})
         _         @(bp/stop! program)]
     (is (= (interleave (repeat 4 :good-morning)
                        (repeat 4 :good-evening))
            (butlast @!a)))))
 
-(deftest add-listener
+(deftest add-subscriber
   (let [bthreads [(bthread/seq [{:wait-on #{:go}}
                                 {:request #{:some-event}}])]
 
-        !a        (atom [])
-        listener  (fn [x _] (swap! !a conj x))
-        program   (bpi/make-program! bthreads)
-        _         (bp/listen! program :test listener)
-        _         (bp/submit-event! program :go)
-        _         @(bp/stop! program)]
+        !a         (atom [])
+        subscriber (fn [x _] (swap! !a conj x))
+        program    (bpi/make-program! bthreads)
+        _          (bp/subscribe! program :test subscriber)
+        _          (bp/submit-event! program :go)
+        _          @(bp/stop! program)]
     (is (= [:go :some-event]
            (butlast  @!a)))))
 
@@ -113,9 +113,9 @@
                   {:type [1 1 :o]}
                   {:type [2 2 :o]}]
         !a        (atom [])
-        listener  (fn [x _] (swap! !a conj x))
+        subscriber  (fn [x _] (swap! !a conj x))
         program  (bpi/make-program! bthreads
-                                    {:listeners {:test listener}})
+                                    {:subscribers {:test subscriber}})
         _        (doseq [event events]
                    (bp/submit-event! program event))
         _        @(bp/stop! program)]
@@ -163,9 +163,9 @@
                  (make-no-double-placement-bthreads)])
 
         !a        (atom [])
-        listener  (fn [x _] (swap! !a conj x))
+        subscriber  (fn [x _] (swap! !a conj x))
         program (bpi/make-program! bthreads
-                                   {:listeners {:test listener}})
+                                   {:subscribers {:test subscriber}})
 
         _        @(bp/stop! program)
         out-events @!a]
@@ -223,9 +223,9 @@
                  (make-no-double-placement-bthreads)])
 
         !a        (atom [])
-        listener  (fn [x _] (swap! !a conj x))
+        subscriber (fn [x _] (swap! !a conj x))
         program (bpi/make-program! bthreads
-                                   {:listeners {:test listener}})
+                                   {:subscribers {:test subscriber}})
         _        (bp/submit-event! program {:type [1 1 :x]})
         _        @(bp/stop! program)]
 
