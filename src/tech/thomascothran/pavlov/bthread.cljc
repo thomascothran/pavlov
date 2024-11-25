@@ -1,6 +1,10 @@
 (ns tech.thomascothran.pavlov.bthread
-  (:refer-clojure :exclude [seq reduce])
+  (:refer-clojure :exclude [seq reduce name])
   (:require [tech.thomascothran.pavlov.bthread.proto :as proto]))
+
+(defn name
+  [bthread]
+  (proto/name bthread))
 
 (defn bid
   ([bthread]

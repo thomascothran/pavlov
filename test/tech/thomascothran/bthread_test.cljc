@@ -5,13 +5,22 @@
             [tech.thomascothran.pavlov.bthread.defaults]))
 
 (deftest test-bid-sequence
-  (let [abc [{:request #{:a}} {:request #{:b}} {:request #{:c}}]
+  (let [abc [{:name `request-a
+              :request #{:a}}
+             {:name `request-b
+              :request #{:b}}
+             {:name `request-c
+              :request #{:c}}]
         bthread (bthread/seq abc)]
-    (is (= {:request #{:a}} (bthread/bid bthread {:type :test})))
-    (is (= {:request #{:b}} (bthread/bid bthread {:type :test})))
-    (is (= {:request #{:c}} (bthread/bid bthread {:type :test})))
-    (is (nil? (bthread/bid bthread {:type :test})))
-    (is (= abc [{:request #{:a}} {:request #{:b}} {:request #{:c}}]))))
+    (is (= (first abc)
+           (bthread/bid bthread {:type :test})))
+    (is (= (second abc)
+           (bthread/bid bthread {:type :test})))
+    (is (= (-> (nth abc 2) bthread/name)
+           (-> bthread
+               (bthread/bid {:type :test})
+               (bthread/name))))
+    (is (nil? (bthread/bid bthread {:type :test})))))
 
 (deftest test-bid-reduce
   (testing "Should retain state"
