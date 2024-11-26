@@ -1,6 +1,6 @@
 (ns tech.thomascothran.bthread-test
-  (:require #?(:clj [clojure.test :refer [deftest is testing run-tests]]
-               :cljs [cljs.test :refer-macros [deftest is testing run-tests]])
+  (:require #?(:clj [clojure.test :refer [deftest is testing]]
+               :cljs [cljs.test :refer-macros [deftest is testing]])
             [tech.thomascothran.pavlov.bthread :as bthread]
             [tech.thomascothran.pavlov.bthread.defaults]))
 
