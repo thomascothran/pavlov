@@ -15,15 +15,30 @@
             (.put this event))
           (pop [this] (.take this))))
 
+#?(:cljs
+   (defn deliver
+     [m v]
+     ((get m :deliver) v)))
+
 (defn- set-stopped!
-  [program]
-  #?(:clj (deliver (get program :stopped) true)
-     :cljs (throw (ex-info "not implemented" program))))
+  [program-opts]
+  (deliver (get program-opts :stopped) true))
 
 (defn- set-killed!
-  [program]
-  #?(:clj (deliver (get program :killed) true)
-     :cljs (throw (ex-info "not implemented" program))))
+  [program-opts]
+  (deliver (get program-opts :killed) true))
+
+#?(:cljs
+   (defn- deferred-promise
+     []
+     (let [resolve (volatile! nil)
+           reject (volatile! nil)]
+       {:promise
+        (js/Promise. (fn [resolve' reject']
+                       (vswap! resolve resolve')
+                       (vswap! reject reject')))
+        :resolve @resolve
+        :reject @reject})))
 
 (defn- handle-event!
   [program-opts event]
@@ -61,7 +76,8 @@
   [program-opts]
   (set-killed! program-opts)
   (set-stopped! program-opts)
-  (get program-opts :killed))
+  #?(:clj (get program-opts :killed)
+     :cljs (get-in program-opts [:killed :promise])))
 
 (defn- subscribe!
   [program k subscriber]
@@ -84,7 +100,8 @@
   (submit-event! program-opts
                  {:type :pavlov/terminate
                   :terminal true})
-  (get program-opts :stopped))
+  #?(:clj (get program-opts :stopped)
+     :cljs (get-in program-opts [:stopped :promise])))
 
 (defn make-program!
   ([bthreads]
@@ -100,9 +117,9 @@
          {:!state !state
           :in-queue in-queue
           :stopped #?(:clj (promise)
-                      :cljs (js/Promise.))
+                      :cljs (deferred-promise))
           :killed #?(:clj (promise)
-                     :cljs (js/Promise.))
+                     :cljs (deferred-promise))
           :publisher publisher}
 
          program (reify bprogram/BProgram
