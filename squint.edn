@@ -1,2 +1,2 @@
-{:paths ["src" "test"]
- :output-dir "out/js"}
+{:paths ["src" "squint-test"]
+ :output-dir "out/squint-js"}

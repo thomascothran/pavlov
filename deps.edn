@@ -1,7 +1,7 @@
 {:paths ["src" "resources"]
  :deps {}
  :aliases
- {:test {:extra-paths ["test"]
+ {:test {:extra-paths ["test" "squint-test"]
          :extra-deps {org.clojure/test.check {:mvn/version "1.1.1"}
                       lambdaisland/kaocha {:mvn/version "1.91.1392"}}
          :exec-fn kaocha.runner/exec-fn}
