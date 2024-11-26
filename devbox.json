@@ -1,0 +1,20 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jetpack-io/devbox/0.10.3/.schema/devbox.schema.json",
+  "packages": [
+    "jdk@21",
+    "nodejs@23.2.0"
+  ],
+  "shell": {
+    "init_hook": [
+      "echo 'Welcome to devbox!' > /dev/null"
+    ],
+    "scripts": {
+      "test": [
+        "clj -X:test"
+      ],
+      "test-watch": [
+        "clj -X:test :watch? true"
+      ]
+    }
+  }
+}
