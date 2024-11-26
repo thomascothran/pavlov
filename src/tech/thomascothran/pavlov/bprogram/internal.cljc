@@ -100,7 +100,7 @@
          publisher (get opts :publisher
                         (pub-default/make-publisher! {:subscribers subscribers}))
 
-         program
+         program-state
          (with-meta {:!state !state
                      :in-queue in-queue
                      :stopped #?(:clj (promise)
@@ -115,9 +115,17 @@
 
             `bprogram/kill! kill!
 
-            `bprogram/subscribe! subscribe!})]
+            `bprogram/subscribe! subscribe!})
 
-     #?(:clj (future (run-event-loop! program)))
+         program (reify bprogram/BProgram
+                   (stop! [_] (stop! program-state))
+                   (kill! [_] (kill! program-state))
+                   (subscribe! [_ k f]
+                     (subscribe! program-state k f))
+                   (submit-event! [_ event]
+                     (submit-event! program-state event)))]
+
+     #?(:clj (future (run-event-loop! program-state)))
      program)))
 
 
