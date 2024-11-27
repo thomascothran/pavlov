@@ -1,8 +1,8 @@
-(ns tech.thomascothran.pavlov.bthread.proto)
+(ns tech.thomascothran.pavlov.bthread.proto
+  (:refer-clojure :exclude [name]))
 
 (defprotocol BThread
-  :extend-via-metadata true
-  (bid [this] [this last-event] "initial bid")
-  (priority [this]
-    "Returns a numeric value for priority"))
+  (name [this])
+  (bid [this] [this last-event])
+  (priority [this]))
 

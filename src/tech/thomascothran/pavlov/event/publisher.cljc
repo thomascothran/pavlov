@@ -2,8 +2,8 @@
   (:require [tech.thomascothran.pavlov.event.publisher.proto :as proto]))
 
 (defn notify!
-  [publisher event]
-  (proto/notify! publisher event))
+  [publisher event bthread->bid]
+  (proto/notify! publisher event bthread->bid))
 
 (defn subscribe!
   [publisher key f]

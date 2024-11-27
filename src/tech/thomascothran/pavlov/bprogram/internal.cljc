@@ -15,80 +15,93 @@
             (.put this event))
           (pop [this] (.take this))))
 
+#?(:cljs
+   (defn deliver
+     [m v]
+     ((get m :deliver) v)))
+
 (defn- set-stopped!
-  [program]
-  #?(:clj (deliver (get program :stopped) true)
-     :cljs (throw (ex-info "not implemented" program))))
+  [program-opts]
+  (deliver (get program-opts :stopped) true))
 
 (defn- set-killed!
-  [program]
-  #?(:clj (deliver (get program :killed) true)
-     :cljs (throw (ex-info "not implemented" program))))
+  [program-opts]
+  (deliver (get program-opts :killed) true))
+
+#?(:cljs
+   (defn- deferred-promise
+     []
+     (let [resolve (volatile! nil)
+           reject (volatile! nil)]
+       {:promise
+        (js/Promise. (fn [resolve' reject']
+                       (vswap! resolve resolve')
+                       (vswap! reject reject')))
+        :resolve @resolve
+        :reject @reject})))
 
 (defn- handle-event!
-  [program event]
-  (let [!state (get program :!state)
+  [program-opts event]
+  (let [!state (get program-opts :!state)
+        publisher (get program-opts :publisher)
         state @!state
         next-state (reset! !state (state/step state event))
         next-event (get next-state :next-event)
         terminate? (event/terminal? event)
-        recur?    (and next-event (not terminate?))
-        publisher (get program :publisher)]
-
-    #_(tap> [::handle-event!
-             {:event event
-              :terminate? terminate?
-              :next-event next-event
-              :state state
-              :bids (set (vals (:bthread->bid state)))
-              :next-bids (set (vals (:bthread->bid next-state)))
-              :next-state next-state}])
+        recur?    (and next-event (not terminate?))]
 
     (when event
       (pub/notify! publisher event (get state :bthread->bid)))
 
     (if recur?
-      (recur program next-event)
+      (recur program-opts next-event)
       (when terminate?
-        (set-stopped! program)))))
-
-(defn- stop!
-  [program]
-  (bprogram/submit-event! program
-                          {:type :pavlov/terminate
-                           :terminal true})
-  (get program :stopped))
+        (set-stopped! program-opts)))))
 
 #?(:clj (defn- run-event-loop!
-          [program]
-          (let [killed (get program :killed)
-                in-queue (get program :in-queue)]
-            (loop [next-event' (some-> program
+          [program-opts]
+          (let [killed (get program-opts :killed)
+                in-queue (get program-opts :in-queue)]
+            (loop [next-event' (some-> program-opts
                                        (get :!state)
                                        deref
                                        (get :next-event))]
               (when-not (realized? killed)
                 (when next-event'
-                  (handle-event! program next-event'))
+                  (handle-event! program-opts next-event'))
                 (when-not (event/terminal? next-event')
                   (recur (bprogram/pop in-queue))))))))
 
 (defn kill!
-  [program]
-  (set-killed! program)
-  (set-stopped! program)
-  (get program :killed))
+  [program-opts]
+  (set-killed! program-opts)
+  (set-stopped! program-opts)
+  #?(:clj (get program-opts :killed)
+     :cljs (get-in program-opts [:killed :promise])))
 
 (defn- subscribe!
   [program k subscriber]
   (let [publisher (get program :publisher)]
     (pub/subscribe! publisher k subscriber)))
 
-(defn- submit-event!
-  [program event]
-  #?(:clj (let [in-queue (get program :in-queue)]
-            (bprogram/conj in-queue event))
-     :cljs (js/setTimeout #(handle-event! program event) 0)))
+#?(:clj
+   (defn- submit-event!
+     [opts event]
+     (let [in-queue (get opts :in-queue)]
+       (bprogram/conj in-queue event)))
+
+   :cljs
+   (defn- submit-event!
+     [opts event]
+     (js/setTimeout #(handle-event! opts event) 0)))
+
+(defn- stop!
+  [program-opts]
+  (submit-event! program-opts
+                 {:type :pavlov/terminate
+                  :terminal true})
+  #?(:clj (get program-opts :stopped)
+     :cljs (get-in program-opts [:stopped :promise])))
 
 (defn make-program!
   ([bthreads]
@@ -100,24 +113,24 @@
          publisher (get opts :publisher
                         (pub-default/make-publisher! {:subscribers subscribers}))
 
-         program
-         (with-meta {:!state !state
-                     :in-queue in-queue
-                     :stopped #?(:clj (promise)
-                                 :cljs (js/Promise.))
-                     :killed #?(:clj (promise)
-                                :cljs (js/Promise.))
-                     :publisher publisher}
+         program-opts
+         {:!state !state
+          :in-queue in-queue
+          :stopped #?(:clj (promise)
+                      :cljs (deferred-promise))
+          :killed #?(:clj (promise)
+                     :cljs (deferred-promise))
+          :publisher publisher}
 
-           {`bprogram/submit-event! submit-event!
+         program (reify bprogram/BProgram
+                   (stop! [_] (stop! program-opts))
+                   (kill! [_] (kill! program-opts))
+                   (subscribe! [_ k f]
+                     (pub/subscribe! publisher k f))
+                   (submit-event! [_ event]
+                     (submit-event! program-opts event)))]
 
-            `bprogram/stop! stop!
-
-            `bprogram/kill! kill!
-
-            `bprogram/subscribe! subscribe!})]
-
-     #?(:clj (future (run-event-loop! program)))
+     #?(:clj (future (run-event-loop! program-opts)))
      program)))
 
 

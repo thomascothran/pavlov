@@ -1,23 +1,23 @@
 (ns tech.thomascothran.pavlov.event.publisher.defaults
   (:require [tech.thomascothran.pavlov.event.publisher.proto :as publisher]))
 
-(defn- notify!
-  [publisher event bthread->bid]
-  (let [subscribers (get publisher :subscribers)]
-    (doseq [[k subscriber] @subscribers]
-      (try (subscriber event bthread->bid)
-           (catch #?(:clj Throwable :cljs :default) _
-             (swap! subscribers dissoc k))))))
+(defn- -notify!
+  [!subscribers event bthread->bid]
+  (doseq [[k subscriber] @!subscribers]
+    (try (subscriber event bthread->bid)
+         (catch #?(:clj Throwable :cljs :default) _
+           (swap! !subscribers dissoc k)))))
 
-(defn- subscribe!
-  [publisher k f]
-  (swap! (get publisher :subscribers) assoc k f))
+(defn- -subscribe!
+  [!subscribers k f]
+  (swap! !subscribers assoc k f))
 
 (defn make-publisher!
   [opts]
-  (with-meta {:subscribers (-> (get opts :subscribers {}) atom)}
-    {`publisher/start! (fn [_])
-     `publisher/stop! (fn [_])
-     `publisher/notify! notify!
-     `publisher/subscribe! subscribe!
-     `publisher/subscribers! #(-> (get % :subscribers) deref)}))
+  (let [!subscribers (-> (get opts :subscribers {}) atom)]
+    (reify publisher/Publisher
+      (start! [_])
+      (stop! [_])
+      (notify! [_ event bthread->bid]
+        (-notify! !subscribers event bthread->bid))
+      (subscribe! [_ k f] (-subscribe! !subscribers k f)))))
