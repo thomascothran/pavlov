@@ -21,11 +21,14 @@
 
            cljs.core.PersistentHashMap
            (type [event] (:type event))
-           (terminal? [event] (:terminal event))))
+           (terminal? [event] (:terminal event)))
+   :squint (extend-protocol event/Object
+             (type [event] (get event :type))
+             (terminal? [event] (get event :terminal))))
 
-(extend-protocol event/Event
-  #?(:clj Object
-     :cljs js/Object)
-  (type [o] o)
-  (terminal? [_] false))
+#?(:clj
+   (extend-protocol event/Event
+     Object
+     (type [o] o)
+     (terminal? [_] false)))
 
