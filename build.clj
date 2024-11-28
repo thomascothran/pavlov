@@ -10,7 +10,7 @@
 
 (defn- pom-template [version]
   [[:description "Pavlov: Bthreads for Clojure(Script)"]
-   [:url "https://github.com/tech.thomascothran/pavlov"]
+   [:url "https://github.com/thomascothran/pavlov"]
    [:licenses
     [:license
      [:name "Eclipse Public License"]
@@ -19,9 +19,9 @@
     [:developer
      [:name "Thomas Cothran"]]]
    [:scm
-    [:url "https://github.com/tech.thomascothran/pavlov"]
-    [:connection "scm:git:https://github.com/tech.thomascothran/pavlov.git"]
-    [:developerConnection "scm:git:ssh:git@github.com:tech.thomascothran/pavlov.git"]
+    [:url "https://github.com/thomascothran/pavlov"]
+    [:connection "scm:git:https://github.com/thomascothran/pavlov.git"]
+    [:developerConnection "scm:git:ssh:git@github.com:thomascothran/pavlov.git"]
     [:tag (str "v" version)]]])
 
 (defn- jar-opts [opts]
