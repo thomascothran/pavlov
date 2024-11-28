@@ -18,7 +18,7 @@
 #?(:cljs
    (defn deliver
      [m v]
-     ((get m :deliver) v)))
+     ((get m :resolve) v)))
 
 (defn- set-stopped!
   [program-opts]
@@ -35,8 +35,8 @@
            reject (volatile! nil)]
        {:promise
         (js/Promise. (fn [resolve' reject']
-                       (vswap! resolve resolve')
-                       (vswap! reject reject')))
+                       (vreset! resolve resolve')
+                       (vreset! reject reject')))
         :resolve @resolve
         :reject @reject})))
 
@@ -107,7 +107,8 @@
   ([bthreads]
    (make-program! bthreads {}))
   ([bthreads opts]
-   (let [!state  (atom (state/init bthreads))
+   (let [initial-state (state/init bthreads)
+         !state  (atom initial-state)
          in-queue (get opts :in-queue #?(:clj (LinkedBlockingQueue.)))
          subscribers (get opts :subscribers {})
          publisher (get opts :publisher
@@ -130,7 +131,9 @@
                    (submit-event! [_ event]
                      (submit-event! program-opts event)))]
 
-     #?(:clj (future (run-event-loop! program-opts)))
+     #?(:clj (future (run-event-loop! program-opts))
+        :cljs (when-let [next-event (get initial-state :next-event)]
+                (submit-event! program-opts next-event)))
      program)))
 
 

@@ -26,9 +26,8 @@
              (type [event] (get event :type))
              (terminal? [event] (get event :terminal))))
 
-#?(:clj
-   (extend-protocol event/Event
-     Object
-     (type [o] o)
-     (terminal? [_] false)))
+(extend-protocol event/Event
+  #?(:clj Object :cljs default)
+  (type [o] o)
+  (terminal? [_] false))
 
