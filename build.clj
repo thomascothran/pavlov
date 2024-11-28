@@ -4,23 +4,12 @@
             [deps-deploy.deps-deploy :as dd]))
 
 (def lib 'tech.thomascothran/pavlov)
-(def version "0.1.0-SNAPSHOT")
-#_ ; alternatively, use MAJOR.MINOR.COMMITS:
+; alternatively, use MAJOR.MINOR.COMMITS:
 (def version (format "1.0.%s" (b/git-count-revs nil)))
 (def class-dir "target/classes")
 
-(defn test "Run all the tests." [opts]
-  (let [basis    (b/create-basis {:aliases [:test]})
-        cmds     (b/java-command
-                  {:basis      basis
-                    :main      'clojure.main
-                    :main-args ["-m" "cognitect.test-runner"]})
-        {:keys [exit]} (b/process cmds)]
-    (when-not (zero? exit) (throw (ex-info "Tests failed" {}))))
-  opts)
-
 (defn- pom-template [version]
-  [[:description "FIXME: my new library."]
+  [[:description "Pavlov: Bthreads for Clojure(Script)"]
    [:url "https://github.com/tech.thomascothran/pavlov"]
    [:licenses
     [:license
@@ -28,7 +17,7 @@
      [:url "http://www.eclipse.org/legal/epl-v10.html"]]]
    [:developers
     [:developer
-     [:name "Default"]]]
+     [:name "Thomas Cothran"]]]
    [:scm
     [:url "https://github.com/tech.thomascothran/pavlov"]
     [:connection "scm:git:https://github.com/tech.thomascothran/pavlov.git"]
@@ -37,16 +26,16 @@
 
 (defn- jar-opts [opts]
   (assoc opts
-          :lib lib   :version version
-          :jar-file  (format "target/%s-%s.jar" lib version)
-          :basis     (b/create-basis {})
-          :class-dir class-dir
-          :target    "target"
-          :src-dirs  ["src"]
-          :pom-data  (pom-template version)))
+         :lib lib   :version version
+         :jar-file  (format "target/%s-%s.jar" lib version)
+         :basis     (b/create-basis {})
+         :class-dir class-dir
+         :target    "target"
+         :src-dirs  ["src"]
+         :pom-data  (pom-template version)))
 
 (defn ci "Run the CI pipeline of tests (and build the JAR)." [opts]
-  (test opts)
+  ;(test opts)
   (b/delete {:path "target"})
   (let [opts (jar-opts opts)]
     (println "\nWriting pom.xml...")

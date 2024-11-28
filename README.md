@@ -1,6 +1,8 @@
 # Pavlov: Behavioral Programming for Clojure
 
-*Status: pre-release. Don't use.*
+*Status: pre-release.*
+
+[![Clojars Project](https://img.shields.io/clojars/v/tech.thomascothran/pavlov.svg)](https://clojars.org/tech.thomascothran/pavlov)
 
 Pavlov is a behavioral programming library for Clojure(Script).
 

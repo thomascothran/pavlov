@@ -20,6 +20,11 @@
       ],
       "cljs-test-watch": [
         "node --watch out/node-tests.js"
+      ],
+      "deploy": [
+        "clj -X:test",
+        "clj -T:build ci",
+        "env $(cat .secrets | xargs) clj -T:build deploy"
       ]
     }
   }
