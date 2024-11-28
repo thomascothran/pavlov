@@ -153,19 +153,22 @@ When `:c` occurs, close the program.
 
 ## Design Goals
 
-1. *Swappable implementations*. Protocols are used so that bthreads and bprograms are open for extension and modification.
-2. *BYO parallelization*. Bthreads can run in parallel and you should choose how. Bring your own thread pool, or use core.async. (TODO)
+1. *Zero dependencies*.
+2. *Swappable implementations*. Protocols are used so that bthreads and bprograms are open for extension and modification.
+3. *BYO parallelization*. Bthreads can run in parallel and you should choose how. Bring your own thread pool, or use core.async.
 
 ## Roadmap
 
-1. Implement canonical tic tac toe example in the test suite (done)
-2. Abstract event sources and sinks
-3. Firm up APIs
-4. ClojureScript support (including Squint)
-5. Opt-in parallelization
-6. Documentation
-7. Allow the creation of new bthreads to an active program
-8. Derived event types
+| Description  | Started | Complete |
+| Test canonical tic tac toe example | :heavy_check_mark: | :heavy_check_mark: |
+| Document common idiom | :heavy_check_mark: | :heavy_check_mark: |
+| Clojure(Script) support | :heavy_check_mark: | :heavy_check_mark: |
+| Bring your own parallel | | |
+| Squint support | :heavy_check_mark: | |
+| Sci support | :heavy_check_mark: | |
+| Example web app | | |
+| Generate Live Sequence Charts | | |
+| Automated model checking | | |
 
 ## Further Reading
 
