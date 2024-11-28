@@ -3,7 +3,10 @@
             [flow-storm.api :as fs-api]
             [cljs.repl.browser :as b]
             [cider.piggieback :as p]
-            [nrepl.server :as nrepl]))
+            [nrepl.server :as nrepl]
+            [shadow.cljs.devtools.server.nrepl :as shadow-nrepl]
+            [shadow.cljs.devtools.server :as server]
+            [shadow.cljs.devtools.api :as shadow]))
 
 (defonce !nrepl-server
   (atom nil))
@@ -14,13 +17,22 @@
    (spit ".nrepl-port" port)
    (reset! !nrepl-server
            (nrepl/start-server
-            :handler (nrepl/default-handler #'p/wrap-cljs-repl)
+            :handler (nrepl/default-handler #'shadow-nrepl/middleware #'p/wrap-cljs-repl)
             :port port))
+   (println "nrepl started on port " port)
    :ok))
+
+(defn shadow-go!
+  []
+  (do
+    (server/start!)
+    (shadow/watch :test)
+    (shadow/repl :test)))
 
 (defn go!
   [& _]
   (start-nrepl!)
+  (shadow-go!)
   @(promise))
 
 (defn run-plain-repl

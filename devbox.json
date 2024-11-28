@@ -17,6 +17,9 @@
       ],
       "squint-watch": [
         "npx squint watch"
+      ],
+      "cljs-test-watch": [
+        "node --watch out/node-tests.js"
       ]
     }
   }
