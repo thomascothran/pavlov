@@ -26,8 +26,10 @@
   []
   (do
     (server/start!)
-    (shadow/watch :test)
-    (shadow/repl :test)))
+    (shadow/watch :test)))
+
+(comment
+  (shadow/repl :test))
 
 (defn go!
   [& _]
