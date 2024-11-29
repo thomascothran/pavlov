@@ -162,9 +162,9 @@ When `:c` occurs, close the program.
 | Description                   | Started           | Complete          |
 |-------------------------------|-------------------|-------------------|
 | Test canonical tic tac toe example | :heavy_check_mark: | :heavy_check_mark: |
-| Document common idiom         | :heavy_check_mark: | :heavy_check_mark: |
+| Document common idiom s       | :heavy_check_mark: | :heavy_check_mark: |
 | Clojure(Script) support       | :heavy_check_mark: | :heavy_check_mark: |
-| Bring your own parallel       |                   |                   |
+| Bring your own paralleliation   |                   |                   |
 | Squint support                | :heavy_check_mark: |                   |
 | Sci support                   | :heavy_check_mark: |                   |
 | Example web app               |                   |                   |
