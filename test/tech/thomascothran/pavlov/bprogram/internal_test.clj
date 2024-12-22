@@ -6,6 +6,22 @@
             [tech.thomascothran.pavlov.bprogram.internal :as bpi]
             [tech.thomascothran.pavlov.event :as event]))
 
+(deftest subscriber-should-receive-event-after-bthread-executes
+  (let [!stack  (atom [])
+        bthread (bthread/reduce
+                 (fn [_ event]
+                   (swap! !stack conj [:bthread event])
+                   {:wait-on #{:test-event}}))
+        subscriber (fn [x _] (swap! !stack conj [:subscriber x]))
+        program   (bpi/make-program! [bthread]
+                                     {:subscribers {:test subscriber}})
+        _ (bp/submit-event! program :test-event)
+        _ @(bp/stop! program)]
+    (is (= [[:bthread nil]
+            [:bthread :test-event]
+            [:subscriber :test-event]]
+           (butlast @!stack)))))
+
 (deftest good-morning-and-evening
   (let [bthreads
         [(bthread/seq (repeat 4 {:request #{:good-morning}})
