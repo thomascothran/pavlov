@@ -98,7 +98,7 @@
   (let [bid-set (make-bid-map)
         state
         (reduce (fn [acc bthread]
-                  (let [bid (b/bid bthread)]
+                  (let [bid (b/bid bthread nil)]
                     (-> acc
                         (update :bthread->bid into {bthread bid})
                         (assoc-events bthread bid :requests)

@@ -7,9 +7,6 @@
   (proto/name bthread))
 
 (defn bid
-  ([bthread]
-   (some-> (proto/bid bthread)
-           (vary-meta assoc :pavlov/bthread bthread)))
   ([bthread event]
    (some-> (proto/bid bthread event)
            (vary-meta assoc :pavlov/bthread bthread))))
@@ -27,12 +24,6 @@
          xs' (volatile! xs)]
      (reify proto/BThread
        (priority [_] priority)
-       (bid
-         [_]
-         (when-let [x (first @xs')]
-           (let [bid' (bid x)]
-             (vreset! xs' (rest @xs'))
-             bid')))
        (bid [_ event]
          (when-let [x (first @xs')]
            (let [bid' (bid x event)]
@@ -65,10 +56,6 @@
          acc (volatile! init)]
      (reify proto/BThread
        (priority [_] priority)
-       (bid [_]
-         (let [bid (f @acc nil)]
-           (vreset! acc bid)
-           bid))
        (bid [_ event]
          (let [bid (f @acc event)]
            (vreset! acc bid)

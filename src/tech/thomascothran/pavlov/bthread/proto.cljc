@@ -3,6 +3,6 @@
 
 (defprotocol BThread
   (name [this])
-  (bid [this] [this last-event])
+  (bid [this last-event])
   (priority [this]))
 
