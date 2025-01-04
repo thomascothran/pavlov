@@ -22,6 +22,45 @@
                (bthread/name))))
     (is (nil? (bthread/bid bthread {:type :test})))))
 
+(defn count-down-step-fn
+  [prev-state _event]
+  (if prev-state
+    [(dec prev-state) {:wait-on #{:test}}]
+    [3 {:wait-on #{:test}}]))
+
+(deftest test-step-function
+  (testing "Should retain state"
+    (let [bthread (bthread/step count-down-step-fn)]
+      (is (= {:wait-on #{:test}}
+             (bthread/bid bthread nil))
+          "Should return the correct bid")
+      (is (= 3 (bthread/serialize bthread))
+          "Should initialize state correctly")
+      (is (= {:wait-on #{:test}}
+             (bthread/bid bthread {:type :test}))
+          "Should return the correct bid after initialization")
+      (is (= 2 (bthread/serialize bthread))
+          "Should decrement state")))
+  (testing "should handle round trip serialization"
+    (let [bthread (bthread/step count-down-step-fn)
+          _       (bthread/bid bthread nil)
+          _       (bthread/bid bthread {:type :test})
+          ser     (bthread/serialize bthread)
+          de      (bthread/deserialize bthread ser)]
+      (is (= 2 ser de))))
+  (testing "should work with anonymous functions"
+    (let [bthread (bthread/step #(apply count-down-step-fn %&))]
+      (is (= {:wait-on #{:test}}
+             (bthread/bid bthread nil))
+          "Should return the correct bid")
+      (is (= 3 (bthread/serialize bthread))
+          "Should initialize state correctly")
+      (is (= {:wait-on #{:test}}
+             (bthread/bid bthread {:type :test}))
+          "Should return the correct bid after initialization")
+      (is (= 2 (bthread/serialize bthread))
+          "Should decrement state"))))
+
 (deftest test-bid-reduce
   (testing "Should retain state"
     (let [reducer-fn (fn [{:keys [times-called]} _]
@@ -36,5 +75,4 @@
       (is (= {:request #{:more}
               :times-called 3} (bthread/bid bthread {:type :test})))
       (is (= nil (bthread/bid bthread {:type :test}))))))
-
 

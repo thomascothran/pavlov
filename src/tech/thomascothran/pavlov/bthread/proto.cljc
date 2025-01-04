@@ -4,5 +4,7 @@
 (defprotocol BThread
   (name [this])
   (bid [this last-event])
-  (priority [this]))
+  (priority [this])
+  (serialize [this])
+  (deserialize [this serialized]))
 
