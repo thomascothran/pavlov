@@ -4,6 +4,14 @@
             [tech.thomascothran.pavlov.bthread :as bthread]
             [tech.thomascothran.pavlov.bthread.defaults]))
 
+(deftest test-serde-on-maps
+  (let [bthread {:name :test-bthread
+                 :request #{:test-event}}]
+    (= bthread
+       (-> bthread
+           bthread/serialize
+           (bthread/deserialize bthread)))))
+
 (deftest test-bid-sequence
   (let [abc [{:name `request-a
               :request #{:a}}
