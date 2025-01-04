@@ -74,7 +74,9 @@ The bid a bthread produces can request events, wait on events, or block events i
 There are two main functions to create bthreads.
 
 - `b/seq`: turn a sequence of bids into a bthread
-- `b/reduce`: turn a reducing function and a starting value into a bthread
+- `b/step`: create a bthread with a step function
+
+A step function takes its previous state and an event, and returns its next state and a bid.
 
 ## Recipes
 

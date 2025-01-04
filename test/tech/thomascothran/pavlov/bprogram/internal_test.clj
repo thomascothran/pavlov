@@ -8,10 +8,10 @@
 
 (deftest subscriber-should-receive-event-after-bthread-executes
   (let [!stack  (atom [])
-        bthread (bthread/reduce
+        bthread (bthread/step
                  (fn [_ event]
                    (swap! !stack conj [:bthread event])
-                   {:wait-on #{:test-event}}))
+                   [nil {:wait-on #{:test-event}}]))
         subscriber (fn [x _] (swap! !stack conj [:subscriber x]))
         program   (bpi/make-program! [bthread]
                                      {:subscribers {:test subscriber}})
@@ -86,21 +86,25 @@
   selected by the same player), emit a win event
   and terminate the pogram."
   [path-events]
-  (bthread/reduce
+  (bthread/step
    (fn [{:keys [remaining-events] :as acc} event]
-     (if event ;; event is nil on initialization
-       (let [event-type (event/type event)]
-         (if (= remaining-events #{event-type})
-           {:request #{{:type [(last event-type) :wins]
-                        :terminal true}}
-            :remaining-events #{}}
-           (update acc :remaining-events disj event-type)))
-       acc))
-   ;; Initial value
-   {:remaining-events (set path-events)
-    :wait-on (into #{}
-                   (map (fn [event] {:type event}))
-                   path-events)}
+     (let [event-type (event/type event)
+           remaining-events' (disj remaining-events event-type)
+           events-to-watch
+           (into #{} (map (fn [event] {:type event})
+                          path-events))
+           default-bid {:wait-on events-to-watch}]
+       (cond (nil? event) ;; event is nil on initialization
+             [{:remaining-events (set path-events)} default-bid]
+
+             ;; Terminate - we've won!
+             (= remaining-events #{event-type})
+             [{:remaining-events remaining-events'}
+              {:request #{{:type [(last event-type) :wins]
+                           :terminal true}}}]
+
+             :else
+             [(update acc :remaining-events disj event-type) default-bid])))
    {:priority 1})) ;; overrides other bids
 
 ;; Note that we test our behavioral threads in isolation
@@ -111,15 +115,19 @@
     Then the bthread requests a win event"
     (let [bthread (make-winning-bthreads
                    #{[0 0 :x] [2 2 :x] [1 1 :x]})
-          bid1 (bthread/bid bthread {:type [1 1 :x]})
-          bid2 (bthread/bid bthread {:type [2 2 :x]})
-          bid3 (bthread/bid bthread {:type [0 0 :x]})]
-      (is (= #{[0 0 :x] [2 2 :x]} (:remaining-events bid1))
-          "Track which events are left to reach a win for x after the first move")
-      (is (= #{[0 0 :x]} (:remaining-events bid2))
-          "Track which events are left to reach a win for x after the second move")
-      (is (= #{{:type [:x :wins] :terminal true}} (:request bid3))
-          "Request a win when all the winning moves have been made"))))
+          bid1 (bthread/bid bthread nil) ;; initialization
+          bid2 (bthread/bid bthread {:type [1 1 :x]})
+          bid3 (bthread/bid bthread {:type [2 2 :x]})
+          bid4 (bthread/bid bthread {:type [0 0 :x]})]
+
+      (is (= #{:wait-on}
+             (set (keys bid1))
+             (set (keys bid2))
+             (set (keys bid3)))
+          "The first three bids should just wait")
+      (is (= #{{:type [:x :wins] :terminal true}}
+             (:request bid4))
+          "The last bid should request a win, because all the winning moves have been made"))))
 
 ;; Let's see if it can detect a win!
 ;; We'll ignore player moves for now.
