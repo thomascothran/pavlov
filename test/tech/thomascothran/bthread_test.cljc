@@ -7,10 +7,16 @@
 (deftest test-serde-on-maps
   (let [bthread {:name :test-bthread
                  :request #{:test-event}}]
-    (= bthread
-       (-> bthread
-           bthread/serialize
-           (bthread/deserialize bthread)))))
+    (is (= bthread
+           (->> bthread
+                bthread/serialize
+                (bthread/deserialize bthread))))))
+
+(deftest test-serde-on-nil
+  (is (= nil
+         (->> nil
+              bthread/serialize
+              (bthread/deserialize nil)))))
 
 (deftest test-bid-sequence
   (let [abc [{:name `request-a
