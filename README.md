@@ -249,17 +249,17 @@ When `:c` occurs, close the program.
 
 ## Roadmap
 
-| Description                   | Started           | Complete          |
-|-------------------------------|-------------------|-------------------|
+| Description                        | Started            | Complete           |
+|------------------------------------|--------------------|--------------------|
 | Test canonical tic tac toe example | :heavy_check_mark: | :heavy_check_mark: |
-| Document common idiom s       | :heavy_check_mark: | :heavy_check_mark: |
-| Clojure(Script) support       | :heavy_check_mark: | :heavy_check_mark: |
-| Bring your own parallelization   |                   |                   |
-| Squint support                | :heavy_check_mark: |                   |
-| Sci support                   | :heavy_check_mark: |                   |
-| Example web app               |                   |                   |
-| Generate Live Sequence Charts |                   |                   |
-| Automated model checking      |                   |                   |
+| Document common idiom s            | :heavy_check_mark: | :heavy_check_mark: |
+| Clojure(Script) support            | :heavy_check_mark: | :heavy_check_mark: |
+| Bring your own parallelization     |                    |                    |
+| Squint support                     | :heavy_check_mark: |                    |
+| Example web app                    |                    |                    |
+| Generate Live Sequence Charts      |                    |                    |
+| Automated model checking           |                    |                    |
+| Durable Execution                  | :heavy_check_mark: |                    |
 
 ## Further Reading
 
