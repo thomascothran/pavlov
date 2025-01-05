@@ -1,10 +1,10 @@
-(ns tech.thomascothran.pavlov.bprogram.internal
+(ns tech.thomascothran.pavlov.bprogram.ephemeral
   (:refer-clojure :exclude [run!])
   (:require [tech.thomascothran.pavlov.bprogram.proto :as bprogram]
             [tech.thomascothran.pavlov.event :as event]
             [tech.thomascothran.pavlov.event.publisher.defaults :as pub-default]
             [tech.thomascothran.pavlov.event.publisher.proto :as pub]
-            [tech.thomascothran.pavlov.bprogram.internal.state
+            [tech.thomascothran.pavlov.bprogram.ephemeral.state
              :as state])
   #?(:clj (:import [java.util.concurrent LinkedBlockingQueue])))
 

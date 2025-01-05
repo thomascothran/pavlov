@@ -1,10 +1,10 @@
-(ns tech.thomascothran.pavlov.bprogram.internal.state-test
+(ns tech.thomascothran.pavlov.bprogram.ephemeral.state-test
   (:require #?(:clj [clojure.test :refer [deftest is run-tests]]
                :cljs [cljs.test :refer [deftest is run-tests]])
             [tech.thomascothran.pavlov.event.defaults]
             [tech.thomascothran.pavlov.bid.defaults]
             [tech.thomascothran.pavlov.bthread :as b]
-            [tech.thomascothran.pavlov.bprogram.internal.state :as s]))
+            [tech.thomascothran.pavlov.bprogram.ephemeral.state :as s]))
 
 #_(def example-data-structure
     {:waits {:event-a #{:bthread-a

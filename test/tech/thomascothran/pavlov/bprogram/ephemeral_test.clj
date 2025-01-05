@@ -1,9 +1,9 @@
-(ns tech.thomascothran.pavlov.bprogram.internal-test
+(ns tech.thomascothran.pavlov.bprogram.ephemeral-test
   (:require [clojure.test :refer [deftest testing is]]
             [tech.thomascothran.pavlov.bthread :as b]
             [tech.thomascothran.pavlov.defaults]
             [tech.thomascothran.pavlov.bprogram.proto :as bp]
-            [tech.thomascothran.pavlov.bprogram.internal :as bpi]
+            [tech.thomascothran.pavlov.bprogram.ephemeral :as bpe]
             [tech.thomascothran.pavlov.event :as event]))
 
 (deftest subscriber-should-receive-event-after-bthread-executes
@@ -14,7 +14,7 @@
                    (swap! !stack conj [:bthread event])
                    [nil {:wait-on #{:test-event}}]))
         subscriber (fn [x _] (swap! !stack conj [:subscriber x]))
-        program   (bpi/make-program! [bthread]
+        program   (bpe/make-program! [bthread]
                                      {:subscribers {:test subscriber}})
         _ (bp/submit-event! program :test-event)
         _ @(bp/stop! program)]
@@ -38,7 +38,7 @@
 
         !a        (atom [])
         subscriber  (fn [x _] (swap! !a conj x))
-        program   (bpi/make-program! bthreads
+        program   (bpe/make-program! bthreads
                                      {:subscribers {:test subscriber}})
         _         @(bp/stop! program)]
     (is (= (interleave (repeat 4 :good-morning)
@@ -51,7 +51,7 @@
 
         !a         (atom [])
         subscriber (fn [x _] (swap! !a conj x))
-        program    (bpi/make-program! bthreads)
+        program    (bpe/make-program! bthreads)
         _          (bp/subscribe! program :test subscriber)
         _          (bp/submit-event! program :go)
         _          @(bp/stop! program)]
@@ -142,7 +142,7 @@
                   {:type [2 2 :o]}]
         !a        (atom [])
         subscriber  (fn [x _] (swap! !a conj x))
-        program  (bpi/make-program! bthreads
+        program  (bpe/make-program! bthreads
                                     {:subscribers {:test subscriber}})
         _        (doseq [event events]
                    (bp/submit-event! program event))
@@ -192,7 +192,7 @@
 
         !a        (atom [])
         subscriber  (fn [x _] (swap! !a conj x))
-        program (bpi/make-program! bthreads
+        program (bpe/make-program! bthreads
                                    {:subscribers {:test subscriber}})
 
         _        @(bp/stop! program)
@@ -251,7 +251,7 @@
 
         !a        (atom [])
         subscriber (fn [x _] (swap! !a conj x))
-        program (bpi/make-program! bthreads
+        program (bpe/make-program! bthreads
                                    {:subscribers {:test subscriber}})
         _        (bp/submit-event! program {:type [1 1 :x]})
         _        @(bp/stop! program)]

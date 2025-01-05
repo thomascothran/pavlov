@@ -1,4 +1,4 @@
-(ns tech.thomascothran.pavlov.bprogram.internal.state
+(ns tech.thomascothran.pavlov.bprogram.ephemeral.state
   (:require [tech.thomascothran.pavlov.bthread :as b]
             [tech.thomascothran.pavlov.bid.proto :as bid]
             [tech.thomascothran.pavlov.event :as event]
