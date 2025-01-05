@@ -80,6 +80,7 @@
   and terminate the pogram."
   [path-events]
   (bthread/step
+   ::winning-bthreads
    (fn [{:keys [remaining-events] :as acc} event]
      (let [event-type (event/type event)
            remaining-events' (disj remaining-events event-type)

@@ -71,12 +71,99 @@ Bthreads are sequential and stateful. They can run in parallel and be parked whe
 
 The bid a bthread produces can request events, wait on events, or block events in other bthreads. Bthreads do not directly know about each other.
 
-There are two main functions to create bthreads.
+### Step Functions
 
-- `b/seq`: turn a sequence of bids into a bthread
-- `b/step`: create a bthread with a step function
+The default way to create a bthread is to use a step function.
 
 A step function takes its previous state and an event, and returns its next state and a bid.
+
+As an example:
+
+```clojure
+(require '[tech.thomascothran.pavlov.bthread :as b])
+
+(defn only-thrice
+  [prev-state _event]
+  (if prev-state
+    [(dec prev-state) {:wait-on #{:test}}]
+    [3 {:wait-on #{:test}}]))
+
+(def count-down-bthread
+  (bthread/step ::count-down-bthread count-down-step-fn))
+```
+
+### Sequence Functions
+
+`b/seq` can create a bthread out of a sequence of bids. However, it is only for finite, relatively short sequences.
+
+For example:
+
+```clojure
+(b/seq
+ [{:wait-on #{:good-morning}
+   :block #{:good-evening}}
+  {:wait-on #{:good-evening}
+   :block #{:good-morning}}])]
+```
+
+This will return a bid twice, then the bthread will be deregistered.
+
+Note that `b/seq` fully realizes any sequence in memory.
+
+There are several other ways to work with sequences. A map literal representing a bid is a bthread that will always return itself.
+
+```clojure
+{:wait-on #{:the-thumbs-up} ;; <- when this event occurs
+ :request #{:fireworks}}    ;; <- this event is requested
+```
+
+If you want to set the fireworks off 10,000 times, you can use `reprise`:
+
+```clojure
+(b/reprise
+  {:wait-on #{:the-thumbs-up} ;; <- when this event occurs
+   :request #{:fireworks}})     ;; <- this event is requested
+```
+
+If you want something like `interleave` for bthreads, you can use `fuse`.
+
+For example:
+
+```clojure
+(b/fuse
+ [{:wait-on #{:good-morning}
+   :block #{:good-evening}}
+  {:wait-on #{:good-evening}
+   :block #{:good-morning}}])]
+```
+
+Which is the same as:
+
+```clojure
+(b/fuse
+ [(b/reprise {:wait-on #{:good-morning}
+              :block #{:good-evening}}
+  (b/reprise {:wait-on #{:good-evening}
+              :block #{:good-morning}})])]
+```
+
+However, fuse is a little different than `interleave`.
+
+With interleave:
+
+```
+(interleave [:a :b] [1])
+;; => [:a 1]
+```
+
+However, with fuse:
+
+```
+(fuse [(b/seq [{:request #{:a :b}}
+               {:request #{1}]))
+;; interplate will return *three* bids, for
+;; events `:a`, `:b`, and `1`
+```
 
 ## Recipes
 
