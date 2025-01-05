@@ -30,7 +30,7 @@
                     {:priority 1})
 
          (b/reprise 4 {:request #{:good-evening}})
-         (b/fuse
+         (b/interlace
           [{:wait-on #{:good-morning}
             :block #{:good-evening}}
            {:wait-on #{:good-evening}
@@ -229,10 +229,10 @@
               (comp (filter (comp (partial = :o) last)))
               moves)]
 
-    (b/fuse [{:wait-on x-moves
-              :block o-moves}
-             {:wait-on o-moves
-              :block x-moves}])))
+    (b/interlace [{:wait-on x-moves
+                   :block o-moves}
+                  {:wait-on o-moves
+                   :block x-moves}])))
 
 ;; Notice that this rule could be generalized.
 ;; It could take the players and coordinates as parameters

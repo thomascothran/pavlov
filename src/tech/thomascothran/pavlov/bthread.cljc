@@ -39,6 +39,8 @@
      (reify proto/BThread
        (name [_] [::seq (vec xs)])
        (priority [_] priority)
+       (serialize [_] xs)
+       (deserialize [_ serialized] serialized)
        (bid [_ event]
          (when-let [x (first @xs')]
            (let [bid' (bid x event)]
@@ -87,7 +89,7 @@
                [(inc invocations') x])))]
      (step [::reprise n] step-fn opts))))
 
-(defn fuse
+(defn interlace
   "Ask bthreads for bids in round-robin fashion
   in order, until one bthread returns a bid of `nil`.
   
@@ -111,7 +113,7 @@
 
   
   "
-  ([bthreads] (fuse bthreads {:priority 0}))
+  ([bthreads] (interlace bthreads {:priority 0}))
   ([bthreads opts]
    (let [priority (get opts :priority)
          bthread-name [::interpolate (mapv name bthreads)]

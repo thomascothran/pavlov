@@ -53,7 +53,7 @@
                           :wait-on #{:trigger}}}
         bid-b {:request #{:test-b
                           :wait-on #{:trigger}}}
-        bthread (bthread/fuse
+        bthread (bthread/interlace
                  [bid-a
                   (bthread/seq [bid-b bid-b])])
         bid1 (bthread/bid bthread :trigger)

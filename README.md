@@ -125,12 +125,12 @@ If you want to set the fireworks off 10,000 times, you can use `reprise`:
    :request #{:fireworks}})     ;; <- this event is requested
 ```
 
-If you want something like `interleave` for bthreads, you can use `fuse`.
+If you want something like `interleave` for bthreads, you can use `interlace`.
 
 For example:
 
 ```clojure
-(b/fuse
+(b/interlace
  [{:wait-on #{:good-morning}
    :block #{:good-evening}}
   {:wait-on #{:good-evening}
@@ -140,28 +140,29 @@ For example:
 Which is the same as:
 
 ```clojure
-(b/fuse
+(b/interlace
  [(b/reprise {:wait-on #{:good-morning}
               :block #{:good-evening}}
   (b/reprise {:wait-on #{:good-evening}
               :block #{:good-morning}})])]
 ```
 
-However, fuse is a little different than `interleave`.
+However, interlace is a little different than `interleave`.
 
 With interleave:
 
-```
+```clojure
 (interleave [:a :b] [1])
 ;; => [:a 1]
 ```
 
-However, with fuse:
+However, with interlace:
 
-```
-(fuse [(b/seq [{:request #{:a :b}}
-               {:request #{1}]))
-;; interplate will return *three* bids, for
+```clojure
+(interlace
+  [(b/seq [{:request #{:a :b}}
+           {:request #{1}]))
+;; interlace will return *three* bids, for
 ;; events `:a`, `:b`, and `1`
 ```
 
@@ -172,7 +173,7 @@ However, with fuse:
 The simplest way to specify an event is as a keyword:
 
 ```clojure
-(b/seq [{:request {:a}}])
+(b/seq [{:request #{:a}}])
 ```
 
 This bthread requests an event of type `:a` then halts
