@@ -14,7 +14,7 @@
       "deploy": [
         "clj -X:test",
         "clj -T:build ci",
-        "env $(cat .secrets | xargs) clj -T:build deploy"
+        "env $(cat ~/.secrets/.clojars | xargs) clj -T:build deploy"
       ],
       "squint-watch": [
         "npx squint watch"
