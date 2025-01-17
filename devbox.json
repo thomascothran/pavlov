@@ -1,5 +1,4 @@
 {
-  "$schema": "https://raw.githubusercontent.com/jetpack-io/devbox/0.10.3/.schema/devbox.schema.json",
   "packages": [
     "jdk@21",
     "nodejs@23.2.0"
@@ -9,15 +8,6 @@
       "echo 'Welcome to devbox!' > /dev/null"
     ],
     "scripts": {
-      "test": [
-        "clj -X:test"
-      ],
-      "test-watch": [
-        "clj -X:test :watch? true"
-      ],
-      "squint-watch": [
-        "npx squint watch"
-      ],
       "cljs-test-watch": [
         "node --watch out/node-tests.js"
       ],
@@ -25,7 +15,19 @@
         "clj -X:test",
         "clj -T:build ci",
         "env $(cat .secrets | xargs) clj -T:build deploy"
+      ],
+      "squint-watch": [
+        "npx squint watch"
+      ],
+      "test": [
+        "clj -X:test"
+      ],
+      "test-watch": [
+        "clj -X:test :watch? true"
       ]
     }
+  },
+  "nixpkgs": {
+    "commit": "f80ac848e3d6f0c12c52758c0f25c10c97ca3b62"
   }
 }
