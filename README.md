@@ -54,9 +54,9 @@ Let's suppose we have an industrial process which should have the following beha
             [tech.thomascothran.pavlov.bprogram :as bp]))
 
 (def water-app
-  (let [add-hot  (b/seq (repeat 3 {:request #{:add-hot-water}}))
-        add-cold (b/seq (repeat 3 {:request #{:add-cold-water}}))
-        alt-temp (b/seq 
+  (let [add-hot  (b/bids (repeat 3 {:request #{:add-hot-water}}))
+        add-cold (b/bids (repeat 3 {:request #{:add-cold-water}}))
+        alt-temp (b/bids 
                     (interleave
                        (repeat {:wait-on #{:add-cold-water}
                                 :block #{:add-hot-water}})
@@ -84,9 +84,10 @@ As an example:
 
 (defn only-thrice
   [prev-state _event]
-  (if prev-state
-    [(dec prev-state) {:wait-on #{:test}}]
-    [3 {:wait-on #{:test}}]))
+  (cond (not prev-state)
+        [1 {:wait-on #{:test}}]
+        (< prev-state 2)
+        [(inc prev-state) {:wait-on #{:test}}]))
 
 (def count-down-bthread
   (bthread/step ::count-down-bthread count-down-step-fn))
@@ -94,12 +95,12 @@ As an example:
 
 ### Sequence Functions
 
-`b/seq` can create a bthread out of a sequence of bids. However, it is only for finite, relatively short sequences.
+`b/bids` can create a bthread out of a sequence of bids. It is only for finite, relatively short sequences.
 
 For example:
 
 ```clojure
-(b/seq
+(b/bids
  [{:wait-on #{:good-morning}
    :block #{:good-evening}}
   {:wait-on #{:good-evening}
@@ -108,7 +109,7 @@ For example:
 
 This will return a bid twice, then the bthread will be deregistered.
 
-Note that `b/seq` fully realizes any sequence in memory.
+Note that `b/bids` fully realizes any sequence in memory.
 
 There are several other ways to work with sequences. A map literal representing a bid is a bthread that will always return itself.
 
@@ -160,7 +161,7 @@ However, with interlace:
 
 ```clojure
 (interlace
-  [(b/seq [{:request #{:a :b}}
+  [(b/bids [{:request #{:a :b}}
            {:request #{1}]))
 ;; interlace will return *three* bids, for
 ;; events `:a`, `:b`, and `1`
@@ -173,7 +174,7 @@ However, with interlace:
 The simplest way to specify an event is as a keyword:
 
 ```clojure
-(b/seq [{:request #{:a}}])
+(b/bids [{:request #{:a}}])
 ```
 
 This bthread requests an event of type `:a` then halts
@@ -216,11 +217,11 @@ Combine `:wait-on` and `:request`:
 
 ```clojure
 (def bthread-one
-  (b/seq [{:wait-on #{:b}
+  (b/bids [{:wait-on #{:b}
            :request #{:a}}]))
 
 (def bthread-two
-  (b/seq [{:block #{:a}
+  (b/bids [{:block #{:a}
            :wait-on #{:c}}])
 
 ```
@@ -236,7 +237,7 @@ However, if event `:b` occurs before event `:c`, then `:a` is cancelled.
 When `:c` occurs, close the program.
 
 ```clojure
-(b/seq [{:wait-on #{:c}}
+(b/bids [{:wait-on #{:c}}
         {:terminate true
          :type :finis}])
 ```
