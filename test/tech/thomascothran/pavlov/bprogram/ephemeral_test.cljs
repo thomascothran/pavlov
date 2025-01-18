@@ -9,15 +9,15 @@
 (deftest good-morning-and-evening
   (async done
          (let [bthreads
-               [(bthread/seq (repeat 4 {:request #{:good-morning}})
-                             {:priority 1})
+               [(bthread/bids (repeat 4 {:request #{:good-morning}})
+                              {:priority 1})
 
-                (bthread/seq (repeat 4 {:request #{:good-evening}}))
-                (bthread/seq (interleave
-                              (repeat {:wait-on #{:good-morning}
-                                       :block #{:good-evening}})
-                              (repeat {:wait-on #{:good-evening}
-                                       :block #{:good-morning}})))]
+                (bthread/bids (repeat 4 {:request #{:good-evening}}))
+                (bthread/bids (interleave
+                               (repeat {:wait-on #{:good-morning}
+                                        :block #{:good-evening}})
+                               (repeat {:wait-on #{:good-evening}
+                                        :block #{:good-morning}})))]
                !a        (atom [])
                subscriber  (fn [x _]
                              (swap! !a conj x))
@@ -33,8 +33,8 @@
 
 (deftest add-subscriber
   (async done
-         (let [bthreads [(bthread/seq [{:wait-on #{:go}}
-                                       {:request #{:some-event}}])]
+         (let [bthreads [(bthread/bids [{:wait-on #{:go}}
+                                        {:request #{:some-event}}])]
 
                !a         (atom [])
                subscriber (fn [x _] (swap! !a conj x))
@@ -154,14 +154,14 @@
   (for [x-coordinate [0 1 2]
         y-coordinate [0 1 2]
         player [:x :o]]
-    (bthread/seq
+    (bthread/bids
      [{:wait-on #{[x-coordinate y-coordinate player]}}
       {:block #{[x-coordinate y-coordinate (if (= player :x) :o :x)]}}])))
 
 (defn make-computer-picks-bthreads
   "Without worrying about strategy, let's pick a square"
   [player]
-  (bthread/seq
+  (bthread/bids
    (for [x-coordinate [0 1 2]
          y-coordinate [0 1 2]]
      {:request #{{:type [x-coordinate y-coordinate player]}}})))
@@ -183,7 +183,7 @@
    (let [bthreads
          (reduce into
                  [(make-computer-picks-bthreads :o)
-                  (bthread/seq             ;; should be blocked
+                  (bthread/bids             ;; should be blocked
                    [{:type [0 0 :o]}])]
                  [(mapv make-winning-bthreads winning-event-set)
                   (make-no-double-placement-bthreads)])
@@ -230,7 +230,7 @@
               (comp (filter (comp (partial = :o) last)))
               moves)]
 
-    (bthread/seq
+    (bthread/bids
      (interleave (repeat {:wait-on x-moves
                           :block o-moves})
                  (repeat {:wait-on o-moves

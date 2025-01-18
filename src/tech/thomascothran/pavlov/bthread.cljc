@@ -24,15 +24,15 @@
   [bthread serialized]
   (proto/deserialize bthread serialized))
 
-(defn seq
-  "Make a bthread from a finite sequence.
+(defn bids
+  "Make a bthread from a finite sequence of bids.
 
   The sequence *will* be fully realized
   
   Items in the sequence must be bthreads. 
   
   If nil is received, the bthread stops."
-  ([xs] (seq xs {:priority 0}))
+  ([xs] (bids xs {:priority 0}))
   ([xs opts]
    (let [priority (get opts :priority)
          xs' (volatile! xs)]

@@ -46,8 +46,8 @@
            (butlast @!a)))))
 
 (deftest add-subscriber
-  (let [bthreads [(b/seq [{:wait-on #{:go}}
-                          {:request #{:some-event}}])]
+  (let [bthreads [(b/bids [{:wait-on #{:go}}
+                           {:request #{:some-event}}])]
 
         !a         (atom [])
         subscriber (fn [x _] (swap! !a conj x))
@@ -159,14 +159,14 @@
   (for [x-coordinate [0 1 2]
         y-coordinate [0 1 2]
         player [:x :o]]
-    (b/seq
+    (b/bids
      [{:wait-on #{[x-coordinate y-coordinate player]}}
       {:block #{[x-coordinate y-coordinate (if (= player :x) :o :x)]}}])))
 
 (defn make-computer-picks-bthreads
   "Without worrying about strategy, let's pick a square"
   [player]
-  (b/seq
+  (b/bids
    (for [x-coordinate [0 1 2]
          y-coordinate [0 1 2]]
      {:request #{{:type [x-coordinate y-coordinate player]}}})))
@@ -185,7 +185,7 @@
 (deftest test-simple-computer-picks
   (let [bthreads
         (reduce into [(make-computer-picks-bthreads :o)
-                      (b/seq             ;; should be blocked
+                      (b/bids             ;; should be blocked
                        [{:type [0 0 :o]}])]
                 [(mapv make-winning-bthreads winning-event-set)
                  (make-no-double-placement-bthreads)])

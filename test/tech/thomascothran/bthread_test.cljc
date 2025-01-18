@@ -25,7 +25,7 @@
               :request #{:b}}
              {:name `request-c
               :request #{:c}}]
-        bthread (bthread/seq abc)]
+        bthread (bthread/bids abc)]
     (is (= (first abc)
            (bthread/bid bthread {:type :test})))
     (is (= (second abc)
@@ -55,7 +55,7 @@
                           :wait-on #{:trigger}}}
         bthread (bthread/interlace
                  [bid-a
-                  (bthread/seq [bid-b bid-b])])
+                  (bthread/bids [bid-b bid-b])])
         bid1 (bthread/bid bthread :trigger)
         bid2 (bthread/bid bthread :trigger)
         bid3 (bthread/bid bthread :trigger)

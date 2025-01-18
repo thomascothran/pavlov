@@ -110,11 +110,11 @@
            (s/next-event state)))))
 
 (deftest test-notify-bthreads!
-  (let [request-bthread-ab (b/seq [{:request #{:a}}
-                                   {:request #{:b}}])
+  (let [request-bthread-ab (b/bids [{:request #{:a}}
+                                    {:request #{:b}}])
         request-bthread-c {:request #{:c}}
-        wait-bthread-d (b/seq [{:wait-on #{:a}}
-                               {:request #{:d}}])
+        wait-bthread-d (b/bids [{:wait-on #{:a}}
+                                {:request #{:d}}])
 
         state (s/init [request-bthread-ab
                        request-bthread-c
@@ -132,14 +132,14 @@
            (:requests result)))))
 
 (deftest test-step-removes-requests
-  (let [bthread-a (b/seq [{:request #{:a}}])
+  (let [bthread-a (b/bids [{:request #{:a}}])
         state (s/init [bthread-a])
         next-state (s/step state {:type :a})]
     (is (= #{} (get-in next-state [:requests :a]))))
 
-  (let [bthread-a (b/seq [{:request #{:a}}])
-        bthread-b (b/seq [{:wait-on #{:a}}
-                          {:request #{:b}}])
+  (let [bthread-a (b/bids [{:request #{:a}}])
+        bthread-b (b/bids [{:wait-on #{:a}}
+                           {:request #{:b}}])
         state (s/init [bthread-a bthread-b])
         next-state (s/step state {:type :a})]
     (is (not (= bthread-a bthread-b)))
@@ -148,7 +148,7 @@
            (get-in next-state [:requests :b])))))
 
 (deftest test-step-removes-terminated-bthreads
-  (let [bthread-a (b/seq [{:request #{:a}}])
+  (let [bthread-a (b/bids [{:request #{:a}}])
         state (s/init [bthread-a])
         next-state (s/step state {:type :a})]
     (is (nil? (get-in next-state [:bthread->bid bthread-a])))
