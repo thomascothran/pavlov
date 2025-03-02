@@ -40,10 +40,13 @@
         subscriber  (fn [x _] (swap! !a conj x))
         program   (bpe/make-program! bthreads
                                      {:subscribers {:test subscriber}})
-        _         @(bp/stop! program)]
+        return      @(bp/stop! program)]
     (is (= (interleave (repeat 4 :good-morning)
                        (repeat 4 :good-evening))
-           (butlast @!a)))))
+           (butlast @!a)))
+    (is (= {:type :pavlov/terminate
+            :terminal true}
+           return))))
 
 (deftest add-subscriber
   (let [bthreads [(b/bids [{:wait-on #{:go}}
@@ -172,11 +175,11 @@
      {:request #{{:type [x-coordinate y-coordinate player]}}})))
 
 ;; But wait? Doesn't `make-computer-picks` need to account for
-;; the squares that are already occupied? 
+;; the squares that are already occupied?
 ;;
 ;; Nope! the no double placement bthread takes care of that for us.
 ;;
-;; OK, but won't we have to rewrite it when we take strategy into 
+;; OK, but won't we have to rewrite it when we take strategy into
 ;; account, e.g., picking the winning square or blocking the other
 ;; player?
 ;;
@@ -206,8 +209,8 @@
     (is (= [:o :wins]
            (event/type (last out-events))))))
 
-;; Great! 
-;; We were able to get our computer to make moves. 
+;; Great!
+;; We were able to get our computer to make moves.
 ;; But it's just going to keep picking without waiting for
 ;; the other player!
 ;; We need a bthread that enforces turns.
@@ -258,3 +261,17 @@
 
     (is (= [{:type [1 1 :x]} {:type [0 0 :o]}]
            (butlast @!a)))))
+
+(deftest test-sync-call
+  (let [bthreads
+        [(b/bids [{:wait-on #{:a}}
+                  {:request #{:b}}])
+         (b/bids [{:wait-on #{:b}}
+                  {:request #{{:type :c
+                               :terminal true}}}])]
+        events [{:type :a}]
+
+        return-value @(bpe/execute! bthreads events)]
+    (is (= {:type :c
+            :terminal true}
+           return-value))))

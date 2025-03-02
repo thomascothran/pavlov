@@ -3,6 +3,7 @@
 
 (defprotocol BProgram
   (stop! [this])
+  (stopped [this])
   (kill! [this])
   (submit-event! [this event])
   (subscribe! [this k f]))

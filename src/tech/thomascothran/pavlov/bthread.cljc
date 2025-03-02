@@ -28,9 +28,9 @@
   "Make a bthread from a finite sequence of bids.
 
   The sequence *will* be fully realized
-  
-  Items in the sequence must be bthreads. 
-  
+
+  Items in the sequence must be bthreads.
+
   If nil is received, the bthread stops."
   ([xs] (bids xs {:priority 0}))
   ([xs opts]
@@ -50,9 +50,9 @@
 (defn step
   "Create bthread with a step function.
 
-  The `step-name` must be globally unique within 
+  The `step-name` must be globally unique within
   a bprogram.
-  
+
   A step function is:
   - Pure (has no side effects)
   - Takes (current state, event)
@@ -92,9 +92,9 @@
 (defn interlace
   "Ask bthreads for bids in round-robin fashion
   in order, until one bthread returns a bid of `nil`.
-  
+
   This is different from `interleave`.
-  
+
   With interleave:
 
   ```
@@ -111,7 +111,7 @@
   ;; events `:a`, `:b`, and `1`
   ```
 
-  
+
   "
   ([bthreads] (interlace bthreads {:priority 0}))
   ([bthreads opts]
@@ -126,5 +126,3 @@
                      (println "idx: " idx "\nbid: " current-bid)
                      [next-idx current-bid]))]
      (step bthread-name step-fn {:priority priority}))))
-
-

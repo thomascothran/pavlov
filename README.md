@@ -6,7 +6,7 @@
 
 Pavlov is a behavioral programming library for Clojure(Script).
 
-Behavioral programming (BP) is an event-driven programming paradigm that decomplects application behaviors.
+Behavioral programming (BP) is an event-driven programming paradigm that decomplects application behaviors. Pavlov also supports using a behavioral program as a synchronous function call.
 
 ![bprogram diagram](./doc/assets/bprogram.png)
 
@@ -56,7 +56,7 @@ Let's suppose we have an industrial process which should have the following beha
 (def water-app
   (let [add-hot  (b/bids (repeat 3 {:request #{:add-hot-water}}))
         add-cold (b/bids (repeat 3 {:request #{:add-cold-water}}))
-        alt-temp (b/bids 
+        alt-temp (b/bids
                     (interleave
                        (repeat {:wait-on #{:add-cold-water}
                                 :block #{:add-hot-water}})
@@ -122,8 +122,8 @@ If you want to set the fireworks off 10,000 times, you can use `reprise`:
 
 ```clojure
 (b/reprise
-  {:wait-on #{:the-thumbs-up} ;; <- when this event occurs
-   :request #{:fireworks}})     ;; <- this event is requested
+  10000
+  {:request #{:fireworks}})     ;; <- this event is requested
 ```
 
 If you want something like `interleave` for bthreads, you can use `interlace`.
@@ -162,9 +162,9 @@ However, with interlace:
 ```clojure
 (interlace
   [(b/bids [{:request #{:a :b}}
-           {:request #{1}]))
+   {:request #{1}]))
 ;; interlace will return *three* bids, for
-;; events `:a`, `:b`, and `1`
+;; events `:a`, `1`, and `:b`
 ```
 
 ## Recipes

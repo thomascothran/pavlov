@@ -21,8 +21,9 @@
      ((get m :resolve) v)))
 
 (defn- set-stopped!
-  [program-opts]
-  (deliver (get program-opts :stopped) true))
+  [program-opts terminal-event]
+  (deliver (get program-opts :stopped)
+           terminal-event))
 
 (defn- set-killed!
   [program-opts]
@@ -56,7 +57,7 @@
     (if recur?
       (recur program-opts next-event)
       (when terminate?
-        (set-stopped! program-opts)))))
+        (set-stopped! program-opts event)))))
 
 #?(:clj (defn- run-event-loop!
           [program-opts]
@@ -75,7 +76,8 @@
 (defn kill!
   [program-opts]
   (set-killed! program-opts)
-  (set-stopped! program-opts)
+  (set-stopped! program-opts {:type :pavlov/kill
+                              :terminal true})
   #?(:clj (get program-opts :killed)
      :cljs (get-in program-opts [:killed :promise])))
 
@@ -104,6 +106,9 @@
      :cljs (get-in program-opts [:stopped :promise])))
 
 (defn make-program!
+  "Create a behavioral program comprising bthreads.
+
+  Returns the behavioral program."
   ([bthreads]
    (make-program! bthreads {}))
   ([bthreads opts]
@@ -114,11 +119,13 @@
          publisher (get opts :publisher
                         (pub-default/make-publisher! {:subscribers subscribers}))
 
+         stopped #?(:clj (promise)
+                    :cljs (deferred-promise))
+
          program-opts
          {:!state !state
           :in-queue in-queue
-          :stopped #?(:clj (promise)
-                      :cljs (deferred-promise))
+          :stopped stopped
           :killed #?(:clj (promise)
                      :cljs (deferred-promise))
           :publisher publisher}
@@ -126,6 +133,7 @@
          program (reify bprogram/BProgram
                    (stop! [_] (stop! program-opts))
                    (kill! [_] (kill! program-opts))
+                   (stopped [_] stopped)
                    (subscribe! [_ k f]
                      (pub/subscribe! publisher k f))
                    (submit-event! [_ event]
@@ -136,4 +144,13 @@
                 (submit-event! program-opts next-event)))
      program)))
 
+(defn execute!
+  "Execute a behavioral program.
 
+  Returns a promise delivered with the value of the
+  terminal event."
+  [bthreads events]
+  (let [program (make-program! bthreads)]
+    (doseq [event events]
+      (bprogram/submit-event! program event))
+    (bprogram/stopped program)))
