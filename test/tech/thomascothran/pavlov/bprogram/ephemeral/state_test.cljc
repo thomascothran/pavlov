@@ -6,48 +6,10 @@
             [tech.thomascothran.pavlov.bthread :as b]
             [tech.thomascothran.pavlov.bprogram.ephemeral.state :as s]))
 
-#_(def example-data-structure
-    {:waits {:event-a #{:bthread-a
-                        :bthread-b}}
-     :requests {:event-b #{:bthread-c
-                           :bthread-d}}
-     :blocks {:event-c #{:bthread-a}}
-
-     ;; duplicate for lookup
-     :bthreads->bid {:bthread-a {:waiting-on #{:event-a}}
-                     :bthread-b {:waiting-on #{:event-a}
-                                 :block #{:event-c}}
-                     :bthread-c {:request #{:event-b}}
-                     :bthread-d {:request #{:event-b}}}})
-
-(deftest test-bidmap
-  (let [bthread->bid
-        {{:priority 1} {:priority 1}
-         {:priority 10} {:priority 10}
-         {:priority 6} {:priority 10}}
-
-        bidmap
-        (into (s/make-bid-map) bthread->bid)]
-    (is (= {:priority 10}
-           (ffirst (seq bidmap))))
-    (is (= bthread->bid bidmap)))
-
-  (let [bid-a {:request #{{:type :a}} :priority 0}
-        bid-b {:wait-on #{{:type :b}} :priority 3}
-        bid-c {:block   #{{:type :c}} :priority 0}
-
-        bthread->bid {bid-a bid-a
-                      bid-b bid-b
-                      bid-c bid-c}
-        bidmap
-        (into (s/make-bid-map) bthread->bid)]
-
-    (is (= 3 (count bidmap)))))
-
 (deftest test-init
-  (let [bid-a {:request #{{:type :a}} :priority 0}
-        bid-b {:wait-on #{{:type :b}} :priority 3}
-        bid-c {:block   #{{:type :c}} :priority 1}
+  (let [bid-a {:request #{{:type :a}}}
+        bid-b {:wait-on #{{:type :b}}}
+        bid-c {:block   #{{:type :c}}}
         bthreads [bid-a bid-b bid-c]
 
         expected-bids  ;; Literals are both
@@ -70,8 +32,6 @@
 
     (is (= 3 (count (:bthread->bid state))))
 
-    (is (sorted? (:bthread->bid state)))
-
     (is (= expected-bids
            (into {} (:bthread->bid state)))
         "Should have the expected bids")
@@ -81,9 +41,9 @@
 
 (deftest test-blocked
   (let [bthread-a {:request #{{:type :a}} :block #{:d}}
-        bthread-b {:request #{{:type :b}} :priority 10
+        bthread-b {:request #{{:type :b}}
                    :block #{:c}}
-        state (s/init [bthread-a bthread-b])]
+        state (s/init [bthread-b bthread-a])]
     (is (= #{:c :d} (s/blocked state)))))
 
 (deftest test-winning-bid
@@ -93,19 +53,18 @@
            (s/next-event state))))
 
   (let [bthread-a {:request #{{:type :a}}}
-        bthread-b {:request #{{:type :b}} :priority 10}
-        bthread-c {:request #{{:type :c}} :priority 5}
-        state (s/init [bthread-a bthread-b bthread-c])]
+        bthread-b {:request #{{:type :b}}}
+        bthread-c {:request #{{:type :c}}}
+        state (s/init [bthread-b bthread-c bthread-a])]
 
     (is (= {:type :b}
            (s/next-event state))))
 
   (let [bthread-a {:request #{{:type :a}}}
-        bthread-b {:request #{{:type :b}} :priority 10}
+        bthread-b {:request #{{:type :b}}}
         bthread-c {:request #{{:type :c}}
-                   :priority 5
                    :block #{:b}}
-        state (s/init [bthread-a bthread-b bthread-c])]
+        state (s/init [bthread-c bthread-a bthread-b])]
     (is (= {:type :c}
            (s/next-event state)))))
 
@@ -123,8 +82,8 @@
         result
         (s/notify-bthreads! state {:type :a})]
 
-    (is (= {request-bthread-ab {:request #{:b}}
-            wait-bthread-d {:request #{:d}}}
+    (is (= {(b/name request-bthread-ab) {:request #{:b}}
+            (b/name wait-bthread-d)     {:request #{:d}}}
            (:bthread->bid result)))
 
     (is (= {:d #{wait-bthread-d}
@@ -151,14 +110,11 @@
   (let [bthread-a (b/bids [{:request #{:a}}])
         state (s/init [bthread-a])
         next-state (s/step state {:type :a})]
-    (is (nil? (get-in next-state [:bthread->bid bthread-a])))
-    (is (sorted? (get next-state :bthread->bid)))))
+    (is (nil? (get-in next-state [:bthread->bid bthread-a])))))
 
 (deftest test-step
-  (let [bid-a {:request #{:a} :priority 1}
-        bid-b {:request #{:b} :priority 0}
+  (let [bid-a {:request #{:a}}
+        bid-b (b/step ::test-step-b (constantly {:request #{:b}}))
         state (s/init [bid-a bid-b])
         next-state (s/step state {:type :a})]
     (is (= :a (:next-event next-state)))))
-
-

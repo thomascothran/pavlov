@@ -22,48 +22,41 @@
               event-types)
       state)))
 
-(defn- bthread-sorter
-  [bthread-a bthread-b]
-  (compare [(b/priority bthread-b) (hash bthread-b)]
-           [(b/priority bthread-a) (hash bthread-a)]))
-
-(defn make-bid-map
-  []
-  (sorted-map-by bthread-sorter))
-
 (defn blocked
   [state]
   (into #{}
         (comp (map second)
               (mapcat bid/block)
               (map event/type))
-        (:bthread->bid state)))
+        (get state :bthread->bid)))
 
-(defn is-blocked?
+(defn unblocked-requests
   [blocked-events bid]
-  (= #{}
-     (set/difference (into #{}
-                           (map event/type)
-                           (bid/request bid))
-                     blocked-events)))
+  (set/difference (into #{}
+                        (map event/type)
+                        (bid/request bid))
+                  blocked-events))
+
+(defn unblocked?
+  [blocked-events bid]
+  (seq (unblocked-requests blocked-events bid)))
 
 (defn next-event
   "The winning bid will request a new event"
   [state]
   (let [blocked-event-types (blocked state)
-        eligible-bthreads
-        (->> (seq (:bthread->bid state))
-             (remove (comp (partial is-blocked? blocked-event-types)
-                           second)))
+        bthreads-by-priority (get state :bthreads-by-priority)
+        bthreads->bid (get state :bthread->bid)
 
-        result
-        (->> eligible-bthreads
-             first
-             second
-             bid/request
-             (remove (comp blocked-event-types event/type))
-             first)]
-    result))
+        event
+        (some->> bthreads-by-priority
+                 (map #(get bthreads->bid %))
+                 (filter #(unblocked? blocked-event-types %))
+                 first
+                 bid/request
+                 first)]
+
+    event))
 
 (defn bthreads-to-notify
   "Given an event, return the bthreads to notify"
@@ -74,7 +67,7 @@
 
 (defn notify-bthreads!
   "Notify the bthreads, returning a map of the
- 
+
   - `bthread->bid`: only the new bids. The caller has
     to merge this into the bthreads to bids
   - `requests`: the new requests
@@ -85,27 +78,30 @@
     (reduce (fn [acc bthread]
               (let [bid (b/bid bthread event)]
                 (-> acc
-                    (assoc-in [:bthread->bid bthread] bid)
+                    (assoc-in [:bthread->bid (b/name bthread)] bid)
                     (assoc-events bthread bid :requests)
                     (assoc-events bthread bid :waits)
                     (assoc-events bthread bid :blocks))))
             {:bthread->bid {}}
             bthreads)))
 
+;; Here, we can put the bthreads in order of priority
 (defn init
   "Initiate the state"
   [bthreads]
-  (let [bid-set (make-bid-map)
+  (let [bid-set {}
         state
         (reduce (fn [acc bthread]
                   (let [bid (b/bid bthread nil)]
                     (-> acc
-                        (update :bthread->bid into {bthread bid})
+                        (update :bthread->bid into {(b/name bthread)
+                                                    bid})
                         (assoc-events bthread bid :requests)
                         (assoc-events bthread bid :waits)
                         (assoc-events bthread bid :blocks))))
                 {:bthread->bid bid-set
-                 :last-event nil}
+                 :last-event nil
+                 :bthreads-by-priority (mapv #(b/name %) bthreads)}
                 bthreads)
         next-event' (next-event state)]
     (assoc state :next-event next-event')))
@@ -140,21 +136,21 @@
         rm-triggered-bthreads
         #(remove-triggered-bthreads triggered-bthreads %)
 
-        waits (-> (:waits state)
+        waits (-> (get state :waits)
                   (dissoc event)
                   rm-triggered-bthreads
                   (merge-event->bthreads new-waits))
-        requests (-> (:requests state)
+        requests (-> (get state :requests)
                      (dissoc event)
                      rm-triggered-bthreads
                      (merge-event->bthreads new-requests))
-        blocks   (-> (:blocks state)
+        blocks   (-> (get state :blocks)
                      (dissoc event)
                      rm-triggered-bthreads
                      (merge-event->bthreads new-blocks))
 
         next-bthread->bid
-        (-> (:bthread->bid state)
+        (-> (get state :bthread->bid)
             (#(apply dissoc % triggered-bthreads))
             (into new-bthread->bid))
 
@@ -163,6 +159,7 @@
          :waits waits
          :requests requests
          :blocks blocks
+         :bthreads-by-priority (get state :bthreads-by-priority)
          :bthread->bid next-bthread->bid}]
     (assoc next-state :next-event (next-event next-state))))
 
@@ -176,4 +173,3 @@
                  :last-event last-event
                  :event event}
                 notification-results)))
-

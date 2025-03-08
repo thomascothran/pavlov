@@ -3,25 +3,22 @@
 
 #?(:clj (extend-protocol bthread/BThread
           clojure.lang.APersistentMap
-          (name [this] (get this :name))
+          (name [this] this)
           (bid [this _event] this)
-          (priority [this] (get this :priority 0))
           (serialize [this] this)
           (deserialize [_this serialized] serialized))
 
    :cljs (extend-protocol bthread/BThread
 
            cljs.core.PersistentArrayMap
-           (name [this] (get this :name))
+           (name [this] this)
            (bid [this _event] this)
-           (priority [this] (get this :priority 0))
            (serialize [this] this)
            (deserialize [_this serialized] serialized)
 
            cljs.core.PersistentHashMap
-           (name [this] (get this name))
+           (name [this] this)
            (bid [this _event] this)
-           (priority [this] (get this :priority 0))
            (serialize [this] this)
            (deserialize [_this serialized] serialized)))
 
@@ -29,6 +26,5 @@
   nil
   (name [_] nil)
   (bid [this _event] this)
-  (priority [_] 0)
   (serialize [_] nil)
   (deserialize [_ _] nil))

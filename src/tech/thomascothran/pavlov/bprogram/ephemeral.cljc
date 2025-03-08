@@ -108,6 +108,10 @@
 (defn make-program!
   "Create a behavioral program comprising bthreads.
 
+  `bthreads` is a collection of bthreads. Their priority
+  is determined by the order in which they are supplied.
+  ealier bthreads have higher priority.
+
   Returns the behavioral program."
   ([bthreads]
    (make-program! bthreads {}))

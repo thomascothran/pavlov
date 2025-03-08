@@ -30,8 +30,6 @@ The bprogram will select the next event based on the bids. Any event that is blo
 
 Bthreads are assigned a priority. The bprogram selects the bthread with a) the highest priority and b) at least one requested event that is not blocked.
 
-If all threads have the same priority, then the bid selection is random.
-
 ## Internal and External Events
 
 All events requested by bthreads will be handled before external events.

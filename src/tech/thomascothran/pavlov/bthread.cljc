@@ -12,10 +12,6 @@
    (some-> (proto/bid bthread event)
            (vary-meta assoc :pavlov/bthread bthread))))
 
-(defn priority
-  [bthread]
-  (proto/priority bthread))
-
 (defn serialize
   [bthread]
   (proto/serialize bthread))
@@ -32,40 +28,36 @@
   Items in the sequence must be bthreads.
 
   If nil is received, the bthread stops."
-  ([xs] (bids xs {:priority 0}))
-  ([xs opts]
-   (let [priority (get opts :priority)
-         xs' (volatile! xs)]
-     (reify proto/BThread
-       (name [_] [::seq (vec xs)])
-       (priority [_] priority)
-       (serialize [_] xs)
-       (deserialize [_ serialized] serialized)
-       (bid [_ event]
-         (when-let [x (first @xs')]
-           (let [bid' (bid x event)]
-             (vreset! xs' (rest @xs'))
-             bid')))))))
+  [xs]
+  (let [xs' (volatile! xs)]
+    (reify proto/BThread
+      (name [_] [::seq (vec xs)])
+      (serialize [_] xs)
+      (deserialize [_ serialized] serialized)
+      (bid [_ event]
+        (when-let [x (first @xs')]
+          (let [bid' (bid x event)]
+            (vreset! xs' (rest @xs'))
+            bid'))))))
 
 (defn step
   "Create bthread with a step function.
 
-  The `step-name` must be globally unique within
-  a bprogram.
+  The `step-name` *must* be globally unique within
+  a bprogram. If it is not globally unique you will
+  see unpredictable behavior.
 
   A step function is:
   - Pure (has no side effects)
   - Takes (current state, event)
   - Returns (new state, bid)
  "
-  ([step-name f] (step step-name f {:priority 0}))
-  ([step-name f opts]
-   (let [state (volatile! nil)
-         priority (get opts :priority)]
+  ([step-name f] (step step-name f {}))
+  ([step-name f _opts]
+   (let [state (volatile! nil)]
 
      (reify proto/BThread
        (name [_] step-name)
-       (priority [_] priority)
        (serialize [_] @state)
        (deserialize [_ serialized] (vreset! state serialized))
        (bid [_ event]
@@ -76,9 +68,8 @@
            bid))))))
 
 (defn reprise
-  ([x] (reprise :forever x {:priority 0}))
-  ([n x] (reprise n x {:priority 0}))
-  ([n x opts]
+  ([x] (reprise :forever x))
+  ([n x]
    (let [repeate-forever? (or (nil? n) (= n :forever))
          step-fn
          (fn [invocations _]
@@ -87,7 +78,7 @@
                       (< n invocations'))
                [(inc invocations') nil]
                [(inc invocations') x])))]
-     (step [::reprise n] step-fn opts))))
+     (step [::reprise n x] step-fn))))
 
 (defn interlace
   "Ask bthreads for bids in round-robin fashion
@@ -113,16 +104,13 @@
 
 
   "
-  ([bthreads] (interlace bthreads {:priority 0}))
-  ([bthreads opts]
-   (let [priority (get opts :priority)
-         bthread-name [::interpolate (mapv name bthreads)]
+  ([bthreads]
+   (let [bthread-name [::interpolate (mapv name bthreads)]
          bthread-count (count bthreads)
          step-fn (fn [idx event]
                    (let [idx' (or idx 0)
                          active-bthread (nth bthreads idx')
                          next-idx (if (= (inc idx') bthread-count) 0 (inc idx'))
                          current-bid (bid active-bthread event)]
-                     (println "idx: " idx "\nbid: " current-bid)
                      [next-idx current-bid]))]
-     (step bthread-name step-fn {:priority priority}))))
+     (step bthread-name step-fn))))
