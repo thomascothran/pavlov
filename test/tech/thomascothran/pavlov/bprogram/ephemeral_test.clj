@@ -26,8 +26,7 @@
 (deftest good-morning-and-evening
   (let [bthreads
         [(b/reprise 4
-                    {:request #{:good-morning}}
-                    {:priority 1})
+                    {:request #{:good-morning}})
 
          (b/reprise 4 {:request #{:good-evening}})
          (b/interlace
@@ -41,6 +40,7 @@
         program   (bpe/make-program! bthreads
                                      {:subscribers {:test subscriber}})
         return      @(bp/stop! program)]
+
     (is (= (interleave (repeat 4 :good-morning)
                        (repeat 4 :good-evening))
            (butlast @!a)))
@@ -93,7 +93,7 @@
   and terminate the pogram."
   [path-events]
   (b/step
-   ::make-winning-bthreads
+   [::make-winning-bthreads path-events]
    (fn [{:keys [remaining-events] :as acc} event]
      (let [event-type (event/type event)
            remaining-events' (disj remaining-events event-type)
@@ -111,8 +111,7 @@
                            :terminal true}}}]
 
              :else
-             [(update acc :remaining-events disj event-type) default-bid])))
-   {:priority 1})) ;; overrides other bids
+             [(update acc :remaining-events disj event-type) default-bid])))))
 
 ;; Note that we test our behavioral threads in isolation
 ;; from the bprogram.
@@ -149,9 +148,11 @@
                                     {:subscribers {:test subscriber}})
         _        (doseq [event events]
                    (bp/submit-event! program event))
-        _        @(bp/stop! program)]
-    (is (= (conj events {:terminal true, :type [:o :wins]})
-           (take 5 @!a)))))
+        _        @(bp/stop! program)
+
+        expected (conj events {:terminal true, :type [:o :wins]})
+        actual   (take 5 @!a)]
+    (is (= expected actual))))
 
 ;; Now we need to handle moves.
 ;; But we need some rules.
@@ -187,11 +188,11 @@
 
 (deftest test-simple-computer-picks
   (let [bthreads
-        (reduce into [(make-computer-picks-bthreads :o)
-                      (b/bids             ;; should be blocked
-                       [{:type [0 0 :o]}])]
+        (reduce into []
                 [(mapv make-winning-bthreads winning-event-set)
-                 (make-no-double-placement-bthreads)])
+                 (make-no-double-placement-bthreads)
+                 [(make-computer-picks-bthreads :o)
+                  (b/bids [{:type [0 0 :o]}])]])
 
         !a        (atom [])
         subscriber  (fn [x _] (swap! !a conj x))
