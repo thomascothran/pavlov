@@ -153,8 +153,7 @@
 
   Returns a promise delivered with the value of the
   terminal event."
-  [bthreads events]
-  (let [program (make-program! bthreads)]
-    (doseq [event events]
-      (bprogram/submit-event! program event))
-    (bprogram/stopped program)))
+  ([bthreads] (execute! bthreads nil))
+  ([bthreads opts]
+   (-> (make-program! bthreads opts)
+       (bprogram/stopped))))
