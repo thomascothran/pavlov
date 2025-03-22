@@ -2,6 +2,7 @@
   (:require [clojure.test :refer [deftest testing is]]
             [tech.thomascothran.pavlov.bthread :as b]
             [tech.thomascothran.pavlov.defaults]
+            [tech.thomascothran.pavlov.bprogram.ephemeral-test.bthreads :as tb]
             [tech.thomascothran.pavlov.bprogram.proto :as bp]
             [tech.thomascothran.pavlov.bprogram.ephemeral :as bpe]
             [tech.thomascothran.pavlov.event :as event]))
@@ -61,65 +62,13 @@
     (is (= [:go :some-event]
            (butlast  @!a)))))
 
-(def straight-wins-paths
-  (let [product
-        (for [x (range 3)
-              y (range 3)]
-          [x y])
-
-        vertical
-        (partition 3 product)
-
-        horizontal
-        (->> (sort-by second product)
-             (partition 3))]
-    (reduce into [] [vertical horizontal])))
-
-(def crossing-win-bthreads
-  [(map vector [0 1 2] [0 1 2])
-   (map vector [2 1 0] [0 1 2])])
-
-(def winning-paths
-  (into crossing-win-bthreads straight-wins-paths))
-
-(def winning-event-set
-  (for [paths winning-paths
-        player [:x :o]]
-    (into #{} (map #(conj % player)) paths)))
-
-(defn make-winning-bthreads
-  "for a winning path (e.g., three diagonal squares
-  selected by the same player), emit a win event
-  and terminate the pogram."
-  [path-events]
-  (b/step
-   [::make-winning-bthreads path-events]
-   (fn [{:keys [remaining-events] :as acc} event]
-     (let [event-type (event/type event)
-           remaining-events' (disj remaining-events event-type)
-           events-to-watch
-           (into #{} (map (fn [event] {:type event})
-                          path-events))
-           default-bid {:wait-on events-to-watch}]
-       (cond (nil? event) ;; event is nil on initialization
-             [{:remaining-events (set path-events)} default-bid]
-
-             ;; Terminate - we've won!
-             (= remaining-events #{event-type})
-             [{:remaining-events remaining-events'}
-              {:request #{{:type [(last event-type) :wins]
-                           :terminal true}}}]
-
-             :else
-             [(update acc :remaining-events disj event-type) default-bid])))))
-
 ;; Note that we test our behavioral threads in isolation
 ;; from the bprogram.
 (deftest test-winning-bthreads
   (testing "Given a bthread that watches a crossing win pattern for player x
     When that crossing pattern is filled in by player x
     Then the bthread requests a win event"
-    (let [bthread (make-winning-bthreads
+    (let [bthread (tb/make-winning-bthreads
                    #{[0 0 :x] [2 2 :x] [1 1 :x]})
           bid1 (b/bid bthread nil) ;; initialization
           bid2 (b/bid bthread {:type [1 1 :x]})
@@ -138,7 +87,7 @@
 ;; Let's see if it can detect a win!
 ;; We'll ignore player moves for now.
 (deftest tic-tac-toe-simple-win
-  (let [bthreads (mapv make-winning-bthreads winning-event-set)
+  (let [bthreads (mapv tb/make-winning-bthreads tb/winning-event-set)
         events   [{:type [0 0 :o]}
                   {:type [1 1 :o]}
                   {:type [2 2 :o]}]
@@ -154,44 +103,12 @@
         actual   (take 5 @!a)]
     (is (= expected actual))))
 
-;; Now we need to handle moves.
-;; But we need some rules.
-;; First, you can't pick the same square
-(defn make-no-double-placement-bthreads
-  "You can't pick another player's square!"
-  []
-  (for [x-coordinate [0 1 2]
-        y-coordinate [0 1 2]
-        player [:x :o]]
-    (b/bids
-     [{:wait-on #{[x-coordinate y-coordinate player]}}
-      {:block #{[x-coordinate y-coordinate (if (= player :x) :o :x)]}}])))
-
-(defn make-computer-picks-bthreads
-  "Without worrying about strategy, let's pick a square"
-  [player]
-  (b/bids
-   (for [x-coordinate [0 1 2]
-         y-coordinate [0 1 2]]
-     {:request #{{:type [x-coordinate y-coordinate player]}}})))
-
-;; But wait? Doesn't `make-computer-picks` need to account for
-;; the squares that are already occupied?
-;;
-;; Nope! the no double placement bthread takes care of that for us.
-;;
-;; OK, but won't we have to rewrite it when we take strategy into
-;; account, e.g., picking the winning square or blocking the other
-;; player?
-;;
-;; Nope! We can add strategies incrementally and prioritize them.
-
 (deftest test-simple-computer-picks
   (let [bthreads
         (reduce into []
-                [(mapv make-winning-bthreads winning-event-set)
-                 (make-no-double-placement-bthreads)
-                 [(make-computer-picks-bthreads :o)
+                [(mapv tb/make-winning-bthreads tb/winning-event-set)
+                 (tb/make-no-double-placement-bthreads)
+                 [(tb/make-computer-picks-bthreads :o)
                   (b/bids [{:type [0 0 :o]}])]])
 
         !a        (atom [])
@@ -210,48 +127,15 @@
     (is (= [:o :wins]
            (event/type (last out-events))))))
 
-;; Great!
-;; We were able to get our computer to make moves.
-;; But it's just going to keep picking without waiting for
-;; the other player!
-;; We need a bthread that enforces turns.
-
-(defn make-enforce-turn-bthreads
-  []
-  (let [moves (for [x-coord [0 1 2]
-                    y-coord [0 1 2]
-                    player [:x :o]]
-                [x-coord y-coord player])
-
-        x-moves
-        (into #{}
-              (comp (filter (comp (partial = :x) last)))
-              moves)
-
-        o-moves
-        (into #{}
-              (comp (filter (comp (partial = :o) last)))
-              moves)]
-
-    (b/interlace [{:wait-on x-moves
-                   :block o-moves}
-                  {:wait-on o-moves
-                   :block x-moves}])))
-
-;; Notice that this rule could be generalized.
-;; It could take the players and coordinates as parameters
-;; and then be used for *any* turn based game. Chess,
-;; checkers, poker, etc.
-
 (deftest test-taking-turns
   ;; Problem is that blocked events
   ;; are being represented both as a map with a :type key
   ;; and as the type itself. Can we support both?
   (let [bthreads
-        (reduce into [(make-computer-picks-bthreads :o)
-                      (make-enforce-turn-bthreads)]
-                [(mapv make-winning-bthreads winning-event-set)
-                 (make-no-double-placement-bthreads)])
+        (reduce into [(tb/make-computer-picks-bthreads :o)
+                      (tb/make-enforce-turn-bthreads)]
+                [(mapv tb/make-winning-bthreads tb/winning-event-set)
+                 (tb/make-no-double-placement-bthreads)])
 
         !a        (atom [])
         subscriber (fn [x _] (swap! !a conj x))
@@ -265,14 +149,14 @@
 
 (deftest test-sync-call
   (let [bthreads
-        [(b/bids [{:wait-on #{:a}}
+        [(b/bids [{:request #{:a}}])
+         (b/bids [{:wait-on #{:a}}
                   {:request #{:b}}])
          (b/bids [{:wait-on #{:b}}
                   {:request #{{:type :c
                                :terminal true}}}])]
-        events [{:type :a}]
 
-        return-value @(bpe/execute! bthreads events)]
+        return-value @(bpe/execute! bthreads)]
     (is (= {:type :c
             :terminal true}
            return-value))))
