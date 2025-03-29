@@ -28,17 +28,18 @@
   Items in the sequence must be bthreads.
 
   If nil is received, the bthread stops."
-  [xs]
-  (let [xs' (volatile! xs)]
-    (reify proto/BThread
-      (name [_] [::seq (vec xs)])
-      (serialize [_] xs)
-      (deserialize [_ serialized] serialized)
-      (bid [_ event]
-        (when-let [x (first @xs')]
-          (let [bid' (bid x event)]
-            (vreset! xs' (rest @xs'))
-            bid'))))))
+  ([xs] (bids nil xs))
+  ([name-prefix xs]
+   (let [xs' (volatile! xs)]
+     (reify proto/BThread
+       (name [_] [(or name-prefix ::seq) (vec xs)])
+       (serialize [_] xs)
+       (deserialize [_ serialized] serialized)
+       (bid [_ event]
+         (when-let [x (first @xs')]
+           (let [bid' (bid x event)]
+             (vreset! xs' (rest @xs'))
+             bid')))))))
 
 (defn step
   "Create bthread with a step function.
@@ -104,12 +105,14 @@
 
 
   "
-  ([bthreads]
-   (let [bthread-name [::interpolate (mapv name bthreads)]
-         bthread-count (count bthreads)
+  ([bids] (interlace nil bids))
+  ([name-prefix bids]
+   (let [bthread-name [(or name-prefix ::interpolate)
+                       (mapv name bids)]
+         bthread-count (count bids)
          step-fn (fn [idx event]
                    (let [idx' (or idx 0)
-                         active-bthread (nth bthreads idx')
+                         active-bthread (nth bids idx')
                          next-idx (if (= (inc idx') bthread-count) 0 (inc idx'))
                          current-bid (bid active-bthread event)]
                      [next-idx current-bid]))]

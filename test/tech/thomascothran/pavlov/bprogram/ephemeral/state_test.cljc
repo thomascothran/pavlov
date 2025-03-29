@@ -68,6 +68,12 @@
     (is (= {:type :c}
            (s/next-event state)))))
 
+(deftest test-blocked-events-on-winning-bid
+  (let [bthread-a {:request [:blocked :a]}
+        bthread-b {:block #{:blocked}}
+        state (s/init [bthread-a bthread-b])]
+    (is (= :a (s/next-event state)))))
+
 (deftest test-notify-bthreads!
   (let [request-bthread-ab (b/bids [{:request #{:a}}
                                     {:request #{:b}}])

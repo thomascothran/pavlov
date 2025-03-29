@@ -54,6 +54,7 @@
                  (filter #(unblocked? blocked-event-types %))
                  first
                  bid/request
+                 (remove (comp blocked-event-types event/type))
                  first)]
 
     event))
@@ -160,13 +161,15 @@
          :requests requests
          :blocks blocks
          :bthreads-by-priority (get state :bthreads-by-priority)
-         :bthread->bid next-bthread->bid}]
-    (assoc next-state :next-event (next-event next-state))))
+         :bthread->bid next-bthread->bid}
+
+        next-event (next-event next-state)]
+    (assoc next-state :next-event next-event)))
 
 (defn step
   "Return the next state based on the event"
   [state event]
-  (let [last-event (:last-event state)
+  (let [last-event (get state :last-event)
         notification-results
         (notify-bthreads! state event)]
     (next-state {:state state

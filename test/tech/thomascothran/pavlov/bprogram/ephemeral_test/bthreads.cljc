@@ -63,19 +63,21 @@
   "You can't pick another player's square!"
   []
   (for [x-coordinate [0 1 2]
-        y-coordinate [0 1 2]
-        player [:x :o]]
+        y-coordinate [0 1 2]]
     (b/bids
-     [{:wait-on #{[x-coordinate y-coordinate player]}}
-      {:block #{[x-coordinate y-coordinate (if (= player :x) :o :x)]}}])))
+     ::no-double-placement
+     [{:wait-on #{[x-coordinate y-coordinate :x]
+                  [x-coordinate y-coordinate :o]}}
+      {:block #{[x-coordinate y-coordinate :x]
+                [x-coordinate y-coordinate :o]}}])))
 
 (defn make-computer-picks-bthreads
   "Without worrying about strategy, let's pick a square"
   [player]
-  (b/bids
-   (for [x-coordinate [0 1 2]
-         y-coordinate [0 1 2]]
-     {:request #{{:type [x-coordinate y-coordinate player]}}})))
+  (b/bids ::computer-picks
+          (for [x-coordinate [0 1 2]
+                y-coordinate [0 1 2]]
+            {:request #{{:type [x-coordinate y-coordinate player]}}})))
 
 ;; But wait? Doesn't `make-computer-picks` need to account for
 ;; the squares that are already occupied?
@@ -110,7 +112,8 @@
               (comp (filter (comp (partial = :o) last)))
               moves)]
 
-    (b/interlace [{:wait-on x-moves
+    (b/interlace ::enforce-turns
+                 [{:wait-on x-moves
                    :block o-moves}
                   {:wait-on o-moves
                    :block x-moves}])))
