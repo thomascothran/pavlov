@@ -57,10 +57,6 @@
                           winning-path))
            default-bid {:wait-on events-to-watch}]
 
-       (println "hit with " event)
-       (println "event-type" event-type)
-       (println "remaining-events" remaining-events')
-
        (cond (nil? event) ;; event is nil on initialization
              [{:remaining-events (set winning-path)} default-bid]
 
