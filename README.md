@@ -4,9 +4,11 @@
 
 [![Clojars Project](https://img.shields.io/clojars/v/tech.thomascothran/pavlov.svg)](https://clojars.org/tech.thomascothran/pavlov)
 
-Pavlov is a behavioral programming library for Clojure(Script).
+Pavlov is an opinionated behavioral programming library for Clojure(Script).
 
-Behavioral programming (BP) is an event-driven programming paradigm that decomplects application behaviors. Pavlov also supports using a behavioral program as a synchronous function call.
+Behavioral programming (BP) is an event-driven programming paradigm that strongly decomplects application behaviors.
+
+Pavlov can be used for strongly Pavlov also supports using a behavioral program as a synchronous function call.
 
 ![bprogram diagram](./doc/assets/bprogram.png)
 
@@ -20,7 +22,7 @@ Bthreads work by producing bids in a certain kind of pub-sub system -- a bprogra
 2. Wait on events
 3. Block events
 
-Events may come from an external process. This can be anything: not only a bid from a bthread, but a user action in a UI, an event on a Kafka stream, an HTTP request, etc.
+Events may come from an external process. This can be anything: not only a bid from a bthread, but a user action in a UI, an event from a Kafka queue, an HTTP request, etc.
 
 When an event occurs, all bthreads that have either requested that event or are waiting on that event submit their next bid.
 
@@ -82,9 +84,10 @@ As an example:
 
 (defn only-thrice
   [prev-state _event]
-  (cond (not prev-state)
-        [1 {:wait-on #{:test}}]
-        (< prev-state 2)
+  (cond (not prev-state) ;; initialization
+        [0 {:wait-on #{:test}}]
+
+        (< prev-state 3)
         [(inc prev-state) {:wait-on #{:test}}]))
 
 (def count-down-bthread
@@ -112,8 +115,7 @@ Note that `b/bids` fully realizes any sequence in memory.
 There are several other ways to work with sequences. A map literal representing a bid is a bthread that will always return itself.
 
 ```clojure
-{:wait-on #{:the-thumbs-up} ;; <- when this event occurs
- :request #{:fireworks}}    ;; <- this event is requested
+{:request #{:fireworks}}  ;; Fireworks are always fun
 ```
 
 If you want to set the fireworks off 10,000 times, you can use `reprise`:
@@ -136,17 +138,7 @@ For example:
    :block #{:good-morning}}])]
 ```
 
-Which is the same as:
-
-```clojure
-(b/interlace
- [(b/reprise {:wait-on #{:good-morning}
-              :block #{:good-evening}}
-  (b/reprise {:wait-on #{:good-evening}
-              :block #{:good-morning}})])]
-```
-
-However, interlace is a little different than `interleave`.
+`interlace` is a little different than `interleave`.
 
 With interleave:
 
@@ -175,7 +167,7 @@ The simplest way to specify an event is as a keyword:
 (b/bids [{:request #{:a}}])
 ```
 
-This bthread requests an event of type `:a` then halts
+This bthread requests an event of type `:a` once. Then the bthread terminates.
 
 ### Add more data to an event
 
@@ -188,9 +180,11 @@ For example:
  :form {:first-name "Thomas"}
 ```
 
+All bthreads that subscribe to `:submit` events now have access to the form data as well.
+
 ### Compound events
 
-Events need not be an atomic type.
+Events need not be a keyword, or even an atomic type.
 
 For example, if you are playing tic tac toe, you may have `:x` select the center of the board:
 
@@ -216,11 +210,11 @@ Combine `:wait-on` and `:request`:
 ```clojure
 (def bthread-one
   (b/bids [{:wait-on #{:b}
-           :request #{:a}}]))
+            :request #{:a}}]))
 
 (def bthread-two
   (b/bids [{:block #{:a}
-           :wait-on #{:c}}])
+            :wait-on #{:c}}])
 
 ```
 
@@ -240,10 +234,40 @@ When `:c` occurs, close the program.
          :type :finis}])
 ```
 
+## Understanding Program Execution
+
+It may seem that behavioral programming makes programs both harder to reason about and harder to visualize as they execute. In fact, the opposite is the case.
+
+### Visualizing program execution
+
+Despite the ability to run concurrently, every step in the bprogram's execution is deterministic and auditable. Each bthread submits a bid, and the logic for selecting a bid is straightforward: the highest priority, unblocked bid is selected.
+
+`pavlov`'s bprogram takes functions in the `subscribers` options map, which are invoked on each sync point.
+
+The functions in `subscribers` re invoked with two arguments: the selected bid, and a map of each bthread to its bid.
+
+A `tap` subscriber is implemented in `tech.thomascothran.pavlov.subscribers.tap`. This subscriber shows, on each sync:
+
+- What event was selected
+- What events are blocked
+- What events were requested
+- What events are being waited on
+- A map of bthreads to bids
+- A map of events to bthreads
+
+### Reasoning about bprograms
+
+`pavlov` is intrinsically easier to reason about than a typical program for a few reasons:
+
+- strict separation of logic from side effects. bthreads in pavlov are pure functions
+- strong isolation of behavior. Each bthread encapsulates a single behavior and shares no state. Bthreads can be tested in isolation
+- append only programming. This is enabled by the ability of a bthread to block another bthread.
+- behavioral programming lends itself to model checking - without the need to write TLA+
+
 ## Design Goals
 
 1. *Zero dependencies*.
-2. *Swappable implementations*. Protocols are used so that bthreads and bprograms are open for extension and modification.
+2. *Swappable implementations*. Bthreads and bprograms are open for extension and modification.
 3. *BYO parallelization*. Bthreads can run in parallel and you should choose how. Bring your own thread pool, or use core.async.
 
 ## Roadmap

@@ -24,8 +24,8 @@
   -----------
   - `:safety-bthreads`: these are the bthreads that
     fire when a safety propert
-  - `:bthreads`: these are the main bthreads that make
-    up the bprogram.
+  - `:make-bthreads`: a 0-arity function returning
+     the main bthreads that make up the bprogram.
   - `:events`: this is a collection of events. Depending
     on the `:strategy`, all permutations may be tested,
     random generators may be used, or the events may be
@@ -50,7 +50,8 @@
   - `:event`: the type of the event identifing the violation"
   [m]
   (let [safety-bthreads (get m :safety-bthreads [])
-        bthreads (get m :bthreads [])
+        make-bthreads (or (get m :make-bthreads)
+                          (constantly []))
         check-deadlock (get m :check-deadlock)
         subscribers (get m :subscribers {})
         strategy (get m :strategy straight-sequence)
@@ -62,9 +63,9 @@
                                   events)
               all-bthreads
               (->> (if check-deadlock
-                     [bthreads input-threads
+                     [(make-bthreads) input-threads
                       [(make-deadlock-bthread)]]
-                     [bthreads input-threads])
+                     [(make-bthreads) input-threads])
                    (reduce into safety-bthreads))
 
               !a (atom [])

@@ -55,5 +55,6 @@
 
 (comment
   (do
+    (require '[portal.api :as portal])
     (def p (portal/open))
     (add-tap #'portal/submit)))

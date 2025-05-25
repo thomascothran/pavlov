@@ -30,3 +30,4 @@
 node_modules/
 .shadow-cljs
 .secrets
+.aider*

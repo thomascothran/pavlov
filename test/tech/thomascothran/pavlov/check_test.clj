@@ -1,5 +1,5 @@
 (ns tech.thomascothran.pavlov.check-test
-  (:require [clojure.test :refer [deftest testing is]]
+  (:require [clojure.test :refer [deftest is]]
             [tech.thomascothran.pavlov.check :as check]
             [tech.thomascothran.pavlov.bthread :as b]
             [tech.thomascothran.pavlov.event :as event]
@@ -83,7 +83,7 @@
   (let [{:keys [event path]}
         (check/run {:safety-bthreads (safety-bthreads)
                     :check-deadlock true
-                    :bthreads (initial-tic-tac-toe-bthreads)
+                    :make-bthreads #(initial-tic-tac-toe-bthreads)
                     :events (all-moves [:x])})
 
         {:keys [invariant-violated] event-type :type} event]
@@ -106,7 +106,7 @@
   (let [bthreads [{:wait-on #{:godot}}]
         events [{:type [:beckett :writes]}]
 
-        result (check/run {:bthreads bthreads
+        result (check/run {:make-bthreads (constantly bthreads)
                            :events events
                            :check-deadlock true})
         event (get result :event)
@@ -124,7 +124,7 @@
                               :terminal true
                               :invariant-violated true}]}])]
 
-        result (check/run {:bthreads bthreads
+        result (check/run {:make-bthreads (constantly bthreads)
                            :check-deadlock true
                            :safety-bthreads safety-bthreads})
         event (get result :event)
@@ -150,7 +150,7 @@
 
         events [{:type :a}]
 
-        result (check/run {:bthreads bthreads
+        result (check/run {:make-bthreads (constantly bthreads)
                            :events events
                            :check-deadlock true
                            :safety-bthreads safety-bthreads})]
