@@ -122,3 +122,24 @@
 ;; It could take the players and coordinates as parameters
 ;; and then be used for *any* turn based game. Chess,
 ;; checkers, poker, etc.
+
+;; We also need a rule for a draw
+(defn make-draw-bthread
+  []
+  (let [all-moves
+        (into #{}
+              (for [x-coord [0 1 2]
+                    y-coord [0 1 2]
+                    player [:x :o]]
+                [x-coord y-coord player]))]
+    (b/step ::draw
+            (fn [state event]
+              (cond (not event)
+                    [1 {:wait-on all-moves}]
+
+                    ;; board is full
+                    (= 9 state)
+                    [(inc state) {:request #{{:type :draw
+                                              :terminal true}}}]
+                    :else
+                    [(inc state) {:wait-on all-moves}])))))
