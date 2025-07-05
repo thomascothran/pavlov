@@ -160,8 +160,9 @@ However, with interlace:
 
 ```clojure
 (interlace
-  [(b/bids [{:request #{:a :b}}
-            {:request #{1}}]))
+  [(b/bids [{:request #{:a}}
+            {:request #{:b}}]
+   (b/bids [{:request #{1}}]))
 ```
 
 Interlace will return *three* bids, for events `:a`, `1`, and `:b`.
