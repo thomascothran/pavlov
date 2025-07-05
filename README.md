@@ -26,6 +26,8 @@ Events may come from an external process. This can be anything: not only a bid f
 
 When an event occurs, all bthreads that have either requested that event or are waiting on that event submit their next bid.
 
+Bthreads should be pure functions. Use subscribers for side effects.
+
 ## Bprograms
 
 The bprogram will select the next event based on the bids. Any event that is blocked by any bthread will never be selected. Importantly, this means bthreads block events requested by other bthreads.
@@ -54,14 +56,14 @@ Let's suppose we have an industrial process which should have the following beha
             [tech.thomascothran.pavlov.bprogram :as bp]))
 
 (def water-app
-  (let [add-hot  (b/bids (repeat 3 {:request #{:add-hot-water}}))
-        add-cold (b/bids (repeat 3 {:request #{:add-cold-water}}))
+  (let [add-hot  (b/bids (b/reprise 3 {:request #{:add-hot-water}}))
+        add-cold (b/bids (b/reprise 3 {:request #{:add-cold-water}}))
         alt-temp (b/bids
-                    (interleave
-                       (repeat {:wait-on #{:add-cold-water}
-                                :block #{:add-hot-water}})
-                       (repeat {:wait-on #{:add-hot-water}
-                                :block #{:add-cold-water}})))]
+                    (b/interlace
+                       (b/reprise {:wait-on #{:add-cold-water}
+                                   :block #{:add-hot-water}})
+                       (b/reprise {:wait-on #{:add-hot-water}
+                                   :block #{:add-cold-water}})))]
     (bp/make-program [add-hot add-cold alt-temp]))
 ```
 
@@ -82,17 +84,24 @@ As an example:
 ```clojure
 (require '[tech.thomascothran.pavlov.bthread :as b])
 
+;; Pure function
 (defn only-thrice
-  [prev-state _event]
-  (cond (not prev-state) ;; initialization
+  [prev-state event]
+  (cond (not event) ;; initialization
         [0 {:wait-on #{:test}}]
 
         (< prev-state 3)
         [(inc prev-state) {:wait-on #{:test}}]))
 
 (def count-down-bthread
-  (bthread/step ::count-down-bthread count-down-step-fn))
+  (b/step ::count-down-bthread only-thrice))
 ```
+
+The bthread will keep track of the state, and the behavioral program keeps track of this (and all other) bthread bids.
+
+The `::count-down-bthread` is called once on initialization. Thereafter, it parks until the `:test` event is emitted. On the third time, the bthread returns nil, at which point it will not be called anymore.
+
+bthreads *must have unique names*. If more than one bthread has the same name, one bthread will be ignored.
 
 ### Sequence Functions
 
@@ -110,7 +119,7 @@ For example:
 
 This will return a bid twice, then the bthread will be deregistered.
 
-Note that `b/bids` fully realizes any sequence in memory.
+Note that `b/bids` fully realizes any sequence in memory!
 
 There are several other ways to work with sequences. A map literal representing a bid is a bthread that will always return itself.
 
@@ -152,19 +161,23 @@ However, with interlace:
 ```clojure
 (interlace
   [(b/bids [{:request #{:a :b}}
-   {:request #{1}]))
-;; interlace will return *three* bids, for
-;; events `:a`, `1`, and `:b`
+            {:request #{1}}]))
 ```
+
+Interlace will return *three* bids, for events `:a`, `1`, and `:b`.
+
+### Extensibility
+
+Bthreads are protocols. You can extend the protocol as needed.
 
 ## Recipes
 
 ### Request a simple event
 
-The simplest way to specify an event is as a keyword:
+The simplest way to specify an event to request the name of the event:
 
 ```clojure
-(b/bids [{:request #{:a}}])
+(b/bids [{:request #{:a}}]) ;; => the event is the same as {:type :a}
 ```
 
 This bthread requests an event of type `:a` once. Then the bthread terminates.
@@ -197,11 +210,11 @@ For example, if you are playing tic tac toe, you may have `:x` select the center
 Combine `:wait` and `:block`:
 
 ```clojure
-{:wait-on #{:b}
- :block #{:c}
+(b/bids [{:wait-on #{:b}
+          :block #{:c}}])
 ```
 
-Event `:c` is blocked until `:b` occurs.
+Event `:c` is blocked until `:b` occurs. Then the bthread terminates
 
 ### Cancel `x` when `y` occurs
 
@@ -230,8 +243,36 @@ When `:c` occurs, close the program.
 
 ```clojure
 (b/bids [{:wait-on #{:c}}
-        {:terminate true
-         :type :finis}])
+         {:terminate true
+          :type :finis}])
+```
+
+## BPrograms
+
+To run an ephemeral bprogram, use one of the two main API functions in `tech.thomascothran.pavlov.bprogram.ephemeral`:
+
+- `execute!`: returns a promise that is delivered when the bprogram terminates with the value of the terminal event. It allows you to call a bprogram like a function
+- `make-program!`: returns the bprogram itself. This lets you send it new events, for example, with your subscribers.
+
+An ephemeral bprogram is distinguished from a durable bprogram. Bprograms are implemented in terms of the BProgram protocol.
+
+It has two arities, one that takes only a sequence of bthreads, and the other that takes bthreads and a map of options.
+
+The most common items in the options map will be `:subscribers`. `:subscribers` is a map of the subscriber name to the subscriber function. Subscribers are invoked when the bprogram emits an event. These are invoked synchronously.
+
+## Subscribers
+
+`pavlov` strictly separates side effects from pure computation. `bthreads` should be pure functions.
+
+Subscribers may be passed in when the bprogram is created:
+
+```clojure
+(require '[tech.thomascothran.pavlov.bprogram.ephemeral :as bp])
+(require '[clojure.pprint :refer [pretty-print]])
+(bp/execute! [bthread-1 bthread-2]
+             {:logger (fn [event bthread->bid]
+                        (pretty-print {:event event
+                                       :bthread->bid bthread->bid})})
 ```
 
 ## Understanding Program Execution
