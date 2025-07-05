@@ -26,3 +26,8 @@
   Generally, the bthread->bid map will only be used for debugging."
   [bprogram k f]
   (bp-proto/subscribe! bprogram k f))
+
+(defn bthread->bids
+  "Get a map of the bthreads to their current bids"
+  [bprogram]
+  (bp-proto/bthread->bids bprogram))

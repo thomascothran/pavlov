@@ -1,6 +1,7 @@
 (ns tech.thomascothran.pavlov.subscribers.tap
   "Experimental, will likely change."
   (:require [tech.thomascothran.pavlov.event :as event]
+            [tech.thomascothran.pavlov.bprogram :as bprogram]
             [tech.thomascothran.pavlov.bid.proto :as bid]))
 
 (defn- event->bthreads
@@ -31,11 +32,12 @@
           bthread->bid))
 
 (defn subscriber
-  ([event bthread->bid]
-   (subscriber :tap event bthread->bid))
-  ([prefix event bthread->bid]
+  ([event bprogram]
+   (subscriber :tap event bprogram))
+  ([prefix event bprogram]
    (try
-     (let [event->bthreads' (event->bthreads bthread->bid)
+     (let [bthread->bid (bprogram/bthread->bids bprogram)
+           event->bthreads' (event->bthreads bthread->bid)
 
            waiting-on (into #{} (keys (get event->bthreads' :wait-on)))
            requested  (into #{} (keys (get event->bthreads' :request)))
@@ -58,6 +60,7 @@
 
 (comment
   (do
+    (clojure.repl.deps/add-lib djblue/portal {:mvn/version "0.59.1"})
     (require '[portal.api :as portal])
     (def p (portal/open))
     (add-tap #'portal/submit)))

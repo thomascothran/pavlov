@@ -11,3 +11,6 @@
 (defprotocol BProgramQueue
   (conj [this event])
   (pop [this]))
+
+(defprotocol BProgramIntrospectable
+  (bthread->bids [this]))

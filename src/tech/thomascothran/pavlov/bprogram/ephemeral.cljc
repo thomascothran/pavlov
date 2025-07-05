@@ -42,7 +42,7 @@
         :reject @reject})))
 
 (defn- handle-event!
-  [program-opts event]
+  [bprogram program-opts event]
   (let [!state (get program-opts :!state)
         publisher (get program-opts :publisher)
         state @!state
@@ -52,15 +52,15 @@
         recur?    (and next-event (not terminate?))]
 
     (when event
-      (pub/notify! publisher event (get state :bthread->bid)))
+      (pub/notify! publisher event bprogram))
 
     (if recur?
-      (recur program-opts next-event)
+      (recur bprogram program-opts next-event)
       (when terminate?
         (set-stopped! program-opts event)))))
 
 #?(:clj (defn- run-event-loop!
-          [program-opts]
+          [bprogram program-opts]
           (let [killed (get program-opts :killed)
                 in-queue (get program-opts :in-queue)]
             (loop [next-event' (some-> program-opts
@@ -69,7 +69,7 @@
                                        (get :next-event))]
               (when-not (realized? killed)
                 (when next-event'
-                  (handle-event! program-opts next-event'))
+                  (handle-event! bprogram program-opts next-event'))
                 (when-not (event/terminal? next-event')
                   (recur (bprogram/pop in-queue))))))))
 
@@ -88,18 +88,19 @@
 
 #?(:clj
    (defn- submit-event!
-     [opts event]
+     [_ opts event]
      (let [in-queue (get opts :in-queue)]
        (bprogram/conj in-queue event)))
 
    :cljs
    (defn- submit-event!
-     [opts event]
-     (js/setTimeout #(handle-event! opts event) 0)))
+     [bprogram opts event]
+     (js/setTimeout #(handle-event! bprogram opts event) 0)))
 
 (defn- stop!
-  [program-opts]
-  (submit-event! program-opts
+  [bprogram program-opts]
+  (submit-event! bprogram
+                 program-opts
                  {:type :pavlov/terminate
                   :terminal true})
   #?(:clj (get program-opts :stopped)
@@ -134,19 +135,24 @@
                      :cljs (deferred-promise))
           :publisher publisher}
 
-         program (reify bprogram/BProgram
-                   (stop! [_] (stop! program-opts))
-                   (kill! [_] (kill! program-opts))
-                   (stopped [_] stopped)
-                   (subscribe! [_ k f]
-                     (pub/subscribe! publisher k f))
-                   (submit-event! [_ event]
-                     (submit-event! program-opts event)))]
+         bprogram (reify
+                    bprogram/BProgram
+                    (stop! [this] (stop! this program-opts))
+                    (kill! [_] (kill! program-opts))
+                    (stopped [_] stopped)
+                    (subscribe! [_ k f]
+                      (pub/subscribe! publisher k f))
+                    (submit-event! [this event]
+                      (submit-event! this program-opts event))
 
-     #?(:clj (future (run-event-loop! program-opts))
+                    bprogram/BProgramIntrospectable
+                    (bthread->bid [_]
+                      (get @!state :bthread->bid)))]
+
+     #?(:clj (future (run-event-loop! bprogram program-opts))
         :cljs (when-let [next-event (get initial-state :next-event)]
-                (submit-event! program-opts next-event)))
-     program)))
+                (submit-event! bprogram program-opts next-event)))
+     bprogram)))
 
 (defn execute!
   "Execute a behavioral program.
