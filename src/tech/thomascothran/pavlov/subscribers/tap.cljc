@@ -60,7 +60,7 @@
 
 (comment
   (do
-    (clojure.repl.deps/add-lib djblue/portal {:mvn/version "0.59.1"})
+    (clojure.repl.deps/add-lib 'djblue/portal {:mvn/version "0.59.1"})
     (require '[portal.api :as portal])
     (def p (portal/open))
     (add-tap #'portal/submit)))

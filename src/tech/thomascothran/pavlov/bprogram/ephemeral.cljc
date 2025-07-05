@@ -146,7 +146,7 @@
                       (submit-event! this program-opts event))
 
                     bprogram/BProgramIntrospectable
-                    (bthread->bid [_]
+                    (bthread->bids [_]
                       (get @!state :bthread->bid)))]
 
      #?(:clj (future (run-event-loop! bprogram program-opts))
