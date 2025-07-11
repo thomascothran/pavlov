@@ -2,7 +2,8 @@
   (:require [tech.thomascothran.pavlov.bthread :as b]
             [tech.thomascothran.pavlov.bid.proto :as bid]
             [tech.thomascothran.pavlov.event :as event]
-            [clojure.set :as set]))
+            [tech.thomascothran.pavlov.event.selection
+             :as event-selection]))
 
 (defn assoc-events
   [state bthread bid request-type]
@@ -22,42 +23,14 @@
               event-types)
       state)))
 
-(defn blocked
-  [state]
-  (into #{}
-        (comp (map second)
-              (mapcat bid/block)
-              (map event/type))
-        (get state :bthread->bid)))
-
-(defn unblocked-requests
-  [blocked-events bid]
-  (set/difference (into #{}
-                        (map event/type)
-                        (bid/request bid))
-                  blocked-events))
-
-(defn unblocked?
-  [blocked-events bid]
-  (seq (unblocked-requests blocked-events bid)))
-
 (defn next-event
   "The winning bid will request a new event"
   [state]
-  (let [blocked-event-types (blocked state)
-        bthreads-by-priority (get state :bthreads-by-priority)
-        bthreads->bid (get state :bthread->bid)
-
-        event
-        (some->> bthreads-by-priority
-                 (map #(get bthreads->bid %))
-                 (filter #(unblocked? blocked-event-types %))
-                 first
-                 bid/request
-                 (remove (comp blocked-event-types event/type))
-                 first)]
-
-    event))
+  (let [bthreads-by-priority (get state :bthreads-by-priority)
+        bthreads->bid (get state :bthread->bid)]
+    (event-selection/prioritized-event
+     bthreads-by-priority
+     bthreads->bid)))
 
 (defn bthreads-to-notify
   "Given an event, return the bthreads to notify"

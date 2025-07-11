@@ -3,6 +3,7 @@
                :cljs [cljs.test :refer [deftest is run-tests]])
             [tech.thomascothran.pavlov.event.defaults]
             [tech.thomascothran.pavlov.bid.defaults]
+            [tech.thomascothran.pavlov.bthread.defaults]
             [tech.thomascothran.pavlov.bthread :as b]
             [tech.thomascothran.pavlov.bprogram.ephemeral.state :as s]))
 
@@ -38,13 +39,6 @@
     (is (= {:type :a}
            (:next-event state))
         "Should queue up the next event")))
-
-(deftest test-blocked
-  (let [bthread-a {:request #{{:type :a}} :block #{:d}}
-        bthread-b {:request #{{:type :b}}
-                   :block #{:c}}
-        state (s/init [bthread-b bthread-a])]
-    (is (= #{:c :d} (s/blocked state)))))
 
 (deftest test-winning-bid
   (let [bthread-a {:request #{{:type :a}}}
