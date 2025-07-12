@@ -30,10 +30,7 @@
            (bthread/bid bthread {:type :test})))
     (is (= (second abc)
            (bthread/bid bthread {:type :test})))
-    (is (= (-> (nth abc 2) bthread/name)
-           (-> bthread
-               (bthread/bid {:type :test})
-               (bthread/name))))
+    (bthread/bid bthread {:type :test})
     (is (nil? (bthread/bid bthread {:type :test})))))
 
 (deftest test-reprise
@@ -104,4 +101,3 @@
           "Should return the correct bid after initialization")
       (is (= 2 (bthread/serialize bthread))
           "Should decrement state"))))
-

@@ -1,8 +1,6 @@
-(ns tech.thomascothran.pavlov.bthread.proto
-  (:refer-clojure :exclude [name]))
+(ns tech.thomascothran.pavlov.bthread.proto)
 
 (defprotocol BThread
-  (name [this])
   (bid [this last-event])
   (serialize [this])
   (deserialize [this serialized]))

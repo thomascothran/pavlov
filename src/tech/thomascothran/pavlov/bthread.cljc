@@ -2,11 +2,6 @@
   (:refer-clojure :exclude [seq reduce name])
   (:require [tech.thomascothran.pavlov.bthread.proto :as proto]))
 
-(defn name
-  "Name for a bthread that is globally unuque within a bprogram."
-  [bthread]
-  (proto/name bthread))
-
 (defn bid
   ([bthread event]
    (some-> (proto/bid bthread event)
@@ -32,7 +27,6 @@
   ([name-prefix xs]
    (let [xs' (volatile! xs)]
      (reify proto/BThread
-       (name [_] [(or name-prefix ::seq) (vec xs)])
        (serialize [_] xs')
        (deserialize [_ serialized] serialized)
        (bid [_ event]
@@ -58,7 +52,6 @@
    (let [state (volatile! nil)]
 
      (reify proto/BThread
-       (name [_] step-name)
        (serialize [_] @state)
        (deserialize [_ serialized] (vreset! state serialized))
        (bid [_ event]
@@ -107,8 +100,7 @@
   "
   ([bids] (interlace nil bids))
   ([name-prefix bids]
-   (let [bthread-name [(or name-prefix ::interpolate)
-                       (mapv name bids)]
+   (let [bthread-name [(or name-prefix ::interpolate)]
          bthread-count (count bids)
          step-fn (fn [idx event]
                    (let [idx' (or idx 0)
