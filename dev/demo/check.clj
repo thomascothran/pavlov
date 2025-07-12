@@ -38,17 +38,19 @@
 (defn make-tic-tac-toe-rules-bthreads
   []
   (reduce into []
-          [(mapv tb/make-winning-bthreads tb/winning-event-set)
-           [(tb/make-enforce-turn-bthreads)]
+          [(map-indexed (fn [idx event-set]
+                          [[:winning-bthread idx]
+                           (tb/make-winning-bthreads event-set)])
+                        tb/winning-event-set)
+           [[::enforce-turns (tb/make-enforce-turn-bthreads)]]
            (tb/make-no-double-placement-bthreads)
-           [(tb/make-draw-bthread)]
+           [[::draw (tb/make-draw-bthread)]]
            ;; computer strategy
-           [(make-naive-strategy)]]))
+           [[::naive-strategy (make-naive-strategy)]]]))
 
 (defn initial-tic-tac-toe-bthreads
   []
-  (into (make-tic-tac-toe-rules-bthreads)
-        [(make-naive-strategy)]))
+  (make-tic-tac-toe-rules-bthreads))
 
 ;; Let's make a safety bthread
 (defn make-losing-safety-bthread
@@ -56,7 +58,6 @@
   if player wins"
   [winning-path]
   (b/step
-   [::we-lost-bthreads winning-path]
    (fn [{:keys [remaining-events] :as acc} event]
      (let [event-type (event/type event)
            remaining-events' (disj remaining-events event-type)
@@ -87,7 +88,10 @@
 
 (defn losing-bthreads
   []
-  (mapv make-losing-safety-bthread x-win-paths))
+  (map-indexed (fn [idx path]
+                 [[:losing-bthread idx]
+                  (make-losing-safety-bthread path)])
+               x-win-paths))
 
 (def first-result
   "The first time, x winds with a crosser
@@ -113,7 +117,6 @@
   (let [r->l #{[0 0 player] [1 1 player] [2 2 player]}
         l->r #{[2 0 player] [1 1 player] [0 2 player]}]
     (b/step
-     [::block-crosser player]
      (fn [{:keys [remaining-r->l
                   remaining-l->r] :as _state}
           event]
@@ -150,7 +153,7 @@
   (check/run {:safety-bthreads (losing-bthreads)
               :check-deadlock true
               :subscribers {:tap tap/subscriber}
-              :make-bthreads #(into [(make-block-crosser-bthread :x)]
+              :make-bthreads #(into [[::block-crosser (make-block-crosser-bthread :x)]]
                                     (initial-tic-tac-toe-bthreads))
               :events (all-moves [:x])}))
 
@@ -180,7 +183,7 @@
               :check-deadlock true
               :strategy combo/permutations ;; <- new!
               :subscribers {:tap tap/subscriber}
-              :make-bthreads #(into [(make-block-crosser-bthread :x)]
+              :make-bthreads #(into [[::block-crosser (make-block-crosser-bthread :x)]]
                                     (initial-tic-tac-toe-bthreads))
               :events (all-moves [:x])}))
 
@@ -196,8 +199,8 @@
               :check-deadlock true
               :strategy combo/permutations
               :subscribers {:tap tap/subscriber}
-              :make-bthreads #(into [(make-center-strategy) ;; <- center first!
-                                     (make-block-crosser-bthread :x)]
+              :make-bthreads #(into [[::center-strategy (make-center-strategy)] ;; <- center first!
+                                     [::block-crosser (make-block-crosser-bthread :x)]]
                                     (initial-tic-tac-toe-bthreads))
               :events (all-moves [:x])}))
 
@@ -211,7 +214,6 @@
                #{[x 0 player] [x 1 player] [x 2 player]})
         all-lines (concat rows cols)]
     (b/step
-     [::block-lines player]
      (fn [{:keys [remaining-lines] :as _state} event]
        (let [event-type (event/type event)
              ;; Update remaining squares for each line
@@ -267,9 +269,9 @@
               :check-deadlock true
               :strategy combo/permutations
               :subscribers {:tap tap/subscriber}
-              :make-bthreads #(into [(make-center-strategy)
-                                     (make-block-lines-bthread :x)
-                                     (make-block-crosser-bthread :x)]
+              :make-bthreads #(into [[::center-strategy (make-center-strategy)]
+                                     [::block-lines (make-block-lines-bthread :x)]
+                                     [::block-crosser (make-block-crosser-bthread :x)]]
                                     (initial-tic-tac-toe-bthreads))
               :events (all-moves [:x])}))
 
@@ -288,7 +290,6 @@
          {:corners #{[0 0 :x] [2 2 :x]} :block [1 0 :o]} ;; main diag -> edge
          {:corners #{[0 2 :x] [2 0 :x]} :block [0 1 :o]}]] ;; anti diag -> edge
     (b/step
-     ::prevent-corner-forks
      (fn [{:keys [x-moves] :as state} event]
        (let [event-type (event/type event)
              ;; Track X's moves
@@ -353,10 +354,10 @@
               :check-deadlock true
               :strategy combo/permutations
               :subscribers {:tap tap/subscriber}
-              :make-bthreads #(into [(make-center-strategy)
-                                     (make-prevent-corner-forks-bthread)
-                                     (make-block-lines-bthread :x)
-                                     (make-block-crosser-bthread :x)]
+              :make-bthreads #(into [[::center-strategy (make-center-strategy)]
+                                     [::prevent-corner-forks (make-prevent-corner-forks-bthread)]
+                                     [::block-lines (make-block-lines-bthread :x)]
+                                     [::block-crosser (make-block-crosser-bthread :x)]]
                                     (initial-tic-tac-toe-bthreads))
               :events (all-moves [:x])}))
 
