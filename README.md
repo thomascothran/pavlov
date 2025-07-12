@@ -8,6 +8,8 @@ Pavlov is an opinionated behavioral programming library for Clojure(Script).
 
 Behavioral programming (BP) is an event-driven programming paradigm that strongly decomplects application behaviors.
 
+**Note: Recent API changes (January 2025)** - The BThread API has been simplified. Functions like `step`, `bids`, `reprise`, and `interlace` no longer require name parameters.
+
 Pavlov can be used for strongly Pavlov also supports using a behavioral program as a synchronous function call.
 
 ![bprogram diagram](./doc/assets/bprogram.png)
@@ -56,15 +58,14 @@ Let's suppose we have an industrial process which should have the following beha
             [tech.thomascothran.pavlov.bprogram :as bp]))
 
 (def water-app
-  (let [add-hot  (b/bids (b/reprise 3 {:request #{:add-hot-water}}))
-        add-cold (b/bids (b/reprise 3 {:request #{:add-cold-water}}))
-        alt-temp (b/bids
-                    (b/interlace
-                       (b/reprise {:wait-on #{:add-cold-water}
-                                   :block #{:add-hot-water}})
-                       (b/reprise {:wait-on #{:add-hot-water}
-                                   :block #{:add-cold-water}})))]
-    (bp/make-program [add-hot add-cold alt-temp]))
+  (let [add-hot  (b/reprise 3 {:request #{:add-hot-water}})
+        add-cold (b/reprise 3 {:request #{:add-cold-water}})
+        alt-temp (b/interlace
+                   [(b/reprise {:wait-on #{:add-cold-water}
+                                :block #{:add-hot-water}})
+                    (b/reprise {:wait-on #{:add-hot-water}
+                                :block #{:add-cold-water}})])]
+    (bp/make-program! [add-hot add-cold alt-temp]))
 ```
 
 ## Creating bthreads
@@ -94,14 +95,12 @@ As an example:
         [(inc prev-state) {:wait-on #{:test}}]))
 
 (def count-down-bthread
-  (b/step ::count-down-bthread only-thrice))
+  (b/step only-thrice))
 ```
 
 The bthread will keep track of the state, and the behavioral program keeps track of this (and all other) bthread bids.
 
-The `::count-down-bthread` is called once on initialization. Thereafter, it parks until the `:test` event is emitted. On the third time, the bthread returns nil, at which point it will not be called anymore.
-
-bthreads *must have unique names*. If more than one bthread has the same name, one bthread will be ignored.
+The step function is called once on initialization with a `nil` event. Thereafter, it parks until the `:test` event is emitted. On the third time, the bthread returns nil, at which point it will not be called anymore.
 
 ### Sequence Functions
 
@@ -114,7 +113,7 @@ For example:
  [{:wait-on #{:good-morning}
    :block #{:good-evening}}
   {:wait-on #{:good-evening}
-   :block #{:good-morning}}])]
+   :block #{:good-morning}}])
 ```
 
 This will return a bid twice, then the bthread will be deregistered.
@@ -144,7 +143,7 @@ For example:
  [{:wait-on #{:good-morning}
    :block #{:good-evening}}
   {:wait-on #{:good-evening}
-   :block #{:good-morning}}])]
+   :block #{:good-morning}}])
 ```
 
 `interlace` is a little different than `interleave`.
@@ -159,10 +158,10 @@ With interleave:
 However, with interlace:
 
 ```clojure
-(interlace
+(b/interlace
   [(b/bids [{:request #{:a}}
-            {:request #{:b}}]
-   (b/bids [{:request #{1}}]))
+            {:request #{:b}}])
+   (b/bids [{:request #{1}}])])
 ```
 
 Interlace will return *three* bids, for events `:a`, `1`, and `:b`.
@@ -228,8 +227,7 @@ Combine `:wait-on` and `:request`:
 
 (def bthread-two
   (b/bids [{:block #{:a}
-            :wait-on #{:c}}])
-
+            :wait-on #{:c}}]))
 ```
 
 `bthread-two` blocks event `:a`.
@@ -271,9 +269,9 @@ Subscribers may be passed in when the bprogram is created:
 (require '[tech.thomascothran.pavlov.bprogram.ephemeral :as bp])
 (require '[clojure.pprint :refer [pretty-print]])
 (bp/execute! [bthread-1 bthread-2]
-             {:logger (fn [event bthread->bid]
-                        (pretty-print {:event event
-                                       :bthread->bid bthread->bid})})
+             {:subscribers {:logger (fn [event bthread->bid]
+                                      (pretty-print {:event event
+                                                     :bthread->bid bthread->bid}))}})
 ```
 
 ## Understanding Program Execution

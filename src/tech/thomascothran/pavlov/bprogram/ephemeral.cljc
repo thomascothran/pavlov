@@ -132,43 +132,44 @@
   Earlier bthreads have higher priority.
 
   Returns the behavioral program."
-  [opts named-bthreads]
-  (let [initial-state (state/init named-bthreads)
-        !state (atom initial-state)
-        in-queue (get opts :in-queue #?(:clj (LinkedBlockingQueue.)))
-        subscribers (get opts :subscribers {})
-        publisher (get opts :publisher
-                       (pub-default/make-publisher! {:subscribers subscribers}))
+  ([named-bthreads] (make-program! nil named-bthreads))
+  ([opts named-bthreads]
+   (let [initial-state (state/init named-bthreads)
+         !state (atom initial-state)
+         in-queue (get opts :in-queue #?(:clj (LinkedBlockingQueue.)))
+         subscribers (get opts :subscribers {})
+         publisher (get opts :publisher
+                        (pub-default/make-publisher! {:subscribers subscribers}))
 
-        stopped #?(:clj (promise)
-                   :cljs (deferred-promise))
-
-        program-opts
-        {:!state !state
-         :in-queue in-queue
-         :stopped stopped
-         :killed #?(:clj (promise)
+         stopped #?(:clj (promise)
                     :cljs (deferred-promise))
-         :publisher publisher}
 
-        bprogram (reify
-                   bprogram/BProgram
-                   (stop! [this] (stop! this program-opts))
-                   (kill! [_] (kill! program-opts))
-                   (stopped [_] stopped)
-                   (subscribe! [_ k f]
-                     (pub/subscribe! publisher k f))
-                   (submit-event! [this event]
-                     (submit-event! this program-opts event))
+         program-opts
+         {:!state !state
+          :in-queue in-queue
+          :stopped stopped
+          :killed #?(:clj (promise)
+                     :cljs (deferred-promise))
+          :publisher publisher}
 
-                   bprogram/BProgramIntrospectable
-                   (bthread->bids [_]
-                     (get @!state :bthread->bid)))]
+         bprogram (reify
+                    bprogram/BProgram
+                    (stop! [this] (stop! this program-opts))
+                    (kill! [_] (kill! program-opts))
+                    (stopped [_] stopped)
+                    (subscribe! [_ k f]
+                      (pub/subscribe! publisher k f))
+                    (submit-event! [this event]
+                      (submit-event! this program-opts event))
 
-    #?(:clj (future (run-event-loop! bprogram program-opts))
-       :cljs (when-let [next-event (get initial-state :next-event)]
-               (submit-event! bprogram program-opts next-event)))
-    bprogram))
+                    bprogram/BProgramIntrospectable
+                    (bthread->bids [_]
+                      (get @!state :bthread->bid)))]
+
+     #?(:clj (future (run-event-loop! bprogram program-opts))
+        :cljs (when-let [next-event (get initial-state :next-event)]
+                (submit-event! bprogram program-opts next-event)))
+     bprogram)))
 
 (defn execute!
   "Execute a behavioral program.

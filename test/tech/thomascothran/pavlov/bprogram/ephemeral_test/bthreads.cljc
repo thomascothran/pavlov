@@ -36,7 +36,6 @@
   and terminate the pogram."
   [path-events]
   (b/step
-   [::make-winning-bthreads path-events]
    (fn [{:keys [remaining-events] :as acc} event]
      (let [event-type (event/type event)
            remaining-events' (disj remaining-events event-type)
@@ -66,7 +65,6 @@
         y-coordinate [0 1 2]]
     [[::no-double-placement x-coordinate y-coordinate]
      (b/bids
-      ::no-double-placement
       [{:wait-on #{[x-coordinate y-coordinate :x]
                    [x-coordinate y-coordinate :o]}}
        {:block #{[x-coordinate y-coordinate :x]
@@ -75,8 +73,7 @@
 (defn make-computer-picks-bthreads
   "Without worrying about strategy, let's pick a square"
   [player]
-  (b/bids ::computer-picks
-          (for [x-coordinate [0 1 2]
+  (b/bids (for [x-coordinate [0 1 2]
                 y-coordinate [0 1 2]]
             {:request #{{:type [x-coordinate y-coordinate player]}}})))
 
@@ -113,8 +110,7 @@
               (comp (filter (comp (partial = :o) last)))
               moves)]
 
-    (b/interlace ::enforce-turns
-                 [{:wait-on x-moves
+    (b/interlace [{:wait-on x-moves
                    :block o-moves}
                   {:wait-on o-moves
                    :block x-moves}])))
@@ -133,8 +129,7 @@
                     y-coord [0 1 2]
                     player [:x :o]]
                 [x-coord y-coord player]))]
-    (b/step ::draw
-            (fn [state event]
+    (b/step (fn [state event]
               (cond (not event)
                     [1 {:wait-on all-moves}]
 

@@ -121,7 +121,7 @@
 
 (deftest test-step
   (let [bid-a {:request #{:a}}
-        bid-b (b/step ::test-step-b (constantly {:request #{:b}}))
+        bid-b (b/step (constantly {:request #{:b}}))
         state (s/init [[:bid-a bid-a]
                        [:bid-b bid-b]])
         next-state (s/step state {:type :a})]

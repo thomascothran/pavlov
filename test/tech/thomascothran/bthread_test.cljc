@@ -71,7 +71,7 @@
 
 (deftest test-step-function
   (testing "Should retain state"
-    (let [bthread (bthread/step ::count-down-step-fn count-down-step-fn)]
+    (let [bthread (bthread/step count-down-step-fn)]
       (is (= {:wait-on #{:test}}
              (bthread/bid bthread nil))
           "Should return the correct bid")
@@ -83,14 +83,14 @@
       (is (= 2 (bthread/state bthread))
           "Should decrement state")))
   (testing "should handle round trip serialization"
-    (let [bthread (bthread/step ::count-down-step-fn count-down-step-fn)
-          _       (bthread/bid bthread nil)
-          _       (bthread/bid bthread {:type :test})
-          ser     (bthread/state bthread)
-          de      (bthread/set-state bthread ser)]
+    (let [bthread (bthread/step count-down-step-fn)
+          _ (bthread/bid bthread nil)
+          _ (bthread/bid bthread {:type :test})
+          ser (bthread/state bthread)
+          de (bthread/set-state bthread ser)]
       (is (= 2 ser de))))
   (testing "should work with anonymous functions"
-    (let [bthread (bthread/step ::count-down-step-fn #(apply count-down-step-fn %&))]
+    (let [bthread (bthread/step #(apply count-down-step-fn %&))]
       (is (= {:wait-on #{:test}}
              (bthread/bid bthread nil))
           "Should return the correct bid")

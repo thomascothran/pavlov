@@ -10,13 +10,12 @@
 (deftest subscriber-should-receive-event-after-bthread-executes
   (let [!stack (atom [])
         bthread (b/step
-                 ::test-subscriber-call-order
                  (fn [_ event]
                    (swap! !stack conj [:bthread event])
                    [nil {:wait-on #{:test-event}}]))
         subscriber (fn [x _] (swap! !stack conj [:subscriber x]))
         program (bpe/make-program! {:subscribers {:test subscriber}}
-                                   {::test-subscriber-call-order bthread})
+                                   {:test-bthread bthread})
         _ (bp/submit-event! program :test-event)
         _ @(bp/stop! program)]
     (is (= [[:bthread nil]

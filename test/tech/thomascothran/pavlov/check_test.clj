@@ -47,7 +47,6 @@
   if player wins"
   [winning-path]
   (b/step
-   [::we-lost-bthreads winning-path]
    (fn [{:keys [remaining-events] :as acc} event]
      (let [event-type (event/type event)
            remaining-events' (disj remaining-events event-type)
