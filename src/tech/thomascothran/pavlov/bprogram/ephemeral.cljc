@@ -133,11 +133,7 @@
 
   Returns the behavioral program."
   [opts named-bthreads]
-  (def named-bthreads named-bthreads)
-  (let [initial-state (->> named-bthreads
-                           (mapv second)
-                           (state/init))
-        _ (def initial-state initial-state)
+  (let [initial-state (state/init named-bthreads)
         !state (atom initial-state)
         in-queue (get opts :in-queue #?(:clj (LinkedBlockingQueue.)))
         subscribers (get opts :subscribers {})

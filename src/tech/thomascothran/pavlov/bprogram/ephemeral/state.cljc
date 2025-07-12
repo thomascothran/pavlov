@@ -6,7 +6,7 @@
              :as event-selection]))
 
 (defn assoc-events
-  [state bthread bid request-type]
+  [state bthread-name bid request-type]
   (let [event-fn (case request-type
                    :requests bid/request
                    :waits bid/wait-on
@@ -18,7 +18,7 @@
                                      (if :requests
                                        (event/type requested-event)
                                        requested-event)]
-                           #(into #{bthread} %)))
+                           #(into #{bthread-name} %)))
               state
               event-types)
       state)))
@@ -48,35 +48,44 @@
   - `waits`: the new waits
   - `blocks`: the new blocks"
   [state event]
-  (let [bthreads (bthreads-to-notify state event)]
-    (reduce (fn [acc bthread]
-              (let [bid (b/bid bthread event)]
+  (let [bthread-names (bthreads-to-notify state event)]
+    (reduce (fn [acc bthread-name]
+              (let [bthread (get-in state [:name->bthread bthread-name])
+                    _ (when-not bthread (println "No bthread found for" bthread-name))
+                    bid (b/bid bthread event)]
                 (-> acc
-                    (assoc-in [:bthread->bid (b/name bthread)] bid)
-                    (assoc-events bthread bid :requests)
-                    (assoc-events bthread bid :waits)
-                    (assoc-events bthread bid :blocks))))
+                    (assoc-in [:bthread->bid bthread-name] bid)
+                    (assoc-events bthread-name bid :requests)
+                    (assoc-events bthread-name bid :waits)
+                    (assoc-events bthread-name bid :blocks))))
             {:bthread->bid {}}
-            bthreads)))
+            bthread-names)))
 
 ;; Here, we can put the bthreads in order of priority
 (defn init
   "Initiate the state"
-  [bthreads]
-  (let [bid-set {}
+  [named-bthreads]
+  (let [name-bthread-pairs (into [] named-bthreads)
+        name->bthread (into {} named-bthreads)
+        bthreads-by-priority (mapv first name-bthread-pairs)
+
+        bid-set {}
         state
-        (reduce (fn [acc bthread]
-                  (let [bid (b/bid bthread nil)]
+        (reduce (fn [acc bthread-name]
+                  (let [bthread (get name->bthread bthread-name)
+                        _ (assert bthread)
+                        bid (b/bid bthread nil)]
                     (-> acc
-                        (update :bthread->bid into {(b/name bthread)
+                        (update :bthread->bid into {bthread-name
                                                     bid})
-                        (assoc-events bthread bid :requests)
-                        (assoc-events bthread bid :waits)
-                        (assoc-events bthread bid :blocks))))
+                        (assoc-events bthread-name bid :requests)
+                        (assoc-events bthread-name bid :waits)
+                        (assoc-events bthread-name bid :blocks))))
                 {:bthread->bid bid-set
                  :last-event nil
-                 :bthreads-by-priority (mapv #(b/name %) bthreads)}
-                bthreads)
+                 :name->bthread name->bthread
+                 :bthreads-by-priority bthreads-by-priority}
+                (keys name->bthread))
         next-event' (next-event state)]
     (assoc state :next-event next-event')))
 
@@ -97,9 +106,10 @@
 (defn next-state
   [{:keys [state event]}
    {new-bthread->bid :bthread->bid
-    new-waits        :waits
-    new-requests     :requests
-    new-blocks       :blocks}]
+    name->bthread :name->bthread
+    new-waits :waits
+    new-requests :requests
+    new-blocks :blocks}]
 
   (let [triggered-bthreads
         (into #{}
@@ -118,10 +128,10 @@
                      (dissoc event)
                      rm-triggered-bthreads
                      (merge-event->bthreads new-requests))
-        blocks   (-> (get state :blocks)
-                     (dissoc event)
-                     rm-triggered-bthreads
-                     (merge-event->bthreads new-blocks))
+        blocks (-> (get state :blocks)
+                   (dissoc event)
+                   rm-triggered-bthreads
+                   (merge-event->bthreads new-blocks))
 
         next-bthread->bid
         (-> (get state :bthread->bid)
@@ -129,12 +139,13 @@
             (into new-bthread->bid))
 
         next-state
-        {:last-event event
-         :waits waits
-         :requests requests
-         :blocks blocks
-         :bthreads-by-priority (get state :bthreads-by-priority)
-         :bthread->bid next-bthread->bid}
+        (assoc state
+               :last-event event
+               :waits waits
+               :requests requests
+               :blocks blocks
+               :bthreads-by-priority (get state :bthreads-by-priority)
+               :bthread->bid next-bthread->bid)
 
         next-event (next-event next-state)]
     (assoc next-state :next-event next-event)))
