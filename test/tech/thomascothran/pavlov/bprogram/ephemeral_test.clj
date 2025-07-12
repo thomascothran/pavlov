@@ -8,15 +8,15 @@
             [tech.thomascothran.pavlov.event :as event]))
 
 (deftest subscriber-should-receive-event-after-bthread-executes
-  (let [!stack  (atom [])
+  (let [!stack (atom [])
         bthread (b/step
                  ::test-subscriber-call-order
                  (fn [_ event]
                    (swap! !stack conj [:bthread event])
                    [nil {:wait-on #{:test-event}}]))
         subscriber (fn [x _] (swap! !stack conj [:subscriber x]))
-        program   (bpe/make-program! [bthread]
-                                     {:subscribers {:test subscriber}})
+        program (bpe/make-program! {:subscribers {:test subscriber}}
+                                   {::test-subscriber-call-order bthread})
         _ (bp/submit-event! program :test-event)
         _ @(bp/stop! program)]
     (is (= [[:bthread nil]
@@ -26,21 +26,26 @@
 
 (deftest good-morning-and-evening
   (let [bthreads
-        [(b/reprise 4
+        {:good-morning
+         (b/reprise 4
                     {:request #{:good-morning}})
 
+         :good-evening
          (b/reprise 4 {:request #{:good-evening}})
+
+         :interlace
          (b/interlace
           [{:wait-on #{:good-morning}
             :block #{:good-evening}}
            {:wait-on #{:good-evening}
-            :block #{:good-morning}}])]
+            :block #{:good-morning}}])}
 
-        !a        (atom [])
-        subscriber  (fn [x _] (swap! !a conj x))
-        program   (bpe/make-program! bthreads
-                                     {:subscribers {:test subscriber}})
-        return      @(bp/stop! program)]
+        !a (atom [])
+        subscriber (fn [x _] (swap! !a conj x))
+        program
+        (bpe/make-program! {:subscribers {:test subscriber}}
+                           bthreads)
+        return @(bp/stop! program)]
 
     (is (= (interleave (repeat 4 :good-morning)
                        (repeat 4 :good-evening))
@@ -50,17 +55,18 @@
            return))))
 
 (deftest add-subscriber
-  (let [bthreads [(b/bids [{:wait-on #{:go}}
-                           {:request #{:some-event}}])]
+  (let [bthreads {:wait-on-go
+                  (b/bids [{:wait-on #{:go}}
+                           {:request #{:some-event}}])}
 
-        !a         (atom [])
+        !a (atom [])
         subscriber (fn [x _] (swap! !a conj x))
-        program    (bpe/make-program! bthreads)
-        _          (bp/subscribe! program :test subscriber)
-        _          (bp/submit-event! program :go)
-        _          @(bp/stop! program)]
+        program (bpe/make-program! {} bthreads)
+        _ (bp/subscribe! program :test subscriber)
+        _ (bp/submit-event! program :go)
+        _ @(bp/stop! program)]
     (is (= [:go :some-event]
-           (butlast  @!a)))))
+           (butlast @!a)))))
 
 ;; Note that we test our behavioral threads in isolation
 ;; from the bprogram.
@@ -87,36 +93,52 @@
 ;; Let's see if it can detect a win!
 ;; We'll ignore player moves for now.
 (deftest tic-tac-toe-simple-win
-  (let [bthreads (mapv tb/make-winning-bthreads tb/winning-event-set)
-        events   [{:type [0 0 :o]}
-                  {:type [1 1 :o]}
-                  {:type [2 2 :o]}]
-        !a        (atom [])
-        subscriber  (fn [x _] (swap! !a conj x))
-        program  (bpe/make-program! bthreads
-                                    {:subscribers {:test subscriber}})
-        _        (doseq [event events]
-                   (bp/submit-event! program event))
-        _        @(bp/stop! program)
+  (let [bthreads (into []
+                       (map
+                        (fn [events]
+                          [[:winning-bthreads events]
+                           (tb/make-winning-bthreads events)]))
+                       tb/winning-event-set)
+        events [{:type [0 0 :o]}
+                {:type [1 1 :o]}
+                {:type [2 2 :o]}]
+        !a (atom [])
+        subscriber (fn [x _] (swap! !a conj x))
+        program
+        (bpe/make-program! {:subscribers {:test subscriber}}
+                           bthreads)
+
+        _ (doseq [event events]
+            (bp/submit-event! program event))
+        _ @(bp/stop! program)
 
         expected (conj events {:terminal true, :type [:o :wins]})
-        actual   (take 5 @!a)]
+        actual (take 5 @!a)]
     (is (= expected actual))))
 
 (deftest test-simple-computer-picks
-  (let [bthreads
-        (reduce into []
-                [(mapv tb/make-winning-bthreads tb/winning-event-set)
-                 (tb/make-no-double-placement-bthreads)
-                 [(tb/make-computer-picks-bthreads :o)
-                  (b/bids [{:type [0 0 :o]}])]])
+  ;; This needs names
+  (let [winning-bthreads (for [event-set tb/winning-event-set]
+                           [[:winning-bthreads event-set]
+                            (tb/make-winning-bthreads event-set)])
 
-        !a        (atom [])
-        subscriber  (fn [x _] (swap! !a conj x))
-        program (bpe/make-program! bthreads
-                                   {:subscribers {:test subscriber}})
+        no-double-placement (tb/make-no-double-placement-bthreads)
 
-        _        @(bp/stop! program)
+        other-bthreads [[:computer-o-picks (tb/make-computer-picks-bthreads :o)]
+                        [:o-top-left-corner (b/bids [{:type [0 0 :o]}])]]
+
+        bthreads (reduce into []
+                         [winning-bthreads
+                          no-double-placement
+                          other-bthreads])
+
+        !a (atom [])
+        subscriber (fn [x _] (swap! !a conj x))
+        program
+        (bpe/make-program! {:subscribers {:test subscriber}}
+                           bthreads)
+
+        _ @(bp/stop! program)
         out-events @!a]
     (is (= 4 (count out-events)))
     (is (= #{:o} (->> out-events
@@ -128,33 +150,42 @@
            (event/type (last out-events))))))
 
 (deftest test-taking-turns
-  ;; Problem is that blocked events
-  ;; are being represented both as a map with a :type key
-  ;; and as the type itself. Can we support both?
-  (let [bthreads
-        (reduce into [(tb/make-computer-picks-bthreads :o)
-                      (tb/make-enforce-turn-bthreads)]
-                [(mapv tb/make-winning-bthreads tb/winning-event-set)
-                 (tb/make-no-double-placement-bthreads)])
+  (let [winning-bthreads (for [event-set tb/winning-event-set]
+                           [[:winning-bthreads event-set]
+                            (tb/make-winning-bthreads event-set)])
 
-        !a        (atom [])
+        no-double-placement (tb/make-no-double-placement-bthreads)
+
+        other-bthreads [[:computer-o-picks (tb/make-computer-picks-bthreads :o)]
+                        [:enforce-turns (tb/make-enforce-turn-bthreads)]]
+
+        bthreads (reduce into []
+                         [winning-bthreads
+                          no-double-placement
+                          other-bthreads])
+
+        !a (atom [])
         subscriber (fn [x _] (swap! !a conj x))
-        program (bpe/make-program! bthreads
-                                   {:subscribers {:test subscriber}})
-        _        (bp/submit-event! program {:type [1 1 :x]})
-        _        @(bp/stop! program)]
+        program (bpe/make-program! {:subscribers {:test subscriber}}
+                                   bthreads)
+        _ (bp/submit-event! program {:type [1 1 :x]})
+        _ @(bp/stop! program)]
 
     (is (= [{:type [1 1 :x]} {:type [0 0 :o]}]
            (butlast @!a)))))
 
 (deftest test-sync-call
   (let [bthreads
-        [(b/bids [{:request #{:a}}])
+        {:request-a
+         (b/bids [{:request #{:a}}])
+
+         :request-b
          (b/bids [{:wait-on #{:a}}
                   {:request #{:b}}])
+         :request-c
          (b/bids [{:wait-on #{:b}}
                   {:request #{{:type :c
-                               :terminal true}}}])]
+                               :terminal true}}}])}
 
         return-value @(bpe/execute! bthreads)]
     (is (= {:type :c

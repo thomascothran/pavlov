@@ -49,7 +49,7 @@
         next-state (reset! !state (state/step state event))
         next-event (get next-state :next-event)
         terminate? (event/terminal? event)
-        recur?    (and next-event (not terminate?))]
+        recur? (and next-event (not terminate?))]
 
     (when event
       (pub/notify! publisher event bprogram))
@@ -109,57 +109,77 @@
 (defn make-program!
   "Create a behavioral program comprising bthreads.
 
-  `bthreads` is a collection of bthreads. Their priority
-  is determined by the order in which they are supplied.
-  ealier bthreads have higher priority.
+  Usage
+  ------
+  ```clojure
+  (make-program! opts {:bthread1 bthread1
+                       :bthread2 bthread2}...)
+  ```
+
+  But note that bthread priority is random.
+
+  ```clojure
+  (make-program! opts [[:bthread1 bthread1]
+                       [:bthread2 bthread2]...])
+  ```
+
+
+  To control bthread priority:
+
+  `opts` is a map of options for the behavioral program.
+  Bthreads are supplied as individual arguments after opts.
+  Their priority is determined by the order in which they are supplied.
+  Earlier bthreads have higher priority.
 
   Returns the behavioral program."
-  ([bthreads]
-   (make-program! bthreads {}))
-  ([bthreads opts]
-   (let [initial-state (state/init bthreads)
-         !state  (atom initial-state)
-         in-queue (get opts :in-queue #?(:clj (LinkedBlockingQueue.)))
-         subscribers (get opts :subscribers {})
-         publisher (get opts :publisher
-                        (pub-default/make-publisher! {:subscribers subscribers}))
+  [opts named-bthreads]
+  (def named-bthreads named-bthreads)
+  (let [initial-state (->> named-bthreads
+                           (mapv second)
+                           (state/init))
+        _ (def initial-state initial-state)
+        !state (atom initial-state)
+        in-queue (get opts :in-queue #?(:clj (LinkedBlockingQueue.)))
+        subscribers (get opts :subscribers {})
+        publisher (get opts :publisher
+                       (pub-default/make-publisher! {:subscribers subscribers}))
 
-         stopped #?(:clj (promise)
+        stopped #?(:clj (promise)
+                   :cljs (deferred-promise))
+
+        program-opts
+        {:!state !state
+         :in-queue in-queue
+         :stopped stopped
+         :killed #?(:clj (promise)
                     :cljs (deferred-promise))
+         :publisher publisher}
 
-         program-opts
-         {:!state !state
-          :in-queue in-queue
-          :stopped stopped
-          :killed #?(:clj (promise)
-                     :cljs (deferred-promise))
-          :publisher publisher}
+        bprogram (reify
+                   bprogram/BProgram
+                   (stop! [this] (stop! this program-opts))
+                   (kill! [_] (kill! program-opts))
+                   (stopped [_] stopped)
+                   (subscribe! [_ k f]
+                     (pub/subscribe! publisher k f))
+                   (submit-event! [this event]
+                     (submit-event! this program-opts event))
 
-         bprogram (reify
-                    bprogram/BProgram
-                    (stop! [this] (stop! this program-opts))
-                    (kill! [_] (kill! program-opts))
-                    (stopped [_] stopped)
-                    (subscribe! [_ k f]
-                      (pub/subscribe! publisher k f))
-                    (submit-event! [this event]
-                      (submit-event! this program-opts event))
+                   bprogram/BProgramIntrospectable
+                   (bthread->bids [_]
+                     (get @!state :bthread->bid)))]
 
-                    bprogram/BProgramIntrospectable
-                    (bthread->bids [_]
-                      (get @!state :bthread->bid)))]
-
-     #?(:clj (future (run-event-loop! bprogram program-opts))
-        :cljs (when-let [next-event (get initial-state :next-event)]
-                (submit-event! bprogram program-opts next-event)))
-     bprogram)))
+    #?(:clj (future (run-event-loop! bprogram program-opts))
+       :cljs (when-let [next-event (get initial-state :next-event)]
+               (submit-event! bprogram program-opts next-event)))
+    bprogram))
 
 (defn execute!
   "Execute a behavioral program.
 
   Returns a promise delivered with the value of the
   terminal event."
-  ([bthreads] (execute! bthreads nil))
-  ([bthreads opts]
-   (-> (make-program! bthreads opts)
+  ([bthreads] (execute! nil bthreads))
+  ([opts bthreads]
+   (-> (make-program! opts bthreads)
        (bprogram/stopped))))

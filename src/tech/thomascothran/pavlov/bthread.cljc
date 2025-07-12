@@ -33,7 +33,7 @@
    (let [xs' (volatile! xs)]
      (reify proto/BThread
        (name [_] [(or name-prefix ::seq) (vec xs)])
-       (serialize [_] xs)
+       (serialize [_] xs')
        (deserialize [_ serialized] serialized)
        (bid [_ event]
          (when-let [x (first @xs')]

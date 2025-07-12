@@ -64,12 +64,13 @@
   []
   (for [x-coordinate [0 1 2]
         y-coordinate [0 1 2]]
-    (b/bids
-     ::no-double-placement
-     [{:wait-on #{[x-coordinate y-coordinate :x]
-                  [x-coordinate y-coordinate :o]}}
-      {:block #{[x-coordinate y-coordinate :x]
-                [x-coordinate y-coordinate :o]}}])))
+    [[::no-double-placement x-coordinate y-coordinate]
+     (b/bids
+      ::no-double-placement
+      [{:wait-on #{[x-coordinate y-coordinate :x]
+                   [x-coordinate y-coordinate :o]}}
+       {:block #{[x-coordinate y-coordinate :x]
+                 [x-coordinate y-coordinate :o]}}])]))
 
 (defn make-computer-picks-bthreads
   "Without worrying about strategy, let's pick a square"

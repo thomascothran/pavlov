@@ -8,9 +8,9 @@
 (defn all-moves
   "request all combinations of x moves"
   [players]
-  (->> (for [x-coord  [0 1 2]
-             y-coord  [0 1 2]
-             player   players]
+  (->> (for [x-coord [0 1 2]
+             y-coord [0 1 2]
+             player players]
          [x-coord y-coord player])
        (map #(hash-map :type %))))
 
@@ -30,13 +30,12 @@
 (defn initial-tic-tac-toe-bthreads
   []
   (reduce into []
-          [(mapv tb/make-winning-bthreads tb/winning-event-set)
-           [(tb/make-enforce-turn-bthreads)]
+          [(for [event-set tb/winning-event-set]
+             [[:winning-bthreads event-set]
+              (tb/make-winning-bthreads event-set)])
+           [[::enforce-turns (tb/make-enforce-turn-bthreads)]]
            (tb/make-no-double-placement-bthreads)
-           [(make-naive-strategy)]]))
-
-(comment
-  (mapv b/name (initial-tic-tac-toe-bthreads)))
+           [[::naive-strategy (make-naive-strategy)]]]))
 
 (def x-win-paths
   (into #{};; for each winning path set
@@ -73,14 +72,17 @@
 
 (defn losing-bthreads
   []
-  (mapv make-losing-safety-bthread x-win-paths))
+  (mapv (fn [path]
+          [[:losing-bthread path]
+           (make-losing-safety-bthread path)])
+        x-win-paths))
 
 (defn safety-bthreads
   []
   (losing-bthreads))
 
 (deftest test-tic-tac-toe-x-wins
-  (let [{:keys [event path]}
+  (let [{:keys [event path] :as result}
         (check/run {:safety-bthreads (safety-bthreads)
                     :check-deadlock true
                     :make-bthreads #(initial-tic-tac-toe-bthreads)
@@ -103,7 +105,7 @@
            path))))
 
 (deftest test-run-deadlock
-  (let [bthreads [{:wait-on #{:godot}}]
+  (let [bthreads [[::waiting-for-godot (b/bids [{:wait-on #{:godot}}])]]
         events [{:type [:beckett :writes]}]
 
         result (check/run {:make-bthreads (constantly bthreads)
@@ -116,13 +118,13 @@
     (is (= 2 (count path)))))
 
 (deftest test-safety-properties-are-checked
-  (let [bthreads [{:request #{:godot}}]
+  (let [bthreads [[::request-godot (b/bids [{:request #{:godot}}])]]
 
         safety-bthreads
-        [(b/bids [{:wait-on #{:godot}}
-                  {:request [{:type :oh!
-                              :terminal true
-                              :invariant-violated true}]}])]
+        [[::safety-check (b/bids [{:wait-on #{:godot}}
+                                  {:request [{:type :oh!
+                                              :terminal true
+                                              :invariant-violated true}]}])]]
 
         result (check/run {:make-bthreads (constantly bthreads)
                            :check-deadlock true
@@ -136,17 +138,17 @@
 
 (deftest test-happy-path
   (let [bthreads
-        [(b/bids [{:request #{:a}}
-                  {:request [:b]}])
-         (b/bids [{:wait-on #{:b}}
-                  {:request [{:type :c
-                              :terminal true}]}])]
+        [[::a-requester (b/bids [{:request #{:a}}
+                                 {:request [:b]}])]
+         [::c-requester (b/bids [{:wait-on #{:b}}
+                                 {:request [{:type :c
+                                             :terminal true}]}])]]
 
         safety-bthreads
-        [(b/bids [{:wait-on #{:z}}
-                  {:request [{:type :no!
-                              :terminal true
-                              :invariant-violated true}]}])]
+        [[::safety-z (b/bids [{:wait-on #{:z}}
+                              {:request [{:type :no!
+                                          :terminal true
+                                          :invariant-violated true}]}])]]
 
         events [{:type :a}]
 

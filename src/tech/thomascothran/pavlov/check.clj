@@ -13,6 +13,27 @@
   [events]
   [events])
 
+(defn- make-all-bthreads
+  "Assembles all bthreads with proper naming for make-program!"
+  [{:keys [make-bthreads events safety-bthreads check-deadlock]}]
+  (let [main-bthreads (make-bthreads)
+
+        input-threads (mapv
+                       (fn [event]
+                         [[::input-thread event]
+                          (b/bids [{:request #{event}}])])
+                       events)
+
+        deadlock-threads (when check-deadlock
+                           [[[::deadlock-thread]
+                             (make-deadlock-bthread)]])]
+
+    (reduce into []
+            [safety-bthreads
+             main-bthreads
+             input-threads
+             deadlock-threads])))
+
 (comment
   (straight-sequence [1 2 3]))
 
@@ -58,15 +79,11 @@
         events-combos (strategy (get m :events []))]
     (loop [events-combos' events-combos]
       (when-let [events (first events-combos')]
-        (let [input-threads (mapv (fn [event]
-                                    (b/bids [{:request [event]}]))
-                                  events)
-              all-bthreads
-              (->> (if check-deadlock
-                     [(make-bthreads) input-threads
-                      [(make-deadlock-bthread)]]
-                     [(make-bthreads) input-threads])
-                   (reduce into safety-bthreads))
+        (let [all-bthreads (make-all-bthreads
+                            {:make-bthreads make-bthreads
+                             :events events
+                             :safety-bthreads safety-bthreads
+                             :check-deadlock check-deadlock})
 
               !a (atom [])
 
@@ -74,11 +91,11 @@
                               (swap! !a conj x))
 
               result
-              @(bp/execute! all-bthreads
-                            {:subscribers
+              @(bp/execute! {:subscribers
                              (assoc subscribers
                                     :state-tracker
-                                    state-tracker)})]
+                                    state-tracker)}
+                            all-bthreads)]
           (if (get result :invariant-violated)
             {:path @!a
              :event (last @!a)}
