@@ -9,14 +9,14 @@
                  :request #{:test-event}}]
     (is (= bthread
            (->> bthread
-                bthread/serialize
-                (bthread/deserialize bthread))))))
+                bthread/state
+                (bthread/set-state bthread))))))
 
 (deftest test-serde-on-nil
   (is (= nil
          (->> nil
-              bthread/serialize
-              (bthread/deserialize nil)))))
+              bthread/state
+              (bthread/set-state nil)))))
 
 (deftest test-bid-sequence
   (let [abc [{:name `request-a
@@ -75,29 +75,29 @@
       (is (= {:wait-on #{:test}}
              (bthread/bid bthread nil))
           "Should return the correct bid")
-      (is (= 3 (bthread/serialize bthread))
+      (is (= 3 (bthread/state bthread))
           "Should initialize state correctly")
       (is (= {:wait-on #{:test}}
              (bthread/bid bthread {:type :test}))
           "Should return the correct bid after initialization")
-      (is (= 2 (bthread/serialize bthread))
+      (is (= 2 (bthread/state bthread))
           "Should decrement state")))
   (testing "should handle round trip serialization"
     (let [bthread (bthread/step ::count-down-step-fn count-down-step-fn)
           _       (bthread/bid bthread nil)
           _       (bthread/bid bthread {:type :test})
-          ser     (bthread/serialize bthread)
-          de      (bthread/deserialize bthread ser)]
+          ser     (bthread/state bthread)
+          de      (bthread/set-state bthread ser)]
       (is (= 2 ser de))))
   (testing "should work with anonymous functions"
     (let [bthread (bthread/step ::count-down-step-fn #(apply count-down-step-fn %&))]
       (is (= {:wait-on #{:test}}
              (bthread/bid bthread nil))
           "Should return the correct bid")
-      (is (= 3 (bthread/serialize bthread))
+      (is (= 3 (bthread/state bthread))
           "Should initialize state correctly")
       (is (= {:wait-on #{:test}}
              (bthread/bid bthread {:type :test}))
           "Should return the correct bid after initialization")
-      (is (= 2 (bthread/serialize bthread))
+      (is (= 2 (bthread/state bthread))
           "Should decrement state"))))

@@ -7,13 +7,13 @@
    (some-> (proto/bid bthread event)
            (vary-meta assoc :pavlov/bthread bthread))))
 
-(defn serialize
+(defn state
   [bthread]
-  (proto/serialize bthread))
+  (proto/state bthread))
 
-(defn deserialize
+(defn set-state
   [bthread serialized]
-  (proto/deserialize bthread serialized))
+  (proto/set-state bthread serialized))
 
 (defn bids
   "Make a bthread from a finite sequence of bids.
@@ -27,8 +27,8 @@
   ([name-prefix xs]
    (let [xs' (volatile! xs)]
      (reify proto/BThread
-       (serialize [_] xs')
-       (deserialize [_ serialized] serialized)
+       (state [_] xs')
+       (set-state [_ serialized] serialized)
        (bid [_ event]
          (when-let [x (first @xs')]
            (let [bid' (bid x event)]
@@ -52,8 +52,8 @@
    (let [state (volatile! nil)]
 
      (reify proto/BThread
-       (serialize [_] @state)
-       (deserialize [_ serialized] (vreset! state serialized))
+       (state [_] @state)
+       (set-state [_ serialized] (vreset! state serialized))
        (bid [_ event]
          (let [result (f @state event)
                next-state (first result)

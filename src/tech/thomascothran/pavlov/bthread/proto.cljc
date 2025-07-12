@@ -2,5 +2,5 @@
 
 (defprotocol BThread
   (bid [this last-event])
-  (serialize [this])
-  (deserialize [this serialized]))
+  (state [this])
+  (set-state [this serialized]))
