@@ -109,7 +109,7 @@
 
         _ (doseq [event events]
             (bp/submit-event! program event))
-        _ @(bp/stop! program)
+        _ @(bp/stopped program)
 
         expected (conj events {:terminal true, :type [:o :wins]})
         actual (take 5 @!a)]
