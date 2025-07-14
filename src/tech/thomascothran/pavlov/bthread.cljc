@@ -26,8 +26,8 @@
   [xs]
   (let [xs' (volatile! xs)]
     (reify proto/BThread
-      (state [_] xs')
-      (set-state [_ serialized] serialized)
+      (state [_] @xs')
+      (set-state [_ serialized] (vreset! xs' serialized))
       (bid [_ event]
         (when-let [x (first @xs')]
           (let [bid' (bid x event)]
@@ -94,8 +94,6 @@
   ;; interplate will return *three* bids, for
   ;; events `:a`, `:b`, and `1`
   ```
-
-
   "
   [bids]
   (let [bthread-count (count bids)
