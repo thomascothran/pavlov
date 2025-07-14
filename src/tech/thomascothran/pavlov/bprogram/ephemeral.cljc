@@ -4,7 +4,7 @@
             [tech.thomascothran.pavlov.event :as event]
             [tech.thomascothran.pavlov.event.publisher.defaults :as pub-default]
             [tech.thomascothran.pavlov.event.publisher.proto :as pub]
-            [tech.thomascothran.pavlov.bprogram.ephemeral.state
+            [tech.thomascothran.pavlov.bprogram.state
              :as state])
   #?(:clj (:import [java.util.concurrent LinkedBlockingQueue])))
 

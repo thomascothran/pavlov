@@ -1,4 +1,4 @@
-(ns tech.thomascothran.bthread-test
+(ns tech.thomascothran.pavlov.bthread-test
   (:require #?(:clj [clojure.test :refer [deftest is testing]]
                :cljs [cljs.test :refer-macros [deftest is testing]])
             [tech.thomascothran.pavlov.bthread :as bthread]
