@@ -8,6 +8,11 @@
             [shadow.cljs.devtools.server :as server]
             [shadow.cljs.devtools.api :as shadow]))
 
+(comment
+  (require '[clojure.repl.deps :as d])
+  (d/add-libs
+   {'lambdaisland/kaocha {:mvn/version "1.91.1392"}}))
+
 (defonce !nrepl-server
   (atom nil))
 
