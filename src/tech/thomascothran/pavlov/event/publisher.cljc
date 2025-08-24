@@ -12,4 +12,3 @@
 (defn listeners
   [publisher]
   (proto/listeners publisher))
-

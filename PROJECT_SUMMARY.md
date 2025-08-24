@@ -243,6 +243,7 @@ Create functions with signature `(fn [event bthread->bid])` for:
 - Side effects (database, API calls)
 - UI updates
 - Metrics collection
+- Can return events
 
 ## Future Development (Roadmap)
 

@@ -3,10 +3,14 @@
 
 (defn- -notify!
   [!subscribers event bthread->bid]
-  (doseq [[k subscriber] @!subscribers]
-    (try (subscriber event bthread->bid)
-         (catch #?(:clj Throwable :cljs :default) _
-           (swap! !subscribers dissoc k)))))
+  (mapv (fn [args]
+          (let [k (first args)
+                subscriber (second args)]
+            (try (subscriber event bthread->bid)
+                 (catch #?(:clj Throwable :cljs :default) e
+                   (swap! !subscribers dissoc k)
+                   {:error e}))))
+        @!subscribers))
 
 (defn- -subscribe!
   [!subscribers k f]

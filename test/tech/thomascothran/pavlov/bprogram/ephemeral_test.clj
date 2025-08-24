@@ -190,3 +190,33 @@
     (is (= {:type :c
             :terminal true}
            return-value))))
+
+;; Test that a subscriber can return an `:event` which will be handled by the program
+(deftest test-subscriber-returning-event
+  (let [bthreads
+        {:request-a
+         (b/bids [{:request #{:a}}])
+
+         :request-b
+         (b/bids [{:wait-on #{:a}}
+                  {:request #{:b}}])}
+
+        !a (atom [])
+
+        log-subscriber
+        (fn [event _]
+          (swap! !a conj event))
+
+        event-subscriber
+        (fn [_event _]
+          {:event {:type :c
+                   :terminal true}})
+
+        opts {:subscribers {:a event-subscriber
+                            :log-subscriber
+                            log-subscriber}}
+
+        return-value @(bpe/execute! bthreads opts)]
+    (is (= {:type :c
+            :terminal true}
+           return-value))))

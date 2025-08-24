@@ -43,21 +43,47 @@
 
 (defn- handle-event!
   [bprogram program-opts event]
-  (let [!state (get program-opts :!state)
-        publisher (get program-opts :publisher)
-        state @!state
-        next-state (reset! !state (state/step state event))
-        next-event (get next-state :next-event)
-        terminate? (event/terminal? event)
-        recur? (and next-event (not terminate?))]
+  (loop [event' event
+         subscriber-requested-events' []]
+    (let [!state (get program-opts :!state)
+          publisher (get program-opts :publisher)
+          state @!state
+          next-state (reset! !state (state/step state event'))
+          next-event (get next-state :next-event)
+          terminate? (event/terminal? event')
+          recur? (and next-event (not terminate?))
 
-    (when event
-      (pub/notify! publisher event bprogram))
+          notification-result
+          (pub/notify! publisher event' bprogram)
 
-    (if recur?
-      (recur bprogram program-opts next-event)
-      (when terminate?
-        (set-stopped! program-opts event)))))
+          subscriber-requested-events
+          (when event
+            (into []
+                  (comp (map :event)
+                        (filter identity))
+                  notification-result))]
+
+      (cond recur?
+            (recur next-event (into subscriber-requested-events
+                                    subscriber-requested-events'))
+
+            terminate?
+            (set-stopped! program-opts event')
+
+            :else
+            (doseq [requested-event subscriber-requested-events']
+              (bprogram/submit-event! bprogram requested-event))))))
+
+#?(:clj
+   (defn- submit-event!
+     [_ opts event]
+     (let [in-queue (get opts :in-queue)]
+       (bprogram/conj in-queue event)))
+
+   :cljs
+   (defn- submit-event!
+     [bprogram opts event]
+     (js/setTimeout #(handle-event! bprogram opts event) 0)))
 
 #?(:clj (defn- run-event-loop!
           [bprogram program-opts]
@@ -85,17 +111,6 @@
   [program k subscriber]
   (let [publisher (get program :publisher)]
     (pub/subscribe! publisher k subscriber)))
-
-#?(:clj
-   (defn- submit-event!
-     [_ opts event]
-     (let [in-queue (get opts :in-queue)]
-       (bprogram/conj in-queue event)))
-
-   :cljs
-   (defn- submit-event!
-     [bprogram opts event]
-     (js/setTimeout #(handle-event! bprogram opts event) 0)))
 
 (defn- stop!
   [bprogram program-opts]
@@ -176,7 +191,7 @@
 
   Returns a promise delivered with the value of the
   terminal event."
-  ([bthreads] (execute! nil bthreads))
-  ([opts bthreads]
+  ([bthreads] (execute! bthreads nil))
+  ([bthreads opts]
    (-> (make-program! opts bthreads)
        (bprogram/stopped))))

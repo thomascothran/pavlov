@@ -91,11 +91,12 @@
                               (swap! !a conj x))
 
               result
-              @(bp/execute! {:subscribers
+              @(bp/execute! all-bthreads
+                            {:subscribers
                              (assoc subscribers
                                     :state-tracker
-                                    state-tracker)}
-                            all-bthreads)]
+                                    state-tracker)})]
+
           (if (get result :invariant-violated)
             {:path @!a
              :event (last @!a)}
