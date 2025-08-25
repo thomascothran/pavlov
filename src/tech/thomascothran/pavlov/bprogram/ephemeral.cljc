@@ -212,7 +212,7 @@
   To terminate in case of deadlock, use the option :terminate-on-deadlock."
   ([bthreads] (execute! bthreads nil))
   ([bthreads opts]
-   (let [terminate-on-deadlock (get opts :terminate-on-deadlock true)
+   (let [terminate-on-deadlock (get opts :terminate-on-deadlock)
          bthreads' (if terminate-on-deadlock
                      (-> (into [] bthreads)
                          (conj [::deadlock
