@@ -220,3 +220,8 @@
     (is (= {:type :c
             :terminal true}
            return-value))))
+
+(deftest check-terminate-on-deadlock-works
+  (is (:terminal
+       @(bpe/execute! {:wait-forever (b/bids [{:wait-on #{:godot}}])}
+                      {:terminate-on-deadlock true}))))

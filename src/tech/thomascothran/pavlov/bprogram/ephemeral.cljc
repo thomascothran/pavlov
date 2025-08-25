@@ -216,8 +216,8 @@
          bthreads' (if terminate-on-deadlock
                      (-> (into [] bthreads)
                          (conj [::deadlock
-                                {:type ::deadlock
-                                 :terminal true}]))
+                                {:request #{{:type ::deadlock
+                                             :terminal true}}}]))
                      bthreads)]
      (-> (make-program! bthreads' opts)
          (bprogram/stopped)))))
