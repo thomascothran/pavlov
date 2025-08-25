@@ -127,15 +127,15 @@
   Usage
   ------
   ```clojure
-  (make-program! opts {:bthread1 bthread1
-                       :bthread2 bthread2}...)
+  (make-program! {:bthread1 bthread1
+                  :bthread2 bthread2}...)
   ```
 
   But note that bthread priority is random.
 
   ```clojure
-  (make-program! opts [[:bthread1 bthread1]
-                       [:bthread2 bthread2]...])
+  (make-program! [[:bthread1 bthread1]
+                  [:bthread2 bthread2]...])
   ```
 
 
@@ -147,8 +147,8 @@
   Earlier bthreads have higher priority.
 
   Returns the behavioral program."
-  ([named-bthreads] (make-program! nil named-bthreads))
-  ([opts named-bthreads]
+  ([named-bthreads] (make-program! named-bthreads nil))
+  ([named-bthreads opts]
    (let [initial-state (state/init named-bthreads)
          !state (atom initial-state)
          in-queue (get opts :in-queue #?(:clj (LinkedBlockingQueue.)))
@@ -189,9 +189,35 @@
 (defn execute!
   "Execute a behavioral program.
 
+  Usage
+  ------
+  ```clojure
+  (make-program! {:bthread1 bthread1
+                  :bthread2 bthread2}...)
+  ```
+
+  But note that bthread priority is random when bthreads are defined
+  with a map.
+
+  ```clojure
+  (make-program! [[:bthread1 bthread1]
+                  [:bthread2 bthread2]...])
+  ```
+
   Returns a promise delivered with the value of the
-  terminal event."
+  terminal event.
+
+  Options
+  -------
+  To terminate in case of deadlock, use the option :terminate-on-deadlock."
   ([bthreads] (execute! bthreads nil))
   ([bthreads opts]
-   (-> (make-program! opts bthreads)
-       (bprogram/stopped))))
+   (let [terminate-on-deadlock (get opts :terminate-on-deadlock true)
+         bthreads' (if terminate-on-deadlock
+                     (-> (into [] bthreads)
+                         (conj [::deadlock
+                                {:type ::deadlock
+                                 :terminal true}]))
+                     bthreads)]
+     (-> (make-program! bthreads' opts)
+         (bprogram/stopped)))))

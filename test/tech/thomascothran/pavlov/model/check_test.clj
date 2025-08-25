@@ -9,17 +9,17 @@
           (check/check
            {:bthreads
             {:good-morning
-             #(b/reprise 4 {:request #{:good-morning}})
+             (b/reprise 4 {:request #{:good-morning}})
 
              :good-evening
-             #(b/reprise 4 {:request #{:good-evening}})
+             (b/reprise 4 {:request #{:good-evening}})
 
              :interlace
-             #(b/interlace
-               [{:wait-on #{:good-morning}
-                 :block #{:good-evening}}
-                {:wait-on #{:good-evening}
-                 :block #{:good-morning}}])}})]
+             (b/interlace
+              [{:wait-on #{:good-morning}
+                :block #{:good-evening}}
+               {:wait-on #{:good-evening}
+                :block #{:good-morning}}])}})]
 
       ;; Should find no violations - the bthreads correctly alternate
       (is (nil? result)
@@ -30,13 +30,13 @@
     (let [result
           (check/check
            {:bthreads {:good-morning
-                       #(b/bids [{:request #{:good-morning}}])
+                       (b/bids [{:request #{:good-morning}}])
 
                        :good-evening
-                       #(b/bids [{:request #{:good-evening}}])
+                       (b/bids [{:request #{:good-evening}}])
 
                        :block-all
-                       #(b/bids [{:block #{:good-morning :good-evening}}])}
+                       (b/bids [{:block #{:good-morning :good-evening}}])}
             :check-deadlock? true})]
 
       ;; Should find a deadlock
@@ -52,15 +52,15 @@
     (let [result
           (check/check
            {:bthreads {:requester
-                       #(b/bids [{:request #{:first-event}}])
+                       (b/bids [{:request #{:first-event}}])
 
                        :blocker
-                       #(b/bids [{:wait-on #{:first-event}}
-                                 {:block #{:second-event}}])
+                       (b/bids [{:wait-on #{:first-event}}
+                                {:block #{:second-event}}])
 
                        :second-requester
-                       #(b/bids [{:wait-on #{:first-event}}
-                                 {:request #{:second-event}}])}
+                       (b/bids [{:wait-on #{:first-event}}
+                                {:request #{:second-event}}])}
             :check-deadlock? true})]
 
       ;; Should find a deadlock after :first-event
@@ -79,8 +79,8 @@
     (let [result (check/check
                   {:bthreads
                    {:violator
-                    #(b/bids [{:request #{{:type :violation
-                                           :invariant-violated true}}}])}})]
+                    (b/bids [{:request #{{:type :violation
+                                          :invariant-violated true}}}])}})]
 
       ;; Should find the violation immediately
       (is (some? result)
@@ -100,17 +100,17 @@
           result
           (check/check
            {:bthreads {:racer-a
-                       #(b/bids [{:request #{:event-b :event-a}}])
+                       (b/bids [{:request #{:event-b :event-a}}])
 
                        ;; This bthread creates different outcomes based on order
                        :conditional-violator
-                       #(b/bids [{:wait-on #{:event-a}}
-                                 ;; If event-a happens first, request a violation
-                                 {:request #{{:type :violation
-                                              :invariant-violated true}}}])}
+                       (b/bids [{:wait-on #{:event-a}}
+                                ;; If event-a happens first, request a violation
+                                {:request #{{:type :violation
+                                             :invariant-violated true}}}])}
             :check-deadlock? false})]
 
-      (is (some? result)
+      (is result
           "Should find a violation (but only because it takes the :event-a path)")
 
       (when result
@@ -126,45 +126,45 @@
           _result
           (check/check
            {:bthreads {:top-level-events
-                       #(b/bids [{:request #{:event-b :event-a}}])
+                       (b/bids [{:request #{:event-b :event-a}}])
 
                        :a-mid-level-events
-                       #(b/bids [{:wait-on #{:event-a}}
-                                 {:request #{:event-a1}}])
+                       (b/bids [{:wait-on #{:event-a}}
+                                {:request #{:event-a1}}])
 
                        :b-mid-level-events
-                       #(b/bids [{:wait-on #{:event-b}}
-                                 {:request #{:event-b1}}])
+                       (b/bids [{:wait-on #{:event-b}}
+                                {:request #{:event-b1}}])
 
                        :a-terminate
-                       #(b/bids [{:wait-on #{:event-a1}}
-                                 {:request #{{:type :a-is-done
-                                              :terminal true}}}])
+                       (b/bids [{:wait-on #{:event-a1}}
+                                {:request #{{:type :a-is-done
+                                             :terminal true}}}])
 
                        :b1-low-level-events
-                       #(b/bids [{:wait-on #{:event-b1}}
-                                 {:request #{:event-b1i :event-b1ii
-                                             :event-b1iii}}])
+                       (b/bids [{:wait-on #{:event-b1}}
+                                {:request #{:event-b1i :event-b1ii
+                                            :event-b1iii}}])
 
                        :b1i-terminal-event
-                       #(b/bids [{:wait-on #{:event-b1i}}
-                                 {:request #{{:type :bi1-is-done
-                                              :terminal true}}}])
+                       (b/bids [{:wait-on #{:event-b1i}}
+                                {:request #{{:type :bi1-is-done
+                                             :terminal true}}}])
                        :b1ii-low-level-events
-                       #(b/bids [{:wait-on #{:event-b1ii}}
-                                 {:request #{:event-b1iiA}}])
+                       (b/bids [{:wait-on #{:event-b1ii}}
+                                {:request #{:event-b1iiA}}])
 
                        :b1iii-low-level-events
-                       #(b/bids [{:wait-on #{:event-b1iii}}
-                                 {:request #{:event-b1iiiA :event-b1iiiB}}])
+                       (b/bids [{:wait-on #{:event-b1iii}}
+                                {:request #{:event-b1iiiA :event-b1iiiB}}])
 
                        :watcher-bthread
-                       #(b/step (fn [_prev-state event]
-                                  (swap! !events conj event)
-                                  [nil {:wait-on #{:event-a :event-a1
-                                                   :event-b :event-b1 :event-b1i
-                                                   :event-b1ii :event-b1iiA
-                                                   :event-b1iii :event-b1iiiA :event-b1iiiB}}]))}
+                       (b/step (fn [_prev-state event]
+                                 (swap! !events conj event)
+                                 [nil {:wait-on #{:event-a :event-a1
+                                                  :event-b :event-b1 :event-b1i
+                                                  :event-b1ii :event-b1iiA
+                                                  :event-b1iii :event-b1iiiA :event-b1iiiB}}]))}
 
             :check-deadlock? false})]
       (is (= #{nil :event-a :event-b :event-a1 :event-b1 :event-b1i

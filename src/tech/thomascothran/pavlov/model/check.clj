@@ -26,16 +26,9 @@
   "Assembles all bthreads with proper priority ordering."
   [config]
   (let [;; Create bthreads from each category
-        safety-bthreads (mapv (fn [[name constructor]]
-                                [name (constructor)])
-                              (:safety-bthreads config))
-        main-bthreads (mapv (fn [[name constructor]]
-                              [name (constructor)])
-                            (:bthreads config))
-        env-bthreads (mapv (fn [[name constructor]]
-                             [name (constructor)])
-                           (:environment-bthreads config))
-        ;; Add deadlock bthread if checking for deadlocks
+        safety-bthreads (get config :safety-bthreads)
+        main-bthreads (get config :bthreads)
+        env-bthreads (get config :environment-threads)
         deadlock-bthreads (when (:check-deadlock? config)
                             [[::deadlock-bthread (make-deadlock-bthread)]])]
     ;; Order matters: safety -> main -> env -> deadlock

@@ -14,8 +14,8 @@
                    (swap! !stack conj [:bthread event])
                    [nil {:wait-on #{:test-event}}]))
         subscriber (fn [x _] (swap! !stack conj [:subscriber x]))
-        program (bpe/make-program! {:subscribers {:test subscriber}}
-                                   {:test-bthread bthread})
+        program (bpe/make-program! {:test-bthread bthread}
+                                   {:subscribers {:test subscriber}})
         _ (bp/submit-event! program :test-event)
         _ @(bp/stop! program)]
     (is (= [[:bthread nil]
@@ -42,8 +42,8 @@
         !a (atom [])
         subscriber (fn [x _] (swap! !a conj x))
         program
-        (bpe/make-program! {:subscribers {:test subscriber}}
-                           bthreads)
+        (bpe/make-program! bthreads
+                           {:subscribers {:test subscriber}})
         return @(bp/stop! program)]
 
     (is (= (interleave (repeat 4 :good-morning)
@@ -60,7 +60,7 @@
 
         !a (atom [])
         subscriber (fn [x _] (swap! !a conj x))
-        program (bpe/make-program! {} bthreads)
+        program (bpe/make-program! bthreads)
         _ (bp/subscribe! program :test subscriber)
         _ (bp/submit-event! program :go)
         _ @(bp/stop! program)]
@@ -104,8 +104,8 @@
         !a (atom [])
         subscriber (fn [x _] (swap! !a conj x))
         program
-        (bpe/make-program! {:subscribers {:test subscriber}}
-                           bthreads)
+        (bpe/make-program! bthreads
+                           {:subscribers {:test subscriber}})
 
         _ (doseq [event events]
             (bp/submit-event! program event))
@@ -134,8 +134,8 @@
         !a (atom [])
         subscriber (fn [x _] (swap! !a conj x))
         program
-        (bpe/make-program! {:subscribers {:test subscriber}}
-                           bthreads)
+        (bpe/make-program! bthreads
+                           {:subscribers {:test subscriber}})
 
         _ @(bp/stop! program)
         out-events @!a]
@@ -165,8 +165,8 @@
 
         !a (atom [])
         subscriber (fn [x _] (swap! !a conj x))
-        program (bpe/make-program! {:subscribers {:test subscriber}}
-                                   bthreads)
+        program (bpe/make-program! bthreads
+                                   {:subscribers {:test subscriber}})
         _ (bp/submit-event! program {:type [1 1 :x]})
         _ @(bp/stop! program)]
 
