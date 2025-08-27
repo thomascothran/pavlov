@@ -8,8 +8,6 @@ Pavlov is an opinionated behavioral programming library for Clojure(Script).
 
 Behavioral programming (BP) is an event-driven programming paradigm that strongly decomplects application behaviors.
 
-**Note: Recent API changes (January 2025)** - The BThread API has been simplified. Functions like `step`, `bids`, `reprise`, and `interlace` no longer require name parameters.
-
 Pavlov can be used for strongly Pavlov also supports using a behavioral program as a synchronous function call.
 
 ![bprogram diagram](./doc/assets/bprogram.png)
@@ -18,7 +16,7 @@ Pavlov can be used for strongly Pavlov also supports using a behavioral program 
 
 In BP, a unit of application behavior is a bthread. Bthreads can be run in parallel. Bthreads park until an event they are interested in occurs.
 
-Bthreads work by producing bids in a certain kind of pub-sub system -- a bprogram. A bid can:
+Are assembled in pub-sub system -- a bprogram. A bid can:
 
 1. Request events
 2. Wait on events
@@ -27,8 +25,6 @@ Bthreads work by producing bids in a certain kind of pub-sub system -- a bprogra
 Events may come from an external process. This can be anything: not only a bid from a bthread, but a user action in a UI, an event from a Kafka queue, an HTTP request, etc.
 
 When an event occurs, all bthreads that have either requested that event or are waiting on that event submit their next bid.
-
-Bthreads should be pure functions. Use subscribers for side effects.
 
 ## Bprograms
 
@@ -73,6 +69,34 @@ Let's suppose we have an industrial process which should have the following beha
 Bthreads are sequential and stateful. They can run in parallel and be parked when they are waiting on events.
 
 The bid a bthread produces can request events, wait on events, or block events in other bthreads. Bthreads do not directly know about each other.
+
+### `on-every`
+
+`on-every` takes a set of event names and a function of an event to a bid.
+
+For example:
+
+```clojure
+(require '[next.jdbc.sql :as sql])
+(require '[tech.thomascothran.pavlov.bthread :as b])
+
+(defn create-account!
+  [db-conn {:keys [account]}]
+  (sql/insert! db-conn :account account)
+  {:request #{{:event-type :account-created}}})
+
+(def make-create-account-bthread
+  [db-conn]
+  (b/on-every #{:create-account} create-account!))
+```
+
+When the `:create-account` event is selected, the create account bthread is notified, record is inserted, and the `:account-created` event is requested.
+
+The function passed to `on-every` should not throw an error. If an error is thrown:
+
+- it will be caught,
+- an event of type `:tech.thomascothran.pavlov.bthread/unhandled-step-fn-error` will be requsted
+- unless that event is blocked, it will terminate the program
 
 ### Sequence Bthreads
 
@@ -138,21 +162,6 @@ However, with interlace:
 
 Interlace will return *three* bids, for events `:a`, `1`, and `:b`.
 
-### `on-every`
-
-`on-every` takes a set of event names and a function of an event to a bid.
-
-For example:
-
-```clojure
-(def stop-on-red-bthread
-  (b/on-every #{:red} (fn [_event] {:request #{{:event-type :stop!
-                                                :terminal true}}})))
-```
-
-When an event with the type `:red` occurs, this bthread will request a `:stop!` event. Because the event has the `:terminal` property, the bprogram will stop (unless another bthread blocks `:stop!`)
-
-
 ### Step Functions
 
 The general purpose way to create a bthread is to use a step function.
@@ -164,7 +173,6 @@ As an example:
 ```clojure
 (require '[tech.thomascothran.pavlov.bthread :as b])
 
-;; Pure function
 (defn only-thrice
   [prev-state event]
   (cond (not event) ;; initialization
@@ -180,6 +188,10 @@ As an example:
 The bthread will keep track of the state, and the behavioral program keeps track of this (and all other) bthread bids.
 
 The step function is called once on initialization with a `nil` event. Thereafter, it parks until the `:test` event is emitted. On the third time, the bthread returns nil, at which point it will not be called anymore.
+
+#### Errors in Step Functions
+
+Step functions should not throw errors. If an error occurs, it will be caught, and a `:tech.thomascothran.pavlov.bthread/unhandled-step-fn-error` event will be emitted, terminating the program.
 
 ### Extensibility
 
@@ -285,18 +297,25 @@ The most common items in the options map will be `:subscribers`. `:subscribers` 
 
 ## Subscribers
 
-`pavlov` allows you to strictl separates side effects (using subscribers) from pure computation (using `bthreads`).
+Subscribers are functions that are called on every event. They are useful for logging and development tools.
 
 Subscribers may be passed in when the bprogram is created:
 
 ```clojure
-(require '[tech.thomascothran.pavlov.bprogram.ephemeral :as bp])
-(require '[clojure.pprint :refer [pretty-print]])
-(bp/execute! [bthread-1 bthread-2]
-             {:subscribers {:logger (fn [event bthread->bid]
-                                      (pretty-print {:event event
-                                                     :bthread->bid bthread->bid}))}})
+(require '[tech.thomascothran.pavlov.bprogram.ephemeral :as bpe])
+(require '[clojure.pprint :refer [pprint]])
+
+(def subscribers
+  {:logger (fn [event bthread->bid]
+              (pprint {:event event
+                       :bthread->bid bthread->bid}))})
+
+@(bpe/execute! {:bthread-1 {:request #{:event-a}}
+                :bthread-2 {:request #{:event-b}}]
+               {:subscribers subscribers})
 ```
+
+See the namespace `tech.thomascothran.pavlov.subscribers.tap` for an implementation of a subscriber.
 
 ## Understanding Program Execution
 
@@ -319,6 +338,24 @@ A `tap` subscriber is implemented in `tech.thomascothran.pavlov.subscribers.tap`
 - A map of bthreads to bids
 - A map of events to bthreads
 
+
+Here is an example of how the tap publisher can be used with [portal](https://github.com/djblue/portal).
+
+```clojure
+(require '[portal.api :as portal])
+(require '[tech.thomascothran.pavlov.subscribers.tap :as taps])
+(require '[tech.thomascothran.pavlov.bprogram.ephemeral :as bpe])
+
+;; Set up portal
+(def p (portal/open))
+(add-tap #'portal/submit)))
+
+;; Run the program
+@(bpe/execute {:bthread-1 {:request #{:event-a}}
+               :bthread-2 {:request #{:event-b}}
+              {:subscribers {:tap taps/subscriber}}) ;; <- add the tap
+```
+
 ### Reasoning about bprograms
 
 `pavlov` is intrinsically easier to reason about than a typical program for a few reasons:
@@ -334,20 +371,6 @@ A `tap` subscriber is implemented in `tech.thomascothran.pavlov.subscribers.tap`
 2. *Swappable implementations*. Bthreads and bprograms are open for extension and modification.
 3. *BYO parallelization*. Bthreads can run in parallel and you should choose how. Bring your own thread pool, or use core.async.
 
-## Roadmap
-
-| Description                        | Started            | Complete           |
-|------------------------------------|--------------------|--------------------|
-| Test canonical tic tac toe example | :heavy_check_mark: | :heavy_check_mark: |
-| Document common idiom s            | :heavy_check_mark: | :heavy_check_mark: |
-| Clojure(Script) support            | :heavy_check_mark: | :heavy_check_mark: |
-| Bring your own parallelization     |                    |                    |
-| Squint support                     | :heavy_check_mark: |                    |
-| Example web app                    |                    |                    |
-| Generate Live Sequence Charts      |                    |                    |
-| Automated model checking           |                    |                    |
-| Durable Execution                  | :heavy_check_mark: |                    |
-
 ## Further Reading
 
 - [Behavioral Programming](https://cacm.acm.org/research/behavioral-programming/#R26), by David Harel, Assaf Marron, and Gera Weiss (2012)
@@ -357,6 +380,6 @@ A `tap` subscriber is implemented in `tech.thomascothran.pavlov.subscribers.tap`
 
 ## License
 
-Copyright © 2024 Thomas Cothran
+Copyright © 2025 Thomas Cothran
 
 Distributed under the Eclipse Public License version 1.0.

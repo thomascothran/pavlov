@@ -110,7 +110,7 @@
   ```
   (interpolate [(b/seq [{:request #{:a :b}}
                         {:request #{1}]))
-  ;; interplate will return *three* bids, for
+  ;; interpolate will return *three* bids, for
   ;; events `:a`, `:b`, and `1`
   ```
   "
