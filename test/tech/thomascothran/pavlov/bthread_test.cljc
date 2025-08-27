@@ -118,3 +118,12 @@
       (is (= 1 (count requests)))
       (is (get error-event :terminal))
       (is (get error-event :error)))))
+
+(deftest test-on-every
+  (let [bthread
+        (bthread/on-every #{:test-event}
+                          (constantly {:request #{:test-event-received}}))
+        bid (bthread/bid bthread {:type :test-event})]
+    (is (= {:wait-on #{:test-event}
+            :request #{:test-event-received}}
+           bid))))

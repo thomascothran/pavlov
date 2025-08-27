@@ -74,35 +74,7 @@ Bthreads are sequential and stateful. They can run in parallel and be parked whe
 
 The bid a bthread produces can request events, wait on events, or block events in other bthreads. Bthreads do not directly know about each other.
 
-### Step Functions
-
-The default way to create a bthread is to use a step function.
-
-A step function takes its previous state and an event, and returns its next state and a bid.
-
-As an example:
-
-```clojure
-(require '[tech.thomascothran.pavlov.bthread :as b])
-
-;; Pure function
-(defn only-thrice
-  [prev-state event]
-  (cond (not event) ;; initialization
-        [0 {:wait-on #{:test}}]
-
-        (< prev-state 3)
-        [(inc prev-state) {:wait-on #{:test}}]))
-
-(def count-down-bthread
-  (b/step only-thrice))
-```
-
-The bthread will keep track of the state, and the behavioral program keeps track of this (and all other) bthread bids.
-
-The step function is called once on initialization with a `nil` event. Thereafter, it parks until the `:test` event is emitted. On the third time, the bthread returns nil, at which point it will not be called anymore.
-
-### Sequence Functions
+### Sequence Bthreads
 
 `b/bids` can create a bthread out of a sequence of bids. It is only for finite, relatively short sequences.
 
@@ -166,15 +138,67 @@ However, with interlace:
 
 Interlace will return *three* bids, for events `:a`, `1`, and `:b`.
 
+### `on-every`
+
+`on-every` takes a set of event names and a function of an event to a bid.
+
+For example:
+
+```clojure
+(def stop-on-red-bthread
+  (b/on-every #{:red} (fn [_event] {:request #{{:event-type :stop!
+                                                :terminal true}}})))
+```
+
+When an event with the type `:red` occurs, this bthread will request a `:stop!` event. Because the event has the `:terminal` property, the bprogram will stop (unless another bthread blocks `:stop!`)
+
+
+### Step Functions
+
+The general purpose way to create a bthread is to use a step function.
+
+A step function takes its previous state and an event, and returns its next state and a bid.
+
+As an example:
+
+```clojure
+(require '[tech.thomascothran.pavlov.bthread :as b])
+
+;; Pure function
+(defn only-thrice
+  [prev-state event]
+  (cond (not event) ;; initialization
+        [0 {:wait-on #{:test}}]
+
+        (< prev-state 3)
+        [(inc prev-state) {:wait-on #{:test}}]))
+
+(def count-down-bthread
+  (b/step only-thrice))
+```
+
+The bthread will keep track of the state, and the behavioral program keeps track of this (and all other) bthread bids.
+
+The step function is called once on initialization with a `nil` event. Thereafter, it parks until the `:test` event is emitted. On the third time, the bthread returns nil, at which point it will not be called anymore.
+
 ### Extensibility
 
-Bthreads are protocols. You can extend the protocol as needed.
+Bthreads, bids, and behavioral programs are all protocols, allowing you to extend each as needed.
 
 ## Recipes
 
 ### Request a simple event
 
 The simplest way to specify an event to request the name of the event:
+
+```clojure
+{:request #{:a}}
+```
+
+The bid protocol is extended to clojure maps. This results in a bthread that will always request `:a`.
+
+Perhaps you just want to request `:a` once.
+
 
 ```clojure
 (b/bids [{:request #{:a}}]) ;; => the event is the same as {:type :a}
@@ -242,7 +266,7 @@ When `:c` occurs, close the program.
 
 ```clojure
 (b/bids [{:wait-on #{:c}}
-         {:terminate true
+         {:terminate true ;; <- causes the program to stop.
           :type :finis}])
 ```
 
@@ -261,7 +285,7 @@ The most common items in the options map will be `:subscribers`. `:subscribers` 
 
 ## Subscribers
 
-`pavlov` strictly separates side effects from pure computation. `bthreads` should be pure functions.
+`pavlov` allows you to strictl separates side effects (using subscribers) from pure computation (using `bthreads`).
 
 Subscribers may be passed in when the bprogram is created:
 

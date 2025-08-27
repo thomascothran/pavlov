@@ -77,6 +77,19 @@
                [(inc invocations') x])))]
      (step step-fn))))
 
+(defn on-every
+  "Always run `f` when the specified events occurs.
+
+  `event-names` is a set of event names
+
+  `f` is a function of an event to a bid."
+  [event-names f]
+  (step (fn [_prev-state event]
+          (let [bid (f event)
+                wait-on (->> (get event :wait-on #{})
+                             (into event-names))]
+            [nil (assoc bid :wait-on wait-on)]))))
+
 (defn interlace
   "Ask bthreads for bids in round-robin fashion
   in order, until one bthread returns a bid of `nil`.
