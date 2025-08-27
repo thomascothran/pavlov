@@ -120,10 +120,17 @@
       (is (get error-event :error)))))
 
 (deftest test-on-every
-  (let [bthread
+  (let [!events (atom [])
+        bthread
         (bthread/on-every #{:test-event}
-                          (constantly {:request #{:test-event-received}}))
+                          (fn [event]
+                            (swap! !events conj event)
+                            {:request #{:test-event-received}}))
+        _ (bthread/bid bthread nil) ;; initialize
         bid (bthread/bid bthread {:type :test-event})]
+
+    (is (= [{:type :test-event}] @!events))
+
     (is (= {:wait-on #{:test-event}
             :request #{:test-event-received}}
            bid))))

@@ -85,10 +85,12 @@
   `f` is a function of an event to a bid."
   [event-names f]
   (step (fn [_prev-state event]
-          (let [bid (f event)
-                wait-on (->> (get event :wait-on #{})
-                             (into event-names))]
-            [nil (assoc bid :wait-on wait-on)]))))
+          (if-not event
+            {:wait-on event-names} ;; initialize
+            (let [bid (f event)
+                  wait-on (->> (get event :wait-on #{})
+                               (into event-names))]
+              [nil (assoc bid :wait-on wait-on)])))))
 
 (defn interlace
   "Ask bthreads for bids in round-robin fashion
