@@ -49,16 +49,20 @@
   ([f] (step f nil))
   ([f _opts]
    (let [state (volatile! nil)]
-
      (reify proto/BThread
        (state [_] @state)
        (set-state [_ serialized] (vreset! state serialized))
        (bid [_ event]
-         (let [result (f @state event)
-               next-state (first result)
-               bid (second result)]
-           (vreset! state next-state)
-           bid))))))
+         (try (let [result (f @state event)
+                    next-state (first result)
+                    bid (second result)]
+                (vreset! state next-state)
+                bid)
+              (catch #?(:clj Throwable :cljs) e
+                {:request #{{:type ::unhandled-step-fn-error
+                             :event event
+                             :error e
+                             :terminal true}}})))))))
 
 (defn reprise
   ([x] (reprise :forever x))

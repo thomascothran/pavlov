@@ -101,3 +101,20 @@
           "Should return the correct bid after initialization")
       (is (= 2 (bthread/state bthread))
           "Should decrement state"))))
+
+(deftest test-step-function-error
+  (testing "When a bthread step function throws an error
+    Should emit a terminal event with an error
+    And that event should be terminal"
+    (let [divide-by-0-step-fn (fn [& _] (/ 1 0))
+
+          event {:type :some-event}
+
+          bid (bthread/bid (bthread/step divide-by-0-step-fn)
+                           event)
+
+          requests (get bid :request)
+          error-event (first requests)]
+      (is (= 1 (count requests)))
+      (is (get error-event :terminal))
+      (is (get error-event :error)))))
