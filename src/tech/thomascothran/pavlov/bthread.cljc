@@ -86,7 +86,7 @@
   [event-names f]
   (step (fn [_prev-state event]
           (if-not event
-            {:wait-on event-names} ;; initialize
+            [nil {:wait-on event-names}] ;; initialize
             (let [bid (f event)
                   wait-on (->> (get event :wait-on #{})
                                (into event-names))]

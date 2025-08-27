@@ -126,9 +126,10 @@
                           (fn [event]
                             (swap! !events conj event)
                             {:request #{:test-event-received}}))
-        _ (bthread/bid bthread nil) ;; initialize
+        init-bid (bthread/bid bthread nil) ;; initialize
         bid (bthread/bid bthread {:type :test-event})]
 
+    (is (= {:wait-on #{:test-event}} init-bid))
     (is (= [{:type :test-event}] @!events))
 
     (is (= {:wait-on #{:test-event}
