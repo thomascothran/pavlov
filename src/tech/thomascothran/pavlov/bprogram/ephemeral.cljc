@@ -6,7 +6,8 @@
             [tech.thomascothran.pavlov.event.publisher.proto :as pub]
             [tech.thomascothran.pavlov.bprogram.state
              :as state])
-  #?(:clj (:import [java.util.concurrent LinkedBlockingQueue])))
+  #?(:clj (:import (java.util.concurrent LinkedBlockingQueue)
+                   (java.util.concurrent Executors TimeUnit))))
 
 ;; move this elsewhere
 #?(:clj (extend-protocol bprogram/BProgramQueue
@@ -213,11 +214,19 @@
   ([bthreads] (execute! bthreads nil))
   ([bthreads opts]
    (let [terminate-on-deadlock (get opts :terminate-on-deadlock)
+         kill-after (get opts :kill-after)
          bthreads' (if terminate-on-deadlock
                      (-> (into [] bthreads)
                          (conj [::deadlock
                                 {:request #{{:type ::deadlock
                                              :terminal true}}}]))
-                     bthreads)]
-     (-> (make-program! bthreads' opts)
-         (bprogram/stopped)))))
+                     bthreads)
+         bprogram (make-program! bthreads' opts)]
+     (when kill-after
+       (let [killfn (fn [] (bprogram/kill! bprogram))]
+         #?(:clj (-> (Executors/newSingleThreadScheduledExecutor)
+                     (.schedule ^Runnable killfn
+                                kill-after
+                                TimeUnit/MILLISECONDS))
+            :cljs (js/setTimeout killfn kill-after))))
+     (bprogram/stopped bprogram))))

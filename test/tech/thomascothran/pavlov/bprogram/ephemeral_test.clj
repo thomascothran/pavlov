@@ -225,3 +225,8 @@
   (is (:terminal
        @(bpe/execute! {:wait-forever (b/bids [{:wait-on #{:godot}}])}
                       {:terminate-on-deadlock true}))))
+
+(deftest check-kill-after-works
+  (is true
+      @(bpe/execute! {:wait-forever (b/bids [{:wait-on #{:godot}}])}
+                     {:kill-after 50})))
