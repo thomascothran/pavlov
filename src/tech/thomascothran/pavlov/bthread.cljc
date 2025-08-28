@@ -1,6 +1,8 @@
 (ns tech.thomascothran.pavlov.bthread
   (:refer-clojure :exclude [seq reduce])
-  (:require [tech.thomascothran.pavlov.bthread.proto :as proto]))
+  (:require [tech.thomascothran.pavlov.bthread.proto :as proto]
+            [tech.thomascothran.pavlov.event.proto :as event-proto]
+            [tech.thomascothran.pavlov.defaults]))
 
 (defn bid
   ([bthread event]
@@ -78,14 +80,18 @@
      (step step-fn))))
 
 (defn on-every
-  "Always run `f` when the specified events occurs.
+  "Run `f` always and only when the specified events occurs.
 
   `event-names` is a set of event names
 
-  `f` is a function of an event to a bid."
+  `f` is a function of an event to a bid.
+
+  `f` is only invoked on an event in `event-names` - even if
+  it returns a bid that requests or waits on other events."
   [event-names f]
   (step (fn [_prev-state event]
-          (if-not event
+          (if-not (and event
+                       (get event-names (event-proto/type event)))
             [nil {:wait-on event-names}] ;; initialize
             (let [bid (f event)
                   wait-on (->> (get event :wait-on #{})

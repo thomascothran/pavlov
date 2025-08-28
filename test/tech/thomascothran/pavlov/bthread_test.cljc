@@ -127,7 +127,11 @@
                             (swap! !events conj event)
                             {:request #{:test-event-received}}))
         init-bid (bthread/bid bthread nil) ;; initialize
-        bid (bthread/bid bthread {:type :test-event})]
+        bid (bthread/bid bthread {:type :test-event})
+        ;; because :test-event-received was requested, the
+        ;; bthread will be notified. However, `f` should not
+        ;; be invoked - unless you want an endless loop
+        _ (bthread/bid bthread {:type :test-event-received})]
 
     (is (= {:wait-on #{:test-event}} init-bid))
     (is (= [{:type :test-event}] @!events))
