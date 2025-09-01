@@ -148,6 +148,55 @@
 
 #?(:clj
    (defmacro thread
+     "Create a bthread.
+
+     When the bthread is notified with an event you specified,
+     the corresponding form will be evaludated.
+
+     Each form most return a tuple of `next-state`, `bid`.
+
+     You must first handle initialization with `:pavlov/init`.
+
+     Simple example
+     --------------
+     ```clojure
+     (b/thread [prev-state event]
+       ;; First, you *must* handle the initialization of the bthread
+       :pavlov/init
+       [{:event-a-count 0}       ;; tuple of next state
+        {:wait-on #{:event-a}}]  ;; and bid
+
+       ;; bthread will park until it is notified of `:event-a`
+       :event-a  ;; when notified of `:event-a`, return the next
+       [(update prev-state :event-a-count inc)
+        {:request #{{:type :event-a-handled}}}])
+     ```
+
+
+     You may also pass a next-state, bid tuple in the last position.
+     Analogous with `case`, this will be the default when the bthread
+     is notified of an event and that event is not explicitly handled.
+
+
+     Example with defaults
+     --------
+     ```clojure
+     (b/thread [prev-state event]
+       :pavlov/init         ;; <- always required in this position to initialize bthread
+       [{:initialized true} ;; <- initialized bthread state
+       {:wait-on #{:fire-missiles}}] ;; <- bid, wait until someone
+                                     ;; wants to fire missiles
+
+       :fire-missiles ;; when this event in this set occurs, execute form
+       (let [result (missiles-api/fire!)] ;; do something
+         [prev-state                      ;; return previous state and bid
+         {:request #{{:type :missiles-fired
+                       :result result}}}])
+
+       ;; if bthread notified of any other event, then return the previous
+       ;; state and this bid.
+       [prev-state {:wait-on #{:fire-missiles}}])
+     ```"
      {:clj-kondo/lint-as 'clojure.core/defn}
      [& forms]
      (thread* forms)))
