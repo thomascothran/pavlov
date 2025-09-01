@@ -140,10 +140,49 @@ You can also create a bthread that notifies bthreads in round-robin fashion.
    :block #{:good-morning}}])
 ```
 
+### General Purpose Bthreads with `b/thread`
+
+`b/thread` is a macro that can bus used like this:
+
+```clojure
+(require '[tech.thomascothran.pavlov.bthread :as b])
+
+(b/thread [prev-state event]
+  :pavlov/init         ;; <- always required in the first position to initialize bthread
+  [{:initialized true} ;; <- initialized bthread state
+   {:wait-on #{:fire-missiles}}] ;; <- bid, wait until someone
+                                 ;; wants to fire missiles
+
+  :fire-missiles ;; when an event in this set occurs, execute form
+  (let [result (missiles-api/fire!)] ;; do something
+    [prev-state                      ;; return previous state and bid
+     {:request #{{:type :missiles-fired
+                  :result result}}}])
+
+  ;; if bthread notified of any other event, then return the previous
+  ;; state and this bid.
+  [prev-state {:wait-on #{:fire-missiles}}])
+```
+
+You will notice that the structure of `b/thread` is similar to using `defn` with `case`. The `[prev-state event]` form binds `prev-state` to the bthreads previous state. `event` is bound to the event about which the bthread is notified.
+
+The rest of the body of `b/thread` is similar to a `case` statement, switching on the type of an event (`:fire-missiles` in the example above).
+
+As with `case`, a final form may be provided, which is a default if none of the events match. If no default value is provided, the bthread's state will not change, but it will not subscribe to any events -- meaning it is permanently parked.
+
+Each form must return a tuple of the next state and a bid.
+
+`b/thread` helps avoid some beginner traps with behavioral programming. For examples, see the [decision record on the b/thread macro](./doc/design/003_bthread-macro.md).
+
+If you prefer not to use a macro, use the step functions.
+
+#### Errors in `b/thread` execution
+
+You should not throw an error inside of `b/thread`. If an error occurs, it will be caught, and a `:tech.thomascothran.pavlov.bthread/unhandled-step-fn-error` event will be emitted, terminating the program.
 
 ### Step Functions
 
-The general purpose way to create a bthread is to use a step function.
+The low-level, general purpose way to create a bthread is to use a step function.
 
 A step function takes its previous state and an event, and returns its next state and a bid.
 

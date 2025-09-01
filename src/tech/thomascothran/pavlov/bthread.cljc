@@ -119,3 +119,49 @@
                       :bid-states (mapv proto/state bthreads)} ;; helps w/lasso detection
                      current-bid]))]
     (step step-fn)))
+
+(defn- thread*
+  [forms]
+  (let [binding-vector (first forms)
+        _ (assert (= 2 (count binding-vector))
+                  "Only two arguments, for previous state and the event")
+        event (second binding-vector)
+        init-key (second forms)
+        init-case (nth forms 2)
+        _ (assert (= init-key :pavlov/init)
+                  "Must provide :pavlov/init case")
+        cases (->> (rest forms)
+                   (drop 2)
+                   (partition 2)
+                   (mapcat (fn [[fst snd]]
+                             [(into '() (if (keyword? fst)
+                                          [fst] fst))
+                              snd])))
+        default-case (when (odd? (count (rest forms)))
+                       (last (rest forms)))]
+    `(step (fn ~binding-vector
+             (let [event-type# (get ~event :type)]
+               (case event-type#
+                 nil ~init-case
+                 ~@cases
+                 ~default-case))))))
+
+(defmacro thread
+  {:clj-kondo/lint-as 'clojure.core/defn}
+  [& forms]
+  (thread* forms))
+
+(comment
+  (macroexpand-1
+   '(thread [prev-state event]
+
+            :pavlov/init
+            [{:initialized true}
+             {:wait-on #{:fire-missiles}}]
+
+            #{:fire-missiles}
+            (let [result (missiles-api/fire!)]
+              [prev-state {:request #{{:type :missiles-fired
+                                       :result result}}}])
+
+            [prev-state {:wait-on #{:fire-missiles}}])))
