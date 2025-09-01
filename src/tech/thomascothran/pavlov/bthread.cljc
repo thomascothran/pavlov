@@ -146,10 +146,11 @@
                  ~@cases
                  ~default-case))))))
 
-(defmacro thread
-  {:clj-kondo/lint-as 'clojure.core/defn}
-  [& forms]
-  (thread* forms))
+#?(:clj
+   (defmacro thread
+     {:clj-kondo/lint-as 'clojure.core/defn}
+     [& forms]
+     (thread* forms)))
 
 (comment
   (macroexpand-1
