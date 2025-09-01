@@ -60,7 +60,7 @@ What is needed is a macro that expresses more clearly what the bthread is doing,
 
 We want something that will be easy to lint using clj-kondo and other tools.
 
-## Solutions
+## Options
 
 ### Option A: Mimic Case
 
@@ -81,4 +81,29 @@ We could do something similar to `case`:
     ;; optional default, if not provided returns {} - no requests,
     ;; waits or blocks
     [prev-state {:wait-on #{:fire-missiles}}]))
+```
+
+One advantage of this is that we can lint `b/thread` as `defn`. In the future if we wanted to add metadata to it (e.g. for a label), we could.
+
+### Option B: Mimic Defrecord
+
+Or we could do something like:
+
+```clojure
+(def my-bthread
+  (b/thread [prev-state event]
+    (init []) ;; required!
+      [{:initialized true}
+       {:wait-on #{:fire-missiles}}]
+
+    (on [:fire-missiles] ;; set of all events to trigger body
+      (let [result (missiles-api/fire!)]
+        [prev-state {:request #{{:type :missiles-fired
+                                 :result result}}}])
+
+    ;; optional default, if not provided returns {} - no requests,
+    ;; waits or blocks
+    (default [])
+      [prev-state {:wait-on #{:fire-missiles}}]))
+
 ```
