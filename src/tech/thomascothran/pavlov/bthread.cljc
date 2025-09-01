@@ -30,11 +30,16 @@
     (reify proto/BThread
       (state [_] @xs')
       (set-state [_ serialized] (vreset! xs' serialized))
+      (label [_] @xs')
       (bid [_ event]
         (when-let [x (first @xs')]
           (let [bid' (bid x event)]
             (vreset! xs' (rest @xs'))
             bid'))))))
+
+(defn- default-label
+  [bthread]
+  (proto/state bthread))
 
 (defn step
   "Create bthread with a step function.
@@ -49,11 +54,13 @@
   - Returns (new state, bid)
  "
   ([f] (step f nil))
-  ([f _opts]
-   (let [state (volatile! nil)]
+  ([f opts]
+   (let [state (volatile! nil)
+         label-fn (get opts :label default-label)]
      (reify proto/BThread
        (state [_] @state)
        (set-state [_ serialized] (vreset! state serialized))
+       (label [this] (label-fn this))
        (bid [_ event]
          (try (let [result (f @state event)
                     next-state (first result)
@@ -92,11 +99,11 @@
   (step (fn [_prev-state event]
           (if-not (and event
                        (get event-names (event-proto/type event)))
-            [nil {:wait-on event-names}] ;; initialize
+            [:initialized {:wait-on event-names}] ;; initialize
             (let [bid (f event)
                   wait-on (->> (get event :wait-on #{})
                                (into event-names))]
-              [nil (assoc bid :wait-on wait-on)])))))
+              [:initialized (assoc bid :wait-on wait-on)])))))
 
 (defn interlace
   "Ask bthreads for bids in round-robin fashion
@@ -114,18 +121,21 @@
   However, with interpolate:
 
   ```
-  (interpolate [(b/seq [{:request #{:a :b}}
-                        {:request #{1}]))
-  ;; interpolate will return *three* bids, for
-  ;; events `:a`, `:b`, and `1`
+  (interpolate [(b/seq [{:request #{:a}}
+                        {:request #{:b}}])
+                (b/seq [{:request #{1}}])])
   ```
+  In response to a notification,  interpolate will return
+  in order *three* bids, for events `:a`, `:b`, and `1`
   "
-  [bids]
-  (let [bthread-count (count bids)
-        step-fn (fn [idx event]
-                  (let [idx' (or idx 0)
-                        active-bthread (nth bids idx')
-                        next-idx (if (= (inc idx') bthread-count) 0 (inc idx'))
+  [bthreads]
+  (let [bthread-count (count bthreads)
+        step-fn (fn [state event]
+                  (let [idx (get state :idx 0)
+                        active-bthread (nth bthreads idx)
+                        next-idx (if (= (inc idx) bthread-count) 0 (inc idx))
                         current-bid (bid active-bthread event)]
-                    [next-idx current-bid]))]
+                    [{:idx next-idx
+                      :bid-states (mapv proto/state bthreads)} ;; helps w/lasso detection
+                     current-bid]))]
     (step step-fn)))

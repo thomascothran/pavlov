@@ -5,6 +5,7 @@
           clojure.lang.APersistentMap
           (bid [this _event] this)
           (state [this] this)
+          (label [this] this)
           (set-state [_this serialized] serialized))
 
    :cljs (extend-protocol bthread/BThread
@@ -12,15 +13,18 @@
            cljs.core.PersistentArrayMap
            (bid [this _event] this)
            (state [this] this)
+           (label [this] this)
            (set-state [_this serialized] serialized)
 
            cljs.core.PersistentHashMap
            (bid [this _event] this)
            (state [this] this)
+           (label [this] this)
            (set-state [_this serialized] serialized)))
 
 (extend-protocol bthread/BThread
   nil
   (bid [this _event] this)
+  (label [_] nil)
   (state [_] nil)
   (set-state [_ _] nil))

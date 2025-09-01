@@ -1,6 +1,6 @@
 (ns tech.thomascothran.pavlov.bprogram.state-test
-  (:require #?(:clj [clojure.test :refer [deftest testing is run-tests]]
-               :cljs [cljs.test :refer [deftest testing is run-tests]])
+  (:require #?(:clj [clojure.test :refer [deftest is]]
+               :cljs [cljs.test :refer [deftest is]])
             [tech.thomascothran.pavlov.event.defaults]
             [tech.thomascothran.pavlov.bid.defaults]
             [tech.thomascothran.pavlov.bthread.defaults]
