@@ -7,12 +7,12 @@ Pavlov is a behavioral programming (BP) library for Clojure and ClojureScript th
 The library is currently in pre-release status and is available on Clojars as `tech.thomascothran/pavlov`.
 
 ### Recent API Changes (January 2025)
-The BThread API has been simplified to remove explicit naming requirements. Functions like `step`, `bids`, `reprise`, and `interlace` no longer require name parameters. BThreads are now identified by their registration order in the BProgram.
+The BThread API has been simplified to remove explicit naming requirements. Functions like `step`, `bids`, `repeat`, and `round-robin` no longer require name parameters. BThreads are now identified by their registration order in the BProgram.
 
 ## Key Concepts
 
 ### Behavioral Programming
-- Event-driven programming paradigm that strongly decompletes application behaviors
+- Event-driven programming paradigm that strongly decouples application behaviors
 - Units of behavior (bthreads) can request, wait on, or block events
 - Synchronous coordination of concurrent behaviors without shared state
 
@@ -52,12 +52,12 @@ The BThread API has been simplified to remove explicit naming requirements. Func
 ## Key Files and Their Purpose
 
 ### Core API Files
-- `src/tech/thomascothran/pavlov/bthread.cljc`: Main BThread API with functions like `bids`, `step`, `reprise`, `interlace`
+- `src/tech/thomascothran/pavlov/bthread.cljc`: Main BThread API with functions like `bids`, `step`, `repeat`, `interlace`
 - `src/tech/thomascothran/pavlov/bprogram.cljc`: BProgram API with `stop!`, `kill!`, `submit-event!`, `subscribe!`
 - `src/tech/thomascothran/pavlov/bprogram/ephemeral.cljc`: Ephemeral bprogram implementation with `make-program!` and `execute!`
 
 ### Protocol Definitions
-- `src/tech/thomascothran/pavlov/bthread/proto.cljc`: BThread protocol (name, bid, serialize, deserialize)
+- `src/tech/thomascothran/pavlov/bthread/proto.cljc`: BThread protocol
 - `src/tech/thomascothran/pavlov/bprogram/proto.cljc`: BProgram protocol
 - `src/tech/thomascothran/pavlov/event/proto.cljc`: Event protocol
 
@@ -107,7 +107,7 @@ The BThread API has been simplified to remove explicit naming requirements. Func
 (b/step counter-step)
 
 ;; Repeat a bid n times
-(b/reprise 10 {:request #{:tick}})
+(b/repeat 10 {:request #{:tick}})
 
 ;; Interlace multiple bthreads
 (b/interlace [(b/bids [{:request #{:a}}])
@@ -227,7 +227,7 @@ clojure -A:dev
 
 ### Custom BThread Implementation
 Implement the BThread protocol:
-- `(bid [this last-event])`: Return next bid based on event
+- `(notify! [this last-event])`: Notify bthread, which will update its internal state and return next bid
 - `(state [this])`: Return current state for serialization
 - `(set-state [this serialized])`: Restore from serialized state
 

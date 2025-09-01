@@ -110,10 +110,10 @@
               (comp (filter (comp (partial = :o) last)))
               moves)]
 
-    (b/interlace [{:wait-on x-moves
-                   :block o-moves}
-                  {:wait-on o-moves
-                   :block x-moves}])))
+    (b/round-robin [{:wait-on x-moves
+                     :block o-moves}
+                    {:wait-on o-moves
+                     :block x-moves}])))
 
 ;; Notice that this rule could be generalized.
 ;; It could take the players and coordinates as parameters

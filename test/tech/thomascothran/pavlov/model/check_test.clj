@@ -9,13 +9,13 @@
           (check/check
            {:bthreads
             {:good-morning
-             (b/reprise 4 {:request #{:good-morning}})
+             (b/repeat 4 {:request #{:good-morning}})
 
              :good-evening
-             (b/reprise 4 {:request #{:good-evening}})
+             (b/repeat 4 {:request #{:good-evening}})
 
              :interlace
-             (b/interlace
+             (b/round-robin
               [{:wait-on #{:good-morning}
                 :block #{:good-evening}}
                {:wait-on #{:good-evening}

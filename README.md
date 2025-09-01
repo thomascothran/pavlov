@@ -54,13 +54,13 @@ Let's suppose we have an industrial process which should have the following beha
             [tech.thomascothran.pavlov.bprogram :as bp]))
 
 (def water-app
-  (let [add-hot  (b/reprise 3 {:request #{:add-hot-water}})
-        add-cold (b/reprise 3 {:request #{:add-cold-water}})
-        alt-temp (b/interlace
-                   [(b/reprise {:wait-on #{:add-cold-water}
-                                :block #{:add-hot-water}})
-                    (b/reprise {:wait-on #{:add-hot-water}
-                                :block #{:add-cold-water}})])]
+  (let [add-hot  (b/repeat 3 {:request #{:add-hot-water}})
+        add-cold (b/repeat 3 {:request #{:add-cold-water}})
+        alt-temp (b/round-robin
+                   [(b/repeat {:wait-on #{:add-cold-water}
+                               :block #{:add-hot-water}})
+                    (b/repeat {:wait-on #{:add-hot-water}
+                               :block #{:add-cold-water}})])]
     (bp/make-program! [add-hot add-cold alt-temp]))
 ```
 
@@ -122,45 +122,24 @@ There are several other ways to work with sequences. A map literal representing 
 {:request #{:fireworks}}  ;; Fireworks are always fun
 ```
 
-If you want to set the fireworks off 10,000 times, you can use `reprise`:
+If you want to set the fireworks off 10,000 times, you can use `repeat`:
 
 ```clojure
-(b/reprise
+(b/repeat
   10000
   {:request #{:fireworks}})     ;; <- this event is requested
 ```
 
-If you want something like `interleave` for bthreads, you can use `interlace`.
-
-For example:
+You can also create a bthread that notifies bthreads in round-robin fashion.
 
 ```clojure
-(b/interlace
+(b/round-robin
  [{:wait-on #{:good-morning}
    :block #{:good-evening}}
   {:wait-on #{:good-evening}
    :block #{:good-morning}}])
 ```
 
-`interlace` is a little different than `interleave`.
-
-With interleave:
-
-```clojure
-(interleave [:a :b] [1])
-;; => [:a 1]
-```
-
-However, with interlace:
-
-```clojure
-(b/interlace
-  [(b/bids [{:request #{:a}}
-            {:request #{:b}}])
-   (b/bids [{:request #{1}}])])
-```
-
-Interlace will return *three* bids, for events `:a`, `1`, and `:b`.
 
 ### Step Functions
 

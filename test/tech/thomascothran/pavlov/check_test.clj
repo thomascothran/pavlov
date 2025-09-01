@@ -16,16 +16,16 @@
 
 (defn x-moves-bthread
   []
-  (b/reprise {:request (into [] (all-moves [:x]))}))
+  (b/repeat {:request (into [] (all-moves [:x]))}))
 
 (comment
-  (-> (b/bid (x-moves-bthread) nil)
-      (b/bid nil)
-      (b/bid nil)))
+  (-> (b/notify! (x-moves-bthread) nil)
+      (b/notify! nil)
+      (b/notify! nil)))
 
 (defn make-naive-strategy
   []
-  (b/reprise {:request (into [] (all-moves [:o]))}))
+  (b/repeat {:request (into [] (all-moves [:o]))}))
 
 (defn initial-tic-tac-toe-bthreads
   []

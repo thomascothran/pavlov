@@ -93,7 +93,7 @@
    (reduce (fn [acc bthread-name]
              (let [bthread (get-in state [:name->bthread bthread-name])
                    _ (when-not bthread (println "No bthread found for" bthread-name))
-                   bid (b/bid bthread event)]
+                   bid (b/notify! bthread event)]
                (-> acc
                    (assoc-in [:bthread->bid bthread-name] bid)
                    (index-bid-events bthread-name bid :requests)

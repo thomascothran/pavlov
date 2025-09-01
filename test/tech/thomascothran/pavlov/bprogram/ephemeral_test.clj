@@ -26,14 +26,14 @@
 (deftest good-morning-and-evening
   (let [bthreads
         {:good-morning
-         (b/reprise 4
-                    {:request #{:good-morning}})
+         (b/repeat 4
+                   {:request #{:good-morning}})
 
          :good-evening
-         (b/reprise 4 {:request #{:good-evening}})
+         (b/repeat 4 {:request #{:good-evening}})
 
          :interlace
-         (b/interlace
+         (b/round-robin
           [{:wait-on #{:good-morning}
             :block #{:good-evening}}
            {:wait-on #{:good-evening}
@@ -75,10 +75,10 @@
     Then the bthread requests a win event"
     (let [bthread (tb/make-winning-bthreads
                    #{[0 0 :x] [2 2 :x] [1 1 :x]})
-          bid1 (b/bid bthread nil) ;; initialization
-          bid2 (b/bid bthread {:type [1 1 :x]})
-          bid3 (b/bid bthread {:type [2 2 :x]})
-          bid4 (b/bid bthread {:type [0 0 :x]})]
+          bid1 (b/notify! bthread nil) ;; initialization
+          bid2 (b/notify! bthread {:type [1 1 :x]})
+          bid3 (b/notify! bthread {:type [2 2 :x]})
+          bid4 (b/notify! bthread {:type [0 0 :x]})]
 
       (is (= #{:wait-on}
              (set (keys bid1))

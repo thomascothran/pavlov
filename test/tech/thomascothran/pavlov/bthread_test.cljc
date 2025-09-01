@@ -27,38 +27,38 @@
               :request #{:c}}]
         bthread (bthread/bids abc)]
     (is (= (first abc)
-           (bthread/bid bthread {:type :test})))
+           (bthread/notify! bthread {:type :test})))
     (is (= (second abc)
-           (bthread/bid bthread {:type :test})))
-    (bthread/bid bthread {:type :test})
-    (is (nil? (bthread/bid bthread {:type :test})))))
+           (bthread/notify! bthread {:type :test})))
+    (bthread/notify! bthread {:type :test})
+    (is (nil? (bthread/notify! bthread {:type :test})))))
 
-(deftest test-reprise
-  (let [bthread (bthread/reprise :forever {:request #{:test}})
+(deftest test-repeat
+  (let [bthread (bthread/repeat {:request #{:test}})
         _ (doseq [_ (range 3)]
-            (bthread/bid bthread {:type :test}))]
+            (bthread/notify! bthread {:type :test}))]
     (is (= {:request #{:test}}
-           (bthread/bid bthread {:type :test}))))
+           (bthread/notify! bthread {:type :test}))))
 
-  (let [bthread (bthread/reprise 3 {:request #{:test}})
+  (let [bthread (bthread/repeat 3 {:request #{:test}})
         _ (doseq [_ (range 3)]
-            (bthread/bid bthread {:type :test}))]
-    (is (= nil (bthread/bid bthread {:type :test})))))
+            (bthread/notify! bthread {:type :test}))]
+    (is (= nil (bthread/notify! bthread {:type :test})))))
 
 (deftest test-fuse
   (let [bid-a {:request #{:test-a
                           :wait-on #{:trigger}}}
         bid-b {:request #{:test-b
                           :wait-on #{:trigger}}}
-        bthread (bthread/interlace
+        bthread (bthread/round-robin
                  [bid-a
                   (bthread/bids [bid-b bid-b])])
-        bid1 (bthread/bid bthread :trigger)
-        bid2 (bthread/bid bthread :trigger)
-        bid3 (bthread/bid bthread :trigger)
-        bid4 (bthread/bid bthread :trigger)
-        bid5 (bthread/bid bthread :trigger)
-        bid6 (bthread/bid bthread :trigger)]
+        bid1 (bthread/notify! bthread :trigger)
+        bid2 (bthread/notify! bthread :trigger)
+        bid3 (bthread/notify! bthread :trigger)
+        bid4 (bthread/notify! bthread :trigger)
+        bid5 (bthread/notify! bthread :trigger)
+        bid6 (bthread/notify! bthread :trigger)]
     (is (= bid-a bid1 bid3 bid5))
     (is (= bid-b bid2 bid4))
     (is (nil? bid6))))
@@ -73,31 +73,31 @@
   (testing "Should retain state"
     (let [bthread (bthread/step count-down-step-fn)]
       (is (= {:wait-on #{:test}}
-             (bthread/bid bthread nil))
+             (bthread/notify! bthread nil))
           "Should return the correct bid")
       (is (= 3 (bthread/state bthread))
           "Should initialize state correctly")
       (is (= {:wait-on #{:test}}
-             (bthread/bid bthread {:type :test}))
+             (bthread/notify! bthread {:type :test}))
           "Should return the correct bid after initialization")
       (is (= 2 (bthread/state bthread))
           "Should decrement state")))
   (testing "should handle round trip serialization"
     (let [bthread (bthread/step count-down-step-fn)
-          _ (bthread/bid bthread nil)
-          _ (bthread/bid bthread {:type :test})
+          _ (bthread/notify! bthread nil)
+          _ (bthread/notify! bthread {:type :test})
           ser (bthread/state bthread)
           de (bthread/set-state bthread ser)]
       (is (= 2 ser de))))
   (testing "should work with anonymous functions"
     (let [bthread (bthread/step #(apply count-down-step-fn %&))]
       (is (= {:wait-on #{:test}}
-             (bthread/bid bthread nil))
+             (bthread/notify! bthread nil))
           "Should return the correct bid")
       (is (= 3 (bthread/state bthread))
           "Should initialize state correctly")
       (is (= {:wait-on #{:test}}
-             (bthread/bid bthread {:type :test}))
+             (bthread/notify! bthread {:type :test}))
           "Should return the correct bid after initialization")
       (is (= 2 (bthread/state bthread))
           "Should decrement state"))))
@@ -110,8 +110,8 @@
 
           event {:type :some-event}
 
-          bid (bthread/bid (bthread/step divide-by-0-step-fn)
-                           event)
+          bid (bthread/notify! (bthread/step divide-by-0-step-fn)
+                               event)
 
           requests (get bid :request)
           error-event (first requests)]
@@ -126,12 +126,12 @@
                           (fn [event]
                             (swap! !events conj event)
                             {:request #{:test-event-received}}))
-        init-bid (bthread/bid bthread nil) ;; initialize
-        bid (bthread/bid bthread {:type :test-event})
+        init-bid (bthread/notify! bthread nil) ;; initialize
+        bid (bthread/notify! bthread {:type :test-event})
         ;; because :test-event-received was requested, the
         ;; bthread will be notified. However, `f` should not
         ;; be invoked - unless you want an endless loop
-        _ (bthread/bid bthread {:type :test-event-received})]
+        _ (bthread/notify! bthread {:type :test-event-received})]
 
     (is (= {:wait-on #{:test-event}} init-bid))
     (is (= [{:type :test-event}] @!events))
