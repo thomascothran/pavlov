@@ -140,15 +140,15 @@
             :request #{:test-event-received}}
            bid))))
 
-(deftest simple-thread-test
-  (let [bthread
-        (b/thread [prev-state event]
+#?(:clj (deftest simple-thread-test
+          (let [bthread
+                (b/thread [prev-state event]
                   :pavlov/init
                   [prev-state {:wait-on #{:event-a}}]
 
                   :event-a
                   [prev-state {:request #{{:type  :event-b}}}])
-        bid1 (b/notify! bthread nil)
-        bid2 (b/notify! bthread {:type :event-a})]
-    (is (= {:wait-on #{:event-a}} bid1))
-    (is (= {:request #{{:type  :event-b}}} bid2))))
+                bid1 (b/notify! bthread nil)
+                bid2 (b/notify! bthread {:type :event-a})]
+            (is (= {:wait-on #{:event-a}} bid1))
+            (is (= {:request #{{:type  :event-b}}} bid2)))))

@@ -1,5 +1,5 @@
 (ns tech.thomascothran.pavlov.bthread
-  (:refer-clojure :exclude [seq reduce repeat])
+  (:refer-clojure :exclude [repeat])
   (:require [tech.thomascothran.pavlov.bthread.proto :as proto]
             [tech.thomascothran.pavlov.event.proto :as event-proto]
             [tech.thomascothran.pavlov.defaults]))
@@ -67,7 +67,7 @@
                     bid (second result)]
                 (vreset! state next-state)
                 bid)
-              (catch #?(:clj Throwable :cljs) e
+              (catch #?(:clj Throwable :cljs :default) e
                 {:request #{{:type ::unhandled-step-fn-error
                              :event event
                              :error e
@@ -197,7 +197,8 @@
        ;; state and this bid.
        [prev-state {:wait-on #{:fire-missiles}}])
      ```"
-     {:clj-kondo/lint-as 'clojure.core/defn}
+     {:clj-kondo/lint-as 'clojure.core/fn
+      :style/indent [:block 1]}
      [& forms]
      (thread* forms)))
 
@@ -205,13 +206,13 @@
   (macroexpand-1
    '(thread [prev-state event]
 
-            :pavlov/init
-            [{:initialized true}
-             {:wait-on #{:fire-missiles}}]
+      :pavlov/init
+      [{:initialized true}
+       {:wait-on #{:fire-missiles}}]
 
-            #{:fire-missiles}
-            (let [result (missiles-api/fire!)]
-              [prev-state {:request #{{:type :missiles-fired
-                                       :result result}}}])
+      #{:fire-missiles}
+      (let [result (missiles-api/fire!)]
+        [prev-state {:request #{{:type :missiles-fired
+                                 :result result}}}])
 
-            [prev-state {:wait-on #{:fire-missiles}}])))
+      [prev-state {:wait-on #{:fire-missiles}}])))
