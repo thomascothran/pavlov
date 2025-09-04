@@ -119,13 +119,13 @@
       (is (get error-event :terminal))
       (is (get error-event :error)))))
 
-(deftest test-on-every
+(deftest test-on
   (let [!events (atom [])
         bthread
-        (b/on-every #{:test-event}
-                    (fn [event]
-                      (swap! !events conj event)
-                      {:request #{:test-event-received}}))
+        (b/on :test-event
+              (fn [event]
+                (swap! !events conj event)
+                {:request #{:test-event-received}}))
         init-bid (b/notify! bthread nil) ;; initialize
         bid (b/notify! bthread {:type :test-event})
         ;; because :test-event-received was requested, the

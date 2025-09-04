@@ -86,7 +86,7 @@
                [(inc invocations') x])))]
      (step step-fn))))
 
-(defn on-every
+(defn on
   "Run `f` always and only when the specified events occurs.
 
   `event-names` is a set of event names
@@ -95,14 +95,14 @@
 
   `f` is only invoked on an event in `event-names` - even if
   it returns a bid that requests or waits on other events."
-  [event-names f]
+  [event-type f]
   (step (fn [_prev-state event]
           (if-not (and event
-                       (get event-names (event-proto/type event)))
-            [:initialized {:wait-on event-names}] ;; initialize
+                       (= event-type (event-proto/type event)))
+            [:initialized {:wait-on #{event-type}}] ;; initialize
             (let [bid (f event)
                   wait-on (->> (get event :wait-on #{})
-                               (into event-names))]
+                               (into #{event-type}))]
               [:initialized (assoc bid :wait-on wait-on)])))))
 
 (defn round-robin

@@ -70,9 +70,9 @@ Bthreads are sequential and stateful. They can run in parallel and be parked whe
 
 The bid a bthread produces can request events, wait on events, or block events in other bthreads. Bthreads do not directly know about each other.
 
-### `on-every`
+### `on`
 
-`on-every` takes a set of event names and a function of an event to a bid.
+`on` takes an event type and a function of an event to a bid.
 
 For example:
 
@@ -87,16 +87,16 @@ For example:
 
 (def make-create-account-bthread
   [db-conn]
-  (b/on-every #{:create-account} create-account!))
+  (b/on :create-account create-account!))
 ```
 
 When the `:create-account` event is selected, the create account bthread is notified, record is inserted, and the `:account-created` event is requested.
 
-The function passed to `on-every` should not throw an error. If an error is thrown:
+The function passed to `on` should not throw an error. If an error is thrown:
 
 - it will be caught,
-- an event of type `:tech.thomascothran.pavlov.bthread/unhandled-step-fn-error` will be requsted
-- unless that event is blocked, it will terminate the program
+- an event of type `:tech.thomascothran.pavlov.bthread/unhandled-step-fn-error` will be requested
+- that event will terminate the program (unless it is blocked)
 
 ### Sequence Bthreads
 
