@@ -142,18 +142,18 @@ You can also create a bthread that notifies bthreads in round-robin fashion.
 
 ### General Purpose Bthreads with `b/thread`
 
-`b/thread` is a macro that can bus used like this:
+`b/thread` is a macro that makes creating bthreads both easy and expressive, and prevents mistakes that are easy to make.
 
 ```clojure
 (require '[tech.thomascothran.pavlov.bthread :as b])
 
-(b/thread [prev-state event]
+(b/thread [prev-state event] ;; must be a vector of 2, destructuring not supported
   :pavlov/init         ;; <- always required in the first position to initialize bthread
   [{:initialized true} ;; <- initialized bthread state
    {:wait-on #{:fire-missiles}}] ;; <- bid, wait until someone
                                  ;; wants to fire missiles
 
-  :fire-missiles ;; when an event in this set occurs, execute form
+  :fire-missiles ;; when this event occurs, execute form
   (let [result (missiles-api/fire!)] ;; do something
     [prev-state                      ;; return previous state and bid
      {:request #{{:type :missiles-fired
@@ -164,11 +164,11 @@ You can also create a bthread that notifies bthreads in round-robin fashion.
   [prev-state {:wait-on #{:fire-missiles}}])
 ```
 
-You will notice that the structure of `b/thread` is similar to using `defn` with `case`. The `[prev-state event]` form binds `prev-state` to the bthreads previous state. `event` is bound to the event about which the bthread is notified.
+You will notice that the structure of `b/thread` is similar to using `defn` with `case`. The `[prev-state event]` form binds `prev-state` to the bthread's previous state. `event` is bound to the event about which the bthread is being notified.
 
 The rest of the body of `b/thread` is similar to a `case` statement, switching on the type of an event (`:fire-missiles` in the example above).
 
-As with `case`, a final form may be provided, which is a default if none of the events match. If no default value is provided, the bthread's state will not change, but it will not subscribe to any events -- meaning it is permanently parked.
+Similar to `case`, a final form may be provided, which is a default if none of the events match. If no default value is provided, the bthread's state will not change, but it will not subscribe to any events -- meaning it is permanently parked.
 
 Each form must return a tuple of the next state and a bid.
 
