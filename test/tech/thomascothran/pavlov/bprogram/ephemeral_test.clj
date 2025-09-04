@@ -199,7 +199,10 @@
 
          :request-b
          (b/bids [{:wait-on #{:a}}
-                  {:request #{:b}}])}
+                  {:request #{:b}}])
+
+         :block-deadlock
+         {:block #{:tech.thomascothran.pavlov.bprogram.ephemeral/deadlock}}}
 
         !a (atom [])
 

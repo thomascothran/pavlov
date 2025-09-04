@@ -4,6 +4,7 @@
             [tech.thomascothran.pavlov.event :as event]
             [tech.thomascothran.pavlov.event.publisher.defaults :as pub-default]
             [tech.thomascothran.pavlov.event.publisher.proto :as pub]
+            [tech.thomascothran.pavlov.bthread :as b]
             [tech.thomascothran.pavlov.bprogram.state
              :as state])
   #?(:clj (:import (java.util.concurrent LinkedBlockingQueue)
@@ -210,17 +211,29 @@
 
   Options
   -------
-  To terminate in case of deadlock, use the option :terminate-on-deadlock."
-  ([bthreads] (execute! bthreads nil))
+  - `:request-event`: request an event. This is used to kick off the
+  bprogram
+  "
+  ([bthreads]
+   (execute! bthreads nil))
   ([bthreads opts]
-   (let [terminate-on-deadlock (get opts :terminate-on-deadlock)
+   (let [requested-event (get opts :request-event)
+
+         requested-event-bthread
+         (when requested-event
+           (b/bids [{:request #{requested-event}}]))
+
          kill-after (get opts :kill-after)
-         bthreads' (if terminate-on-deadlock
-                     (-> (into [] bthreads)
-                         (conj [::deadlock
-                                {:request #{{:type ::deadlock
-                                             :terminal true}}}]))
-                     bthreads)
+
+         bthreads'
+         (cond-> (reduce into []
+                         [bthreads
+                          [[::deadlock
+                            {:request #{{:type ::deadlock
+                                         :terminal true}}}]]])
+           requested-event-bthread
+           (conj [::requested-event requested-event-bthread]))
+
          bprogram (make-program! bthreads' opts)]
      (when kill-after
        (let [killfn (fn [] (bprogram/kill! bprogram))]
