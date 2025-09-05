@@ -226,13 +226,13 @@
          kill-after (get opts :kill-after)
 
          bthreads'
-         (cond-> (reduce into []
-                         [bthreads
-                          [[::deadlock
-                            {:request #{{:type ::deadlock
-                                         :terminal true}}}]]])
+         (cond-> bthreads
            requested-event-bthread
-           (conj [::requested-event requested-event-bthread]))
+           (conj [::requested-event requested-event-bthread])
+
+           :then
+           (conj [::deadlock {:request #{{:type ::deadlock
+                                          :terminal true}}}]))
 
          bprogram (make-program! bthreads' opts)]
      (when kill-after
