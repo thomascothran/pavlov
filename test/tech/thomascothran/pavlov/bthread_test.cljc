@@ -140,15 +140,28 @@
             :request #{:test-event-received}}
            bid))))
 
-#?(:clj (deftest simple-thread-test
-          (let [bthread
-                (b/thread [prev-state event]
-                  :pavlov/init
-                  [prev-state {:wait-on #{:event-a}}]
+(deftest test-after-all
+  (let [event-set #{:a :b :c}
 
-                  :event-a
-                  [prev-state {:request #{{:type  :event-b}}}])
-                bid1 (b/notify! bthread nil)
-                bid2 (b/notify! bthread {:type :event-a})]
-            (is (= {:wait-on #{:event-a}} bid1))
-            (is (= {:request #{{:type  :event-b}}} bid2)))))
+        bthread (b/after-all event-set identity)
+
+        results (mapv #(b/notify! bthread {:type %}) event-set)
+        last-bid (b/notify! bthread {:type :d})]
+    (is (= [{:wait-on #{:a :b :c}}
+            {:wait-on #{:a :b :c}}
+            [{:type :c} {:type :b} {:type :a}]]
+           results))
+    (is (nil? last-bid))))
+
+(deftest simple-thread-test
+  (let [bthread
+        (b/thread [prev-state _event]
+          :pavlov/init
+          [prev-state {:wait-on #{:event-a}}]
+
+          :event-a
+          [prev-state {:request #{{:type  :event-b}}}])
+        bid1 (b/notify! bthread nil)
+        bid2 (b/notify! bthread {:type :event-a})]
+    (is (= {:wait-on #{:event-a}} bid1))
+    (is (= {:request #{{:type  :event-b}}} bid2))))

@@ -87,9 +87,7 @@
      (step step-fn))))
 
 (defn on
-  "Run `f` always and only when the specified events occurs.
-
-  `event-names` is a set of event names
+  "Run `f` always and only when the specified event-type occurs.
 
   `f` is a function of an event to a bid.
 
@@ -104,6 +102,31 @@
                   wait-on (->> (get event :wait-on #{})
                                (into #{event-type}))]
               [:initialized (assoc bid :wait-on wait-on)])))))
+
+(defn after-all
+  "After *all* events occur, call `f` to return the next bid.
+
+  Params
+  ------
+  - `event-types` is the set of events that must be selected
+    before `f`'s bid
+  - `f` is a function of all the events to the bid."
+  [event-types f]
+  (assert (set? event-types))
+  (step (fn [prev-state event]
+          (let [event-type (get event :type)
+                done (get prev-state :done)
+                previous-events (get prev-state :previous-events [])
+                seen-event-types (into #{}
+                                       (map event-proto/type)
+                                       (conj previous-events event-type))
+                default-bid {:wait-on event-types}
+                new-events (conj previous-events event)
+                new-state (assoc prev-state :previous-events new-events)]
+            (when-not done
+              (if (= event-types seen-event-types)
+                [(assoc new-state :done true) (f new-events)]
+                [new-state default-bid]))))))
 
 (defn round-robin
   "Ask bthreads for bids in round-robin fashion

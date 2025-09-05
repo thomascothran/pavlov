@@ -150,18 +150,18 @@ You can also create a bthread that notifies bthreads in round-robin fashion.
 (b/thread [prev-state event] ;; must be a vector of 2, destructuring not supported
   :pavlov/init         ;; <- always required in the first position to initialize bthread
   [{:initialized true} ;; <- initialized bthread state
-   {:wait-on #{:fire-missiles}}] ;; <- bid, wait until someone
+   {:wait-on #{:launch-rocket}}] ;; <- bid, wait until someone
                                  ;; wants to fire missiles
 
-  :fire-missiles ;; when this event occurs, execute form
-  (let [result (missiles-api/fire!)] ;; do something
+  :launch-rocket ;; when this event occurs, execute form
+  (let [result (rocket-api/launch!)] ;; do something
     [prev-state                      ;; return previous state and bid
-     {:request #{{:type :missiles-fired
+     {:request #{{:type :rocket-launched
                   :result result}}}])
 
   ;; if bthread notified of any other event, then return the previous
   ;; state and this bid.
-  [prev-state {:wait-on #{:fire-missiles}}])
+  [prev-state {:wait-on #{:launch-rocket}}])
 ```
 
 You will notice that the structure of `b/thread` is similar to using `defn` with `case`. The `[prev-state event]` form binds `prev-state` to the bthread's previous state. `event` is bound to the event about which the bthread is being notified.
