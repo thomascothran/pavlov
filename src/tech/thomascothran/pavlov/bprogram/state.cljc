@@ -17,9 +17,12 @@
 (defn init
   "Initiate the state"
   [named-bthreads]
-  (let [name-bthread-pairs (into [] named-bthreads)
+  (let [ordered-bthreads? (not (map? named-bthreads))
         name->bthread (into {} named-bthreads)
-        bthreads-by-priority (mapv first name-bthread-pairs)
+        bthreads-by-priority
+        (if ordered-bthreads?
+          (into [] (map first) named-bthreads)
+          (into #{} (map first) named-bthreads))
 
         initial-state {:bthread->bid {}
                        :last-event nil

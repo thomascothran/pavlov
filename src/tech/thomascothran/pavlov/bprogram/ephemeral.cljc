@@ -226,7 +226,7 @@
          kill-after (get opts :kill-after)
 
          bthreads'
-         (cond-> bthreads
+         (cond-> (into [] bthreads)
            requested-event-bthread
            (conj [::requested-event requested-event-bthread])
 

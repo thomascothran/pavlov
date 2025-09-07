@@ -75,27 +75,52 @@
 ;; bthread selection strategies |
 ;; =============================|
 
-(defn prioritized-bid
-  "Returns the first bthread that has an unblocked request,
-  ordered by priority"
+(defn prioritized-bids
+  "Returns the all bids which can be selected."
+
   ([bthreads-by-priority bthread->bid]
-   (prioritized-bid bthreads-by-priority
-                    bthread->bid
-                    (blocked bthread->bid)))
+   (prioritized-bids bthreads-by-priority
+                     bthread->bid
+                     (blocked bthread->bid)))
+
   ([bthreads-by-priority bthread->bid blocked-event-types]
-   (->> (filter (unblocked-bthread? bthread->bid blocked-event-types)
-                bthreads-by-priority)
-        first
-        (get bthread->bid))))
+   (cond->> (into []
+                  (comp (filter (unblocked-bthread? bthread->bid
+                                                    blocked-event-types))
+                        (map #(get bthread->bid %)))
+                  bthreads-by-priority)
+     (not (set? bthreads-by-priority))
+     (take 1))))
+
+(defn- prioritized-events-from-request
+  [request]
+  (if (set? request)
+    request
+    (take 1 request)))
 
 ;; ===========================|
 ;; event selection strategies |
 ;; ===========================|
 
+(defn prioritized-events
+  ([bthreads-by-priority bthread->bid]
+   (prioritized-events bthreads-by-priority
+                       bthread->bid
+                       (blocked bthread->bid)))
+  ([bthreads-by-priority bthread->bid blocked-event-types]
+   (into []
+         (comp (map bid/request)
+               (mapcat prioritized-events-from-request)
+               (remove (comp blocked-event-types event/type)))
+         (prioritized-bids bthreads-by-priority
+                           bthread->bid
+                           blocked-event-types))))
+
 (defn prioritized-event
   [bthreads-by-priority bthread->bid]
   (let [blocked-event-types (blocked bthread->bid)]
-    (some->> (prioritized-bid bthreads-by-priority bthread->bid)
+    (some->> (prioritized-bids bthreads-by-priority bthread->bid)
+             first
              bid/request
              (remove (comp blocked-event-types event/type))
              first)))
