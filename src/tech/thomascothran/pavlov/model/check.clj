@@ -8,8 +8,6 @@
   once and detects all violations during traversal."
   (:require [tech.thomascothran.pavlov.search :as search]
             [tech.thomascothran.pavlov.bthread :as bthread]
-            [tech.thomascothran.pavlov.bid.proto :as bid]
-            [tech.thomascothran.pavlov.event :as event]
             [tech.thomascothran.pavlov.event.selection :as selection]
             [tech.thomascothran.pavlov.bprogram.state :as state]))
 
@@ -37,27 +35,6 @@
              main-bthreads
              env-bthreads
              deadlock-bthreads])))
-
-(defn- get-branches
-  "Get all possible next events (branches) from the current state.
-  Returns a sequence of events that could be selected."
-  [bp-state bthread->bid]
-  (let [;; Get all blocked event types
-        blocked-events (into #{}
-                             (comp (map second)
-                                   (mapcat bid/block)
-                                   (map event/type))
-                             bthread->bid)
-
-        ;; Get all requested events that are not blocked
-        unblocked-requests
-        (into []
-              (comp (map second)
-                    (mapcat bid/request)
-                    (remove #(blocked-events (event/type %)))
-                    (distinct))
-              bthread->bid)]
-    unblocked-requests))
 
 (defn- save-bthread-states
   "Save the current state of all bthreads."
@@ -129,8 +106,10 @@
       (succ [_ wrapped]
         (let [{:keys [path saved-bthread-states] :bprogram/keys [state]} wrapped
               ;; Get branches from current state (not restored)
-              bthread->bid (:bthread->bid state)
-              branches (get-branches state bthread->bid)]
+              bthread->bid (get state :bthread->bid)
+              bthreads-by-priority (get state :bthreads-by-priority)
+              branches (selection/prioritized-events bthreads-by-priority
+                                                     bthread->bid)]
           ;; Return a sequence of successor states, one for each branch
           (into []
                 (map (fn [event]
