@@ -129,7 +129,7 @@
           (hash saved-states))))))
 
 (defn check
-  "Model check a behavioral program for safety and liveness violations.
+  "Model check a behavioral program for safety violations.
 
   Explores the state space once, checking for:
   - Safety violations (events with :invariant-violated true)
