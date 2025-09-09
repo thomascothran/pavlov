@@ -142,15 +142,10 @@
     :safety-bthreads - bthreads that detect violations (map of name -> constructor fn)
     :environment-bthreads - bthreads that generate events (map of name -> constructor fn)
     :check-deadlock? - if true, detect deadlocks (default: false)
-    :check-liveness? - if true, detect cycles (default: false)
-    :search-strategy - :bfs or :dfs (default: :bfs)
-    :max-states - maximum states to explore (default: nil/unlimited)
-
   Returns:
   - nil if no violations found
   - {:type :safety-violation :event event :path [events] :state state}
-  - {:type :deadlock :path [events] :state state}
-  - {:type :liveness-violation :cycle [states] :path [events]}"
+  - {:type :deadlock :path [events] :state state}"
   [config]
   (let [all-bthreads (assemble-all-bthreads config)
         navigator (make-navigator config all-bthreads)]
