@@ -339,6 +339,20 @@ See the namespace `tech.thomascothran.pavlov.subscribers.tap` for an implementat
 
 It may seem that behavioral programming makes programs both harder to reason about and harder to visualize as they execute. In fact, the opposite is the case.
 
+### Pavlov Program Navigator (Portal Integration)
+
+The Pavlov Program Navigator is a visual exploration tool that connects your behavioral programs (b-threads) in Clojure with Portal, allowing you to walk through possible execution paths-—including branching decisions and history—click by click.
+
+For example, a tic-tac-toe behavioral program can be viewed as a graph that begins with 9 edges representing the 9 choices that player `x` might make. Click on one of those choices, and now you have 8 edges representing player `o`'s choices.
+
+At each step of the program execution, you can see:
+
+- What the available branches are (what possible events may be emitted)
+- What the state of each bthread is
+- The history of events that led to this program state
+- The bids from all bthreads
+
+
 ### Visualizing program execution
 
 Despite the ability to run concurrently, every step in the bprogram's execution is deterministic and auditable. Each bthread submits a bid, and the logic for selecting a bid is straightforward: the highest priority, unblocked bid is selected.
