@@ -36,7 +36,13 @@
      :pavlov/path     (:path wrapped)
      :pavlov/branches branches
      :pavlov/crumbs   crumbs
-     :pavlov/bthread-states (:saved-bthread-states wrapped)}))
+     :pavlov/bthreads
+     {:pavlov/bthread-states (:saved-bthread-states wrapped)
+      :pavlov/bthread->bid (get-in wrapped [:bprogram/state
+                                            :bthread->bid])
+      :pavlov/bthreads-by-priority
+      (get-in wrapped [:bprogram/state
+                       :bthreads-by-priority])}}))
 
 (defn root
   "Given a navigator from `search` return a navigable data structure."
