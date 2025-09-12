@@ -6,8 +6,7 @@
 
   The main entry point is the `check` function which explores the state space
   once and detects all violations during traversal."
-  (:require [tech.thomascothran.pavlov.search :as search]
-            [tech.thomascothran.pavlov.bthread :as bthread]))
+  (:require [tech.thomascothran.pavlov.search :as search]))
 
 ;; Internal implementation details below
 
@@ -17,7 +16,7 @@
   (let [;; Create bthreads from each category
         safety-bthreads (get config :safety-bthreads)
         main-bthreads (get config :bthreads)
-        env-bthreads (get config :environment-threads)]
+        env-bthreads (get config :environment-bthreads)]
     ;; Order matters: safety -> main -> env -> deadlock
     (reduce into []
             [safety-bthreads
