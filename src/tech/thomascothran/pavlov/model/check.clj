@@ -11,28 +11,18 @@
 
 ;; Internal implementation details below
 
-(defn- make-deadlock-bthread
-  "Creates a bthread that requests a deadlock event."
-  []
-  (bthread/bids [{:request #{::deadlock}
-                  :terminal true
-                  :invariant-violated true}]))
-
 (defn- assemble-all-bthreads
   "Assembles all bthreads with proper priority ordering."
   [config]
   (let [;; Create bthreads from each category
         safety-bthreads (get config :safety-bthreads)
         main-bthreads (get config :bthreads)
-        env-bthreads (get config :environment-threads)
-        deadlock-bthreads (when (:check-deadlock? config)
-                            [[::deadlock-bthread (make-deadlock-bthread)]])]
+        env-bthreads (get config :environment-threads)]
     ;; Order matters: safety -> main -> env -> deadlock
     (reduce into []
             [safety-bthreads
              main-bthreads
-             env-bthreads
-             deadlock-bthreads])))
+             env-bthreads])))
 
 (defn- check-for-violations
   "Check if the current state represents a violation.

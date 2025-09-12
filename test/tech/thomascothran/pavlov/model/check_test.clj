@@ -47,6 +47,14 @@
         (is (= :deadlock (:type result))
             "Violation type should be :deadlock")))))
 
+(deftest simple-deadlock
+  (let [result (check/check
+                {:bthreads
+                 [[:test (b/bids [{:request #{{:type :a}}}
+                                  {:request #{{:type :b}}}])]]
+                 :check-deadlock? true})]
+    (is result)))
+
 (deftest deadlock-after-first-event
   (testing "Model checker should detect deadlock after first event"
     (let [result

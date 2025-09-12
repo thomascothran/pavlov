@@ -139,6 +139,7 @@
 
       (identifier [_ wrapped]
         ;; Use saved states instead of live bthread states to avoid mutation issues
-        (let [saved-states (:saved-bthread-states wrapped)]
-          ;; Create identifier from saved bthread states
-          (hash saved-states))))))
+        (let [saved-states (:saved-bthread-states wrapped)
+              bthread->bid (get-in wrapped
+                                   [:bprogram/state :bthread->bid])]
+          [saved-states bthread->bid])))))
