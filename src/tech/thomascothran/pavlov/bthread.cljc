@@ -114,14 +114,16 @@
   [event-types f]
   (assert (set? event-types))
   (step (fn [prev-state event]
-          (let [event-type (get event :type)
-                done (get prev-state :done)
+          (let [done (get prev-state :done)
                 previous-events (get prev-state :previous-events [])
                 seen-event-types (into #{}
-                                       (map event-proto/type)
-                                       (conj previous-events event-type))
+                                       (comp (filter identity)
+                                             (map event-proto/type))
+                                       (conj previous-events event))
                 default-bid {:wait-on event-types}
-                new-events (conj previous-events event)
+                new-events (if event
+                             (conj previous-events event)
+                             previous-events)
                 new-state (assoc prev-state :previous-events new-events)]
             (when-not done
               (if (= event-types seen-event-types)

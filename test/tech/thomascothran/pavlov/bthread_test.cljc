@@ -145,6 +145,8 @@
 
         bthread (b/after-all event-set identity)
 
+        _initialize (b/notify! bthread nil)
+
         results (mapv #(b/notify! bthread {:type %}) event-set)
         last-bid (b/notify! bthread {:type :d})]
     (is (= [{:wait-on #{:a :b :c}}
