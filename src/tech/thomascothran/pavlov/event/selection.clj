@@ -24,12 +24,7 @@
   easiest to think about is by priority, where every bthread has a unique
   priority order.
 
-  `prioritized-bid` implements this strategy.
-
-
-  It is also useful to select bids randomly, or according to some other
-  selection criteria. Each bid selectoin strategy takes a sequence of
-  bthreads and a map of a bthread to its bid.
+  If the bthreads are in an ordered collection, they are in priority order. If unordered they are all of equal priority
 
   request selection strategies
   -----------------------------
@@ -37,9 +32,8 @@
   may be blocked. Thus there is a decision to be made about which of a
   bid's unblocked requests should be selected.
 
-  `prioritized-event` implements a strategy where the bids are part of an
-  ordered sequence, from highest to lowest priority. The highest priority
-  event is selected. "
+  If the requests ordered sequence, they are priortized from highest
+  to lowest priority. The highest priority event is selected. "
   (:require [tech.thomascothran.pavlov.bid.proto :as bid]
             [tech.thomascothran.pavlov.event :as event]
             [clojure.set :as set]))
