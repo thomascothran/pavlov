@@ -71,6 +71,7 @@
                 {:request #{{:type ::unhandled-step-fn-error
                              :event event
                              :error e
+                             :invariant-violated true
                              :terminal true}}})))))))
 
 (defn repeat
