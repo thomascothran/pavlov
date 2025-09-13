@@ -46,7 +46,8 @@
 
       ;; Check for deadlock
       (and (:check-deadlock? config)
-           (nil? next-event))
+           (nil? next-event)
+           (not (get-in state [:last-event :terminal])))
       {:type :deadlock
        :path path
        :state state}

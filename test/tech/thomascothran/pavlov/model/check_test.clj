@@ -82,6 +82,17 @@
         (is (= [:first-event] (:path result))
             "Path should show :first-event happened before deadlock")))))
 
+(deftest deadlock-not-triggered-on-terminal-event
+  (let [bthreads {:request-a (b/bids [{:request [{:type :a}]}])
+                  :request-b (b/bids [{:wait-on #{:a}}
+                                      {:request [{:type :b}]}])
+                  :request-c (b/bids [{:wait-on #{:b}}
+                                      {:request #{{:type :c
+                                                   :terminal true}}}])}
+        result (check/check {:bthreads bthreads
+                             :check-deadlock? true})]
+    (is (nil? result))))
+
 (deftest simple-invariant-violation
   (testing "Model checker should detect invariant violations"
     (let [result (check/check
