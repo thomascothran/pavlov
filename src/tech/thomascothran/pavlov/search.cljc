@@ -139,7 +139,8 @@
 
       (identifier [_ wrapped]
         ;; Use saved states instead of live bthread states to avoid mutation issues
-        (let [saved-states (:saved-bthread-states wrapped)
+        (let [saved-states (get wrapped :saved-bthread-states)
               bthread->bid (get-in wrapped
-                                   [:bprogram/state :bthread->bid])]
-          [saved-states bthread->bid])))))
+                                   [:bprogram/state :bthread->bid])
+              last-event (get-in wrapped [:bprogram/state :last-event])]
+          [last-event saved-states bthread->bid])))))

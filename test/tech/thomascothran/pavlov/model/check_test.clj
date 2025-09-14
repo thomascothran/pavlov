@@ -83,15 +83,61 @@
             "Path should show :first-event happened before deadlock")))))
 
 (deftest deadlock-not-triggered-on-terminal-event
-  (let [bthreads {:request-a (b/bids [{:request [{:type :a}]}])
-                  :request-b (b/bids [{:wait-on #{:a}}
-                                      {:request [{:type :b}]}])
-                  :request-c (b/bids [{:wait-on #{:b}}
-                                      {:request #{{:type :c
-                                                   :terminal true}}}])}
+  ;; Catches the case where the state of a bthread does not change
+  ;; and the bids are the same. In order to identify a unique bprogram
+  ;; you *also* need the event. Otherwise different bprograms in the
+  ;; same state can be identified as dupes
+  (let [bthreads {:request-a
+                  (b/bids [{:request [{:type :a}]}])
+
+                  :request-b
+                  (b/on :a (constantly {:request #{{:type :b}
+                                                   {:type :c}}}))
+
+                  :request-c
+                  (b/on :b (constantly {:request #{{:type :d
+                                                    :terminal true}}}))}
         result (check/check {:bthreads bthreads
                              :check-deadlock? true})]
-    (is (nil? result))))
+    (is result)))
+
+(defn make-update-sync-bthreads
+  []
+  [[:request-cms-sync-bthreads
+    (b/bids
+     [{:request #{{:type ::sync-thing-from-cms}}}])]
+
+   [::terminate-on-not-found
+    (b/on ::thing-not-found-in-cms
+          (constantly {:request #{{:type ::terminate-on-not-found
+                                   :terminal true}}}))]
+   [::terminate-on-unknown-error
+    (b/on ::unknown-error-fetching-thing-from-cms
+          (constantly {:request #{{:type ::terminate-on-unknown-error
+                                   :terminal true}}}))]
+
+   [::fetch-from-cms
+    (b/on ::sync-thing-from-cms
+          (fn [_]
+            {:request #{{:type ::thing-fetched-from-cms
+                         :a {:test :data}}
+                        {:type ::thing-not-found-in-cms}
+                        {:type ::unknown-error-fetching-thing-from-cms
+                         :cms-response {:status 404}}}}))]
+
+   [::update-thing
+    (b/on ::thing-fetched-from-cms
+          (fn [_]
+            {:request #{{:type ::update-thing}}}))]])
+
+(deftest test-complex-identifier-bug
+  ;; Catches another case where the state of a bthread does not change
+  ;; and the bids are the same. In order to identify a unique bprogram
+  ;; you *also* need the event. Otherwise different bprograms in the
+  ;; same state can be identified as dupes
+  (let [violation (check/check {:bthreads (make-update-sync-bthreads)
+                                :check-deadlock? true})]
+    (is violation)))
 
 (deftest simple-invariant-violation
   (testing "Model checker should detect invariant violations"
