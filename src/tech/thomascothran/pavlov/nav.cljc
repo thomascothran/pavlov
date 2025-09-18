@@ -4,7 +4,7 @@
             [tech.thomascothran.pavlov.search :as search]))
 
 (defn- node->data
-  [nav wrapped chosen ancestors]
+  [nav wrapped chosen ancestors tf]
   (let [succs    (search/succ nav wrapped)
         make-child (fn [state event]
                      {:nav nav :wrapped state :chosen event
@@ -19,7 +19,7 @@
                        {`p/nav
                         (fn [_coll _k v]
                           (if-let [{:keys [nav wrapped chosen ancestors]} (::child v)]
-                            (node->data nav wrapped chosen ancestors)
+                            (node->data nav wrapped chosen ancestors tf)
                             v))}))
         crumbs  (-> (mapv (fn [{:keys [wrapped chosen] :as n}]
                             {:pavlov/event chosen
@@ -31,21 +31,23 @@
                       {`p/nav
                        (fn [_coll _k v]
                          (let [{:keys [nav wrapped chosen ancestors]} (::child v)]
-                           (node->data nav wrapped chosen ancestors)))}))]
-    {:pavlov/event    chosen
-     :pavlov/path     (:path wrapped)
-     :pavlov/branches branches
-     :pavlov/crumbs   crumbs
-     :pavlov/bthreads
-     {:pavlov/bthread-states (:saved-bthread-states wrapped)
-      :pavlov/bthread->bid (get-in wrapped [:bprogram/state
-                                            :bthread->bid])
-      :pavlov/bthreads-by-priority
-      (get-in wrapped [:bprogram/state
-                       :bthreads-by-priority])}}))
+                           (node->data nav wrapped chosen ancestors tf)))}))]
+    (tf
+     {:pavlov/event    chosen
+      :pavlov/path     (:path wrapped)
+      :pavlov/branches branches
+      :pavlov/crumbs   crumbs
+      :pavlov/bthreads
+      {:pavlov/bthread-states (:saved-bthread-states wrapped)
+       :pavlov/bthread->bid (get-in wrapped [:bprogram/state
+                                             :bthread->bid])
+       :pavlov/bthreads-by-priority
+       (get-in wrapped [:bprogram/state
+                        :bthreads-by-priority])}})))
 
 (defn root
   "Given a navigator from `search` return a navigable data structure."
-  [bthreads]
-  (let [nav (search/make-navigator bthreads)]
-    (node->data nav (search/root nav) nil [])))
+  ([bthreads] (root bthreads identity))
+  ([bthreads tf]
+   (let [nav (search/make-navigator bthreads)]
+     (node->data nav (search/root nav) nil [] tf))))
