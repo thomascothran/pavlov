@@ -52,7 +52,11 @@
       (hiccup-viewer [:hr])
       (hiccup-viewer
        [:h3 "History"])
-      crumbs])))
+      crumbs
+      (hiccup-viewer [:hr])
+      (hiccup-viewer [:h6 "Details"])
+      {:bthread-states bthread-states
+       :bthread->bid bthread->bid}])))
 
 (defn bthreads->navigable
   "Given a navigator from `search` return a navigable data structure."
