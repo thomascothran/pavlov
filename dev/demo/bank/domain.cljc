@@ -11,7 +11,7 @@
 (defn make-request-ofac-screening-bthread
   []
   (b/bids [{:wait-on #{:application-submitted}}
-           {:request #{{:type :request-ofac-screening}}}]))
+           {:request #{{:type :ofac-screening-requested}}}]))
 
 (defn make-cip-failure-rule-bthread
   []
@@ -27,16 +27,16 @@
 
 (defn make-request-initial-deposit-bthread
   []
-  (b/bids [{:request #{{:type :request-initial-deposit}}}]))
+  (b/bids [{:request #{{:type :initial-deposit-requested}}}]))
 
 (defn make-block-deposit-until-cip-verified
   []
-  (b/bids [{:block #{:request-initial-deposit}
+  (b/bids [{:block #{:initial-deposit-requested}
             :wait-on #{:cip-verified}}]))
 
-(defn make-block-deposit-until-ofac-cleared
+(defn make-block-opening-until-ofac-cleared
   []
-  (b/bids [{:block #{:request-initial-deposit}
+  (b/bids [{:block #{:initial-deposit-requested}
             :wait-on #{:ofac-clear}}]))
 
 ;; When initial funds arrive, open the account (happy-path terminator).
@@ -65,8 +65,8 @@
    ::block-deposit-until-cip-verified
    (make-block-deposit-until-cip-verified)
 
-   ::block-deposit-until-ofac-cleared
-   (make-block-deposit-until-ofac-cleared)
+   ::block-opening-until-ofac-cleared
+   (make-block-opening-until-ofac-cleared)
 
    ::open-on-funding
    (make-open-on-funding-bthread)})
@@ -79,34 +79,26 @@
    ::pay-deposit
    (b/bids [{:request #{{:type :initial-deposit-paid}}}])})
 
+(defn make-account-opening-requires-ofac-screening-bthread
+  []
+  (b/bids [{:wait-on #{:account-opened}}
+           {:wait-on #{:ofac-clear}
+            :request #{{:type :account-opened
+                        :invariant-violated true}}}]))
+
 (defn safety-bthreads-v1
   []
   {::account-opening-requires-ofac-screening
-   (let [waits #{:account-opened
-                 :ofac-clear}]
-     (b/thread [state _event]
-       :pavlov/init
-       [{:initialized true}
-        {:wait-on waits}]
-
-       :ofac-clear
-       [(assoc state :ofac-clear true)
-        {:wait-on waits}]
-
-       :account-opened
-       [state (if (get state :ofac-clear)
-                {:wait-on #{waits}}
-                {:request #{{:type ::account-opened-without-ofac
-                             :invariant-violated true}}})]
-
-       [state {:waits waits}]))})
+   (make-account-opening-requires-ofac-screening-bthread)})
 
 (comment
   ;; Uh oh - we can open an account before the ofac is clear!
-  (check/check {:bthreads (make-bthreads-v1)
-                :environment-bthreads (make-environment-bthreads-v1)
-                :safety-bthreads (safety-bthreads-v1)
-                :check-deadlock? false #_true}))
+  (-> {:bthreads (make-bthreads-v1)
+       :environment-bthreads (make-environment-bthreads-v1)
+       :safety-bthreads (safety-bthreads-v1)
+       :check-deadlock? false #_true}
+      (check/check)
+      tap>))
 
 (comment
   (-> (reduce into (safety-bthreads-v1)
@@ -122,3 +114,5 @@
 ;; - Identity Theft Alerts
 ;; - Liquidity stress
 ;; - Large initial deposits
+;; - Litigation hold
+;; - Bankruptcy
