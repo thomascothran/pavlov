@@ -221,11 +221,11 @@ So we add a comment block:
 
 And we see the bthread explorer:
 
-![./assets/explorer1.png]
+![portal bthread explorer step 1](./assets/explorer1.png)
 
 By leveraging Portal's nav support, we can select an event and move the application down that execution path. Let's double-click `:application-submitted`.
 
-![./assets/explorer2.png]
+![portal bthread explorer step 2](./assets/explorer2.png)
 
 We can use the back button to go back, and then follow a different execution path.
 
@@ -317,7 +317,7 @@ Now, let's see what our model checker has to say. If it returns `nil`, then no v
 
 Here, however, we see there was a violation, and we know the exact execution path:
 
-![./assets/model-results.png]
+![model checker results in portal](./assets/model-results.png)
 
 The model checker provides not only the path, but the state of the bthreads, which is very useful for debugging. (LLMs work great with this as well.)
 
