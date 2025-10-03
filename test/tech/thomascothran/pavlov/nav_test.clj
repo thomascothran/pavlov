@@ -2,8 +2,7 @@
   (:require [clojure.test :refer [deftest is testing]]
             [tech.thomascothran.pavlov.bthread :as b]
             [tech.thomascothran.pavlov.event :as e]
-            [tech.thomascothran.pavlov.nav :as pnav]
-            [tech.thomascothran.pavlov.viz.portal :as vp]))
+            [tech.thomascothran.pavlov.nav :as pnav]))
 
 (defn make-test-bthreads
   []
@@ -18,9 +17,6 @@
   {:linear (b/bids [{:request [:a]}
                     {:request [:b]}
                     {:request [:c]}])})
-
-(comment
-  (tap> (vp/bthreads->navigable (make-test-bthreads))))
 
 (deftest test-nav-to
   (let [root (pnav/root (make-test-bthreads))
