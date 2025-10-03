@@ -1,6 +1,8 @@
 (ns ^:alpha tech.thomascothran.pavlov.nav
   (:refer-clojure :exclude [ancestors])
   (:require [clojure.core.protocols :as p]
+            [clojure.datafy :refer [nav]]
+            [tech.thomascothran.pavlov.event :as e]
             [tech.thomascothran.pavlov.search :as search]))
 
 (defn- node->data
@@ -51,3 +53,61 @@
   ([bthreads tf]
    (let [nav (search/make-navigator bthreads)]
      (node->data nav (search/root nav) nil [] tf))))
+
+(defn to
+  "Given a navigable, navigate to the path with the given event-type.
+
+  there may be more than one branch with the same event type.
+  In that case, the first one is returned."
+  [navigable event-type]
+  ;; bug, have to call `nav`!
+  (let [branches (:pavlov/branches navigable)
+        branch
+        (first (filter #(= event-type
+                           (e/type (:pavlov/event %)))
+                       branches))]
+    (when branch
+      (nav branches nil branch))))
+
+(defn- follow-step
+  [navigable event-type]
+  (let [event-type'
+        (if (> 2 (count (:pavlov/branches navigable)))
+          (some-> (:pavlov/branches navigable)
+                  first
+                  :pavlov/event
+                  e/type)
+          event-type)]
+    (when event-type'
+      [(to navigable event-type')])))
+
+(defn follow
+  "Given a navigable, follow the path of event-types.
+
+  Event types only need to be specified where there are branches.
+
+  If a there is only one branch to follow, it is followed automatically,
+  even if it is not in the event-types list.
+
+  If there are multiple options at a branch point, but none of them
+  are in the event-types list, then nil is returned. "
+  [navigable event-types]
+  (loop [nav-position navigable
+         remaining-event-types event-types]
+    (let [event-type (first remaining-event-types)
+
+          next-event-type
+          (or (and (= 1 (count (:pavlov/branches nav-position)))
+                   (-> nav-position :pavlov/branches first
+                       :pavlov/event e/type))
+              event-type)
+
+          next-position (to nav-position next-event-type)]
+
+      (if (and nav-position (seq remaining-event-types))
+        (recur
+         next-position
+         (if (= next-event-type event-type)
+           (rest remaining-event-types)
+           remaining-event-types))
+        nav-position))))
