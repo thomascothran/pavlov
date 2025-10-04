@@ -69,18 +69,6 @@
     (when branch
       (nav branches nil branch))))
 
-(defn- follow-step
-  [navigable event-type]
-  (let [event-type'
-        (if (> 2 (count (:pavlov/branches navigable)))
-          (some-> (:pavlov/branches navigable)
-                  first
-                  :pavlov/event
-                  e/type)
-          event-type)]
-    (when event-type'
-      [(to navigable event-type')])))
-
 (defn follow
   "Given a navigable, follow the path of event-types.
 
