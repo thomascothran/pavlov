@@ -98,6 +98,41 @@ The function passed to `on` should not throw an error. If an error is thrown:
 - an event of type `:tech.thomascothran.pavlov.bthread/unhandled-step-fn-error` will be requested
 - that event will terminate the program (unless it is blocked)
 
+### `after-all`
+
+Use `after-all` when you want to coordinate several prerequisites and only continue once they have all happened. This is especially helpful when distinct systems (or bthreads) each publish their own completion events but downstream work must begin only after every prerequisite event has been selected—for example, waiting for both payment authorization and packaging to finish before marking an order ready to ship.
+
+`after-all` takes a set of event types and a function `f`. The bthread waits on every event type in the set, in any order. Once each event type has been seen, `f` is invoked with a vector of the events in the order they arrived; the value returned by `f` becomes the next bid. After the bid from `f` is emitted, the bthread terminates and ignores further notifications.
+
+```clojure
+(require '[tech.thomascothran.pavlov.bthread :as b])
+
+(def order-ready
+  (b/after-all #{:payment/authorized :packing/completed}
+               (fn [events]
+                 (let [order-id (->> events (keep :order/id) first)]
+                   {:request #{{:type :order/ready
+                                :order/id order-id
+                                :sources (mapv :type events)}}}))))
+
+;; Your bprogram will call notify!, your application code will not call
+;; notify! directly. But notify! can be used at the REPL to see what
+;; the bthread does.
+
+(b/notify! order-ready nil)
+;; => {:wait-on #{:packing/completed :payment/authorized}}
+
+(b/notify! order-ready {:type :payment/authorized :order/id 42})
+;; => {:wait-on #{:packing/completed :payment/authorized}}
+
+(b/notify! order-ready {:type :packing/completed :order/id 42})
+;; => {:request #{{:type :order/ready
+;;                 :order/id 42
+;;                 :sources [:payment/authorized :packing/completed]}}}
+```
+
+In this example the `:order/ready` event is only requested after both upstream events have run, regardless of which one arrives first.
+
 ### Sequence Bthreads
 
 `b/bids` can create a bthread out of a sequence of bids. It is only for finite, relatively short sequences.
