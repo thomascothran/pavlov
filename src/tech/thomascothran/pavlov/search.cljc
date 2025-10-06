@@ -3,7 +3,7 @@
   (:require [tech.thomascothran.pavlov.event.selection :as selection]
             [tech.thomascothran.pavlov.bthread :as b]
             [tech.thomascothran.pavlov.bprogram.state :as state])
-  (:import [clojure.lang PersistentQueue]))
+  #?(:clj (:import [clojure.lang PersistentQueue])))
 
 ;; helper functions
 
@@ -42,7 +42,9 @@
                    (cons s
                          (step (into frontier' (map :state (succ nav s)))
                                (conj seen sid))))))))]
-    (step (conj PersistentQueue/EMPTY (root nav)) #{})))
+    (step (conj #?(:clj PersistentQueue/EMPTY
+                   :cljs cljs.core/PersistentQueue.EMPTY)
+                (root nav)) #{})))
 
 (defn bfs-reduce
   "Breadth-first traversal of NAV.
@@ -50,7 +52,9 @@
    init – initial accumulator
    Returns the final accumulator, or a (reduced …) early-exit value."
   [nav f init]
-  (loop [queue (conj PersistentQueue/EMPTY (root nav))
+  (loop [queue (conj #?(:clj PersistentQueue/EMPTY
+                        :cljs cljs.core/PersistentQueue.EMPTY)
+                     (root nav))
          seen #{}
          acc init]
     (if (seq queue)

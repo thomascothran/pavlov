@@ -2,7 +2,8 @@
   (:refer-clojure :exclude [repeat])
   (:require [tech.thomascothran.pavlov.bthread.proto :as proto]
             [tech.thomascothran.pavlov.event.proto :as event-proto]
-            [tech.thomascothran.pavlov.defaults]))
+            [tech.thomascothran.pavlov.defaults])
+  #?(:cljs (:require-macros [tech.thomascothran.pavlov.bthread])))
 
 (defn notify!
   [bthread event]

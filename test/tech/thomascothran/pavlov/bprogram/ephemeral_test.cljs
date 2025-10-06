@@ -9,14 +9,16 @@
 (deftest good-morning-and-evening
   (async done
          (let [bthreads
-               [(bthread/repeat 4 {:request #{:good-morning}})
+               [[:good-morning (bthread/repeat 4 {:request #{:good-morning}})]
 
-                (bthread/repeat  4 {:request #{:good-evening}})
-                (bthread/round-robin
-                 [{:wait-on #{:good-morning}
-                   :block #{:good-evening}}
-                  {:wait-on #{:good-evening}
-                   :block #{:good-morning}}])]
+                [:good-even (bthread/repeat 4 {:request #{:good-evening}})]
+
+                [:round-robin
+                 (bthread/round-robin
+                  [{:wait-on #{:good-morning}
+                    :block #{:good-evening}}
+                   {:wait-on #{:good-evening}
+                    :block #{:good-morning}}])]]
                !a        (atom [])
                subscriber  (fn [x _]
                              (swap! !a conj x))
@@ -32,8 +34,9 @@
 
 (deftest add-subscriber
   (async done
-         (let [bthreads [(bthread/bids [{:wait-on #{:go}}
-                                        {:request #{:some-event}}])]
+         (let [bthreads [[:bthread
+                          (bthread/bids [{:wait-on #{:go}}
+                                         {:request #{:some-event}}])]]
 
                !a         (atom [])
                subscriber (fn [x _] (swap! !a conj x))
@@ -79,7 +82,6 @@
   and terminate the pogram."
   [path-events]
   (bthread/step
-   [::winning-bthreads path-events]
    (fn [{:keys [remaining-events] :as acc} event]
      (let [event-type (event/type event)
            remaining-events' (disj remaining-events event-type)
@@ -90,7 +92,7 @@
        (cond (nil? event) ;; event is nil on initialization
              [{:remaining-events (set path-events)} default-bid]
 
-             ;; Terminate - we've won!
+              ;; Terminate - we've won!
              (= remaining-events #{event-type})
              [{:remaining-events remaining-events'}
               {:request #{{:type [(last event-type) :wins]
@@ -126,7 +128,10 @@
 (deftest tic-tac-toe-simple-win
   (async
    done
-   (let [bthreads (mapv make-winning-bthreads winning-event-set)
+   (let [bthreads (mapv (fn [evts]
+                          [[::winning-evts evts]
+                           (make-winning-bthreads evts)])
+                        winning-event-set)
          events   [{:type [0 0 :o]}
                    {:type [1 1 :o]}
                    {:type [2 2 :o]}]
@@ -143,26 +148,30 @@
                      (take 5 @!a)))
               (done))))))
 
-;; Now we need to handle moves.
-;; But we need some rules.
-;; First, you can't pick the same square
+;; ;; Now we need to handle moves.
+;; ;; But we need some rules.
+;; ;; First, you can't pick the same square
 (defn make-no-double-placement-bthreads
   "You can't pick another player's square!"
   []
   (for [x-coordinate [0 1 2]
         y-coordinate [0 1 2]
         player [:x :o]]
-    (bthread/bids
-     [{:wait-on #{[x-coordinate y-coordinate player]}}
-      {:block #{[x-coordinate y-coordinate (if (= player :x) :o :x)]}}])))
+    [[::make-no-double-placement-bthreads {:x-coordinate x-coordinate
+                                           :y-coordinate y-coordinate
+                                           :player player}]
+     (bthread/bids
+      [{:wait-on #{[x-coordinate y-coordinate player]}}
+       {:block #{[x-coordinate y-coordinate (if (= player :x) :o :x)]}}])]))
 
 (defn make-computer-picks-bthreads
   "Without worrying about strategy, let's pick a square"
   [player]
-  (bthread/bids
-   (for [x-coordinate [0 1 2]
-         y-coordinate [0 1 2]]
-     {:request #{{:type [x-coordinate y-coordinate player]}}})))
+  [::computer-picks
+   (bthread/bids
+    (for [x-coordinate [0 1 2]
+          y-coordinate [0 1 2]]
+      {:request #{{:type [x-coordinate y-coordinate player]}}}))])
 
 ;; But wait? Doesn't `make-computer-picks` need to account for
 ;; the squares that are already occupied?
@@ -181,10 +190,13 @@
    (let [bthreads
          (reduce into
                  []
-                 [(mapv make-winning-bthreads winning-event-set)
+                 [(mapv (fn [e]
+                          [[::winning-event e]
+                           (make-winning-bthreads e)])
+                        winning-event-set)
                   (make-no-double-placement-bthreads)
                   [(make-computer-picks-bthreads :o)
-                   (bthread/bids [{:type [0 0 :o]}])]])
+                   [:o-pick-00 (bthread/bids [{:type [0 0 :o]}])]]])
 
          !a        (atom [])
          subscriber  (fn [x _] (swap! !a conj x))
@@ -204,12 +216,11 @@
               (is (= [:o :wins]
                      (event/type (last @!a))))
               (done))))))
-
-;; Great!
-;; We were able to get our computer to make moves.
-;; But it's just going to keep picking without waiting for
-;; the other player!
-;; We need a bthread that enforces turns.
+;; ;; Great!
+;; ;; We were able to get our computer to make moves.
+;; ;; But it's just going to keep picking without waiting for
+;; ;; the other player!
+;; ;; We need a bthread that enforces turns.
 
 (defn make-enforce-turn-bthreads
   []
