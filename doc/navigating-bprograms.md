@@ -162,8 +162,6 @@ Tip: If you want a single bthread to offer multiple alternatives at once, use a 
 - Use `pnav/follow` to automate through linear stretches, only specifying event-types at branch points
 - Inspect `:pavlov/crumbs`, `:pavlov/path`, and `:pavlov/bthreads` to reason about history and state
 
-All snippets in this guide are REPL-verified.
-
 ## Troubleshooting
 
 - No branch found: `pnav/to` returns `nil` when there is no branch with the given event-type at the current node (or `pnav/follow` returns a node with `:pavlov/event` `nil` at the end).
