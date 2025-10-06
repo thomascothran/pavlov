@@ -28,9 +28,22 @@ For a deeper introduction to the lifecycle of bthreads and how bids work, see [W
 
 ## Bprograms
 
-The bprogram will select the next event based on the bids. Any event that is blocked by any bthread will never be selected. Importantly, this means bthreads block events requested by other bthreads.
+The bprogram will select the next event based on the bids. Any event that is blocked by any bthread will never be selected.
 
-Bthreads are assigned a priority based on how you supply them to the program. When you pass a vector of `[name bthread]` pairs, earlier entries have higher priority. When you pass a map, Clojure's iteration order makes the priority effectively non-deterministic, so treat those bthreads as peers. The bprogram selects the highest-priority bthread that has at least one unblocked request, and within a single bid it respects the order of the request collection (ordered collections establish per-event priority, while sets treat all requested events equally).
+This means bthreads can block events requested by other bthreads.
+
+The main purpose of a behavioral program is to select the next event, and notify all bthreads subscribed to that event type. Bthreads only subscribe to events if they request them or or waiting on them.
+
+### Event Selection Rules
+
+The bprogram will select an event according to the following rules:
+
+1. Find the highest priority bthread which as requested at least one unblocked event
+2. Select the highest priority event requested by that bthread
+
+Bprograms use clojure's collection semantics to determine priority order. Unordered collections (maps for bthreads and sets for requested events) have a non-deterministic priority. In most cases this is fine.
+
+However, ordered collections (a sequence of bthread name, bthread pairs for bthreads; or a vector for requested events) can be used to impose a deterministic priority order.
 
 ## Internal and External Events
 
