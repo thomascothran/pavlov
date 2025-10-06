@@ -8,15 +8,13 @@ Pavlov is an opinionated behavioral programming library for Clojure(Script).
 
 Behavioral programming (BP) is an event-driven programming paradigm that strongly decomplects application behaviors.
 
-Pavlov can be used for strongly Pavlov also supports using a behavioral program as a synchronous function call.
+Pavlov can drive long-running, event-driven systems, and it also supports executing a behavioral program like a synchronous function call when you need single-shot coordination.
 
 ![bprogram diagram](./doc/assets/bprogram.png)
 
 ## Bthreads
 
-In BP, a unit of application behavior is a bthread. Bthreads can be run in parallel. Bthreads park until an event they are interested in occurs.
-
-Are assembled in pub-sub system -- a bprogram. A bid can:
+In BP, a unit of application behavior is a bthread. Bthreads can run in parallel and park until an event they are interested in occurs. Bthreads are assembled into a pub-sub system—a bprogram. Each bid can:
 
 1. Request events
 2. Wait on events
@@ -26,11 +24,13 @@ Events may come from an external process. This can be anything: not only a bid f
 
 When an event occurs, all bthreads that have either requested that event or are waiting on that event submit their next bid.
 
+For a deeper introduction to the lifecycle of bthreads and how bids work, see [What is a bthread?](./doc/what-is-a-bthread.md). To explore groups of bthreads interactively, see [Navigating Behavioral Programs](./doc/navigating-bprograms.md).
+
 ## Bprograms
 
 The bprogram will select the next event based on the bids. Any event that is blocked by any bthread will never be selected. Importantly, this means bthreads block events requested by other bthreads.
 
-Bthreads are assigned a priority. The bprogram selects the bthread with a) the highest priority and b) at least one requested event that is not blocked.
+Bthreads are assigned a priority based on how you supply them to the program. When you pass a vector of `[name bthread]` pairs, earlier entries have higher priority. When you pass a map, Clojure's iteration order makes the priority effectively non-deterministic, so treat those bthreads as peers. The bprogram selects the highest-priority bthread that has at least one unblocked request, and within a single bid it respects the order of the request collection (ordered collections establish per-event priority, while sets treat all requested events equally).
 
 ## Internal and External Events
 
@@ -51,17 +51,28 @@ Let's suppose we have an industrial process which should have the following beha
 ```clojure
 (ns water-controls.app
   (:require [tech.thomascothran.pavlov.bthread :as b]
-            [tech.thomascothran.pavlov.bprogram :as bp]))
+            [tech.thomascothran.pavlov.bprogram :as bp]
+            [tech.thomascothran.pavlov.bprogram.ephemeral :as bpe]))
 
-(def water-app
-  (let [add-hot  (b/repeat 3 {:request #{:add-hot-water}})
-        add-cold (b/repeat 3 {:request #{:add-cold-water}})
-        alt-temp (b/round-robin
-                   [(b/repeat {:wait-on #{:add-cold-water}
-                               :block #{:add-hot-water}})
-                    (b/repeat {:wait-on #{:add-hot-water}
-                               :block #{:add-cold-water}})])]
-    (bp/make-program! [add-hot add-cold alt-temp]))
+(defn log-step [event program]
+  (println "selected" event)
+  (println "bids" (bp/bthread->bids program))
+  (println "---"))
+
+@(bpe/execute!
+   [[:add-hot (b/repeat 3 {:request #{:add-hot-water}})]
+    [:add-cold (b/repeat 3 {:request #{:add-cold-water}})]
+    [:alternator
+     (b/round-robin
+       [(b/repeat {:wait-on #{:add-cold-water}
+                   :block #{:add-hot-water}})
+        (b/repeat {:wait-on #{:add-hot-water}
+                   :block #{:add-cold-water}})])]]
+   {:subscribers {:logger log-step}
+    :kill-after 50}) ;; if program has not exited by 50 ms, kill it
+;; => prints each selected event with its active bids
+;; => {:type :tech.thomascothran.pavlov.bprogram.ephemeral/deadlock,
+;;     :terminal true}
 ```
 
 ## Creating bthreads
@@ -227,20 +238,39 @@ As an example:
 (require '[tech.thomascothran.pavlov.bthread :as b])
 
 (defn only-thrice
-  [prev-state event]
-  (cond (not event) ;; initialization
-        [0 {:wait-on #{:test}}]
+  [{:keys [count done?] :as state} event]
+  (cond
+    (nil? event)
+    [{:count 0} {:wait-on #{:test}}]
 
-        (< prev-state 3)
-        [(inc prev-state) {:wait-on #{:test}}]))
+    done?
+    [state nil]
 
-(def count-down-bthread
-  (b/step only-thrice))
+    (< count 2)
+    [{:count (inc count)} {:wait-on #{:test}}]
+
+    :else
+    [{:count (inc count) :done? true} nil]))
+
+(def count-down-bthread (b/step only-thrice))
+
+;; b/notify! will never be called in real application code,
+;; but it is useful at the REPL to see what the bthread does.
+[(b/notify! count-down-bthread nil)
+ (b/notify! count-down-bthread {:type :test})
+ (b/notify! count-down-bthread {:type :test})
+ (b/notify! count-down-bthread {:type :test})
+ (b/state count-down-bthread)]
+;; => [{:wait-on #{:test}}
+;;     {:wait-on #{:test}}
+;;     {:wait-on #{:test}}
+;;     nil
+;;     {:count 3, :done? true}]
 ```
 
-The bthread will keep track of the state, and the behavioral program keeps track of this (and all other) bthread bids.
+The bthread keeps track of its state, and the behavioral program keeps track of this (and all other) bthread bids.
 
-The step function is called once on initialization with a `nil` event. Thereafter, it parks until the `:test` event is emitted. On the third time, the bthread returns nil, at which point it will not be called anymore.
+The step function is called once on initialization with a `nil` event. Thereafter, it parks until the `:test` event is emitted. After the third `:test` event the bid returns `nil`, and subsequent notifications leave the bthread parked with the `:done?` flag set.
 
 #### Errors in Step Functions
 
@@ -360,12 +390,14 @@ Subscribers may be passed in when the bprogram is created:
 
 (def subscribers
   {:logger (fn [event bthread->bid]
-              (pprint {:event event
-                       :bthread->bid bthread->bid}))})
+             (pprint {:event event
+                      :bthread->bid bthread->bid}))})
 
-@(bpe/execute! {:bthread-1 {:request #{:event-a}}
-                :bthread-2 {:request #{:event-b}}]
-               {:subscribers subscribers})
+@(bpe/execute!
+   [[:bthread-1 {:request #{:event-a}}]
+    [:bthread-2 {:request #{:event-b}}]]
+   {:subscribers subscribers
+    :kill-after 50})
 ```
 
 See the namespace `tech.thomascothran.pavlov.subscribers.tap` for an implementation of a subscriber.
@@ -415,12 +447,14 @@ Here is an example of how the tap publisher can be used with [portal](https://gi
 
 ;; Set up portal
 (def p (portal/open))
-(add-tap #'portal/submit)))
+(add-tap #'portal/submit)
 
 ;; Run the program
-@(bpe/execute {:bthread-1 {:request #{:event-a}}
-               :bthread-2 {:request #{:event-b}}
-              {:subscribers {:tap taps/subscriber}}) ;; <- add the tap
+@(bpe/execute!
+   [[:bthread-1 {:request #{:event-a}}]
+    [:bthread-2 {:request #{:event-b}}]]
+   {:subscribers {:tap taps/subscriber}
+    :kill-after 50}) ;; <- add the tap
 ```
 
 ### Reasoning about bprograms
