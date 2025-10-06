@@ -1,6 +1,5 @@
 (ns dev
   (:require [portal.api :as portal]
-            [flow-storm.api :as fs-api]
             [cljs.repl.browser :as b]
             [cider.piggieback :as p]
             [nrepl.server :as nrepl]
@@ -56,10 +55,6 @@
   :cljs/quit)
 
 (comment
-  (fs-api/local-connect))
-
-(comment
   (do
-    (require '[portal.api :as portal])
     (def p (portal/open))
     (add-tap #'portal/submit)))

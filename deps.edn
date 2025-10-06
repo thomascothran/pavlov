@@ -10,7 +10,8 @@
                      nrepl/nrepl {:mvn/version "1.2.0"}
                      cider/piggieback {:mvn/version "0.4.2"}
                      org.clojure/clojure {:mvn/version "1.11.1"}
-                     thheller/shadow-cljs {:mvn/version "2.28.18"}}
+                     thheller/shadow-cljs {:mvn/version "2.28.18"}
+                     djblue/portal {:mvn/version "0.61.0"}}
         :extra-paths ["dev"]}
   :build {:deps {io.github.clojure/tools.build
                  {:mvn/version "0.9.6"}
