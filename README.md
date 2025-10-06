@@ -1,16 +1,21 @@
 # Pavlov: Behavioral Programming for Clojure
 
-*Status: pre-release.*
+*Status: alpha*
 
 [![Clojars Project](https://img.shields.io/clojars/v/tech.thomascothran/pavlov.svg)](https://clojars.org/tech.thomascothran/pavlov)
 
-Pavlov is an opinionated behavioral programming library for Clojure(Script).
+Pavlov is an opinionated [behavioral programming](https://cacm.acm.org/research/behavioral-programming/#R26) library for Clojure(Script). Behavioral programming was invented by David Harel, who also invented statecharts. It has a solid theoretical foundation, and is extremely simple by design.
 
-Behavioral programming (BP) is an event-driven programming paradigm that strongly decomplects application behaviors.
+Behavioral programming uses a basic unit called a bthread (for "behavioral thread"). Bthreads encapsulate behaviors.  They park until events to which they are subscribed occur. Bthreads communicate exclusively via queues.
 
-Pavlov can drive long-running, event-driven systems, and it also supports executing a behavioral program like a synchronous function call when you need single-shot coordination.
+Bthreads are composed together into behavioral programs. These can be long-running in event-driven systems. Or they can be invoked as a synchronous function. The bprogram's queue can be treated as an implementation detail - and a behavioral program can be called just like a synchronous function.
 
-![bprogram diagram](./doc/assets/bprogram.png)
+Pavlov's implementation of behavioral programming:
+
+- Is navigable via `nav`. Use portal for point and click navigation of the branching execution paths of a program. As you navigate, the program state automatically resets.
+- Comes with model checking (for free). Use a model checker to drive development. Given a set of behaviors, specify the valid final events and safety properties, and the model checker will walk you (or an LLM) through writing the application.
+- Enables durable programs - programs that serialize to disk.
+
 
 ## Bthreads
 
@@ -44,6 +49,8 @@ The bprogram will select an event according to the following rules:
 Bprograms use clojure's collection semantics to determine priority order. Unordered collections (maps for bthreads and sets for requested events) have a non-deterministic priority. In most cases this is fine.
 
 However, ordered collections (a sequence of bthread name, bthread pairs for bthreads; or a vector for requested events) can be used to impose a deterministic priority order.
+
+![bprogram diagram](./doc/assets/bprogram.png)
 
 ## Internal and External Events
 
