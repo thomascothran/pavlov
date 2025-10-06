@@ -50,8 +50,6 @@ Bprograms use clojure's collection semantics to determine priority order. Unorde
 
 However, ordered collections (a sequence of bthread name, bthread pairs for bthreads; or a vector for requested events) can be used to impose a deterministic priority order.
 
-![bprogram diagram](./doc/assets/bprogram.png)
-
 ## Internal and External Events
 
 All events requested by bthreads will be handled before external events.
