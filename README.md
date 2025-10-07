@@ -16,14 +16,21 @@ Pavlov's implementation of behavioral programming:
 - Comes with model checking (for free). Use a model checker to drive development. Given a set of behaviors, specify the valid final events and safety properties, and the model checker will walk you (or an LLM) through writing the application.
 - Enables durable programs - programs that serialize to disk.
 
+## Design Goals
+
+1. *Zero dependencies*.
+2. *Swappable implementations*. Bthreads and bprograms are open for extension and modification.
+3. *BYO parallelization*. Bthreads can run in parallel and you should choose how. Bring your own thread pool, or use core.async.
 
 ## Bthreads
 
-In BP, a unit of application behavior is a bthread. Bthreads can run in parallel and park until an event they are interested in occurs. Bthreads are assembled into a pub-sub system—a bprogram. Each bid can:
+In BP, a unit of application behavior is a bthread. Bthreads can run in parallel and park until an event they are interested in occurs. Bthreads are assembled into a pub-sub system—a bprogram. Each bprogram can:
 
 1. Request events
 2. Wait on events
 3. Block events
+
+Bprograms do this by returning a bid when they are either initialized or notified of an event to which they are subscribed.
 
 Events may come from an external process. This can be anything: not only a bid from a bthread, but a user action in a UI, an event from a Kafka queue, an HTTP request, etc.
 
@@ -37,13 +44,13 @@ The bprogram will select the next event based on the bids. Any event that is blo
 
 This means bthreads can block events requested by other bthreads.
 
-The main purpose of a behavioral program is to select the next event, and notify all bthreads subscribed to that event type. Bthreads only subscribe to events if they request them or or waiting on them.
+The main purpose of a behavioral program is to select the next event, and notify all bthreads subscribed to that event type. Bthreads only subscribe to events if they request them or are waiting on them.
 
 ### Event Selection Rules
 
 The bprogram will select an event according to the following rules:
 
-1. Find the highest priority bthread which as requested at least one unblocked event
+1. Find the highest priority bthread which has requested at least one unblocked event
 2. Select the highest priority event requested by that bthread
 
 Bprograms use clojure's collection semantics to determine priority order. Unordered collections (maps for bthreads and sets for requested events) have a non-deterministic priority. In most cases this is fine.
@@ -95,7 +102,7 @@ Let's suppose we have an industrial process which should have the following beha
 
 ## Creating bthreads
 
-Bthreads are sequential and stateful. They can run in parallel and be parked when they are waiting on events.
+Bthreads are stateful. They can run in parallel and be parked when they are waiting on events.
 
 The bid a bthread produces can request events, wait on events, or block events in other bthreads. Bthreads do not directly know about each other.
 
@@ -444,7 +451,7 @@ Despite the ability to run concurrently, every step in the bprogram's execution 
 
 `pavlov`'s bprogram takes functions in the `subscribers` options map, which are invoked on each sync point.
 
-The functions in `subscribers` re invoked with two arguments: the selected bid, and a map of each bthread to its bid.
+The functions in `subscribers` are invoked with two arguments: the selected bid, and a map of each bthread to its bid.
 
 A `tap` subscriber is implemented in `tech.thomascothran.pavlov.subscribers.tap`. This subscriber shows, on each sync:
 
@@ -484,11 +491,6 @@ Here is an example of how the tap publisher can be used with [portal](https://gi
 - append only programming. This is enabled by the ability of a bthread to block another bthread.
 - behavioral programming lends itself to model checking - without the need to write TLA+
 
-## Design Goals
-
-1. *Zero dependencies*.
-2. *Swappable implementations*. Bthreads and bprograms are open for extension and modification.
-3. *BYO parallelization*. Bthreads can run in parallel and you should choose how. Bring your own thread pool, or use core.async.
 
 ## Further Reading
 
