@@ -21,6 +21,7 @@ Pavlov's implementation of behavioral programming:
 1. *Zero dependencies*.
 2. *Swappable implementations*. Bthreads and bprograms are open for extension and modification.
 3. *BYO parallelization*. Bthreads can run in parallel and you should choose how. Bring your own thread pool, or use core.async.
+4. *CLJS support*.
 
 ## Bthreads
 
