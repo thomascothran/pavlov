@@ -101,6 +101,14 @@
                              :check-deadlock? true})]
     (is result)))
 
+(deftest error-thrown-in-step-fn
+  (let [bthreads {:throw (b/step (fn [state event]
+                                   (throw (ex-info "boom" {:state state
+                                                           :event event}))))}
+        result (check/check {:bthreads bthreads
+                             :check-deadlock? true})]
+    (is result)))
+
 (defn make-update-sync-bthreads
   []
   [[:request-cms-sync-bthreads
