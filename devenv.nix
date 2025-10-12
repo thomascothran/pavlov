@@ -18,7 +18,7 @@
   # languages.rust.enable = true;
 
   # https://devenv.sh/processes/
-  # processes.cargo-watch.exec = "cargo-watch";
+  processes.clj.exec = "clj -A:dev:test -X dev/go!";
 
   # https://devenv.sh/services/
   # services.postgres.enable = true;
