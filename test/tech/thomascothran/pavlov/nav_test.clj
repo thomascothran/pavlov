@@ -19,10 +19,18 @@
                     {:request [:c]}])})
 
 (deftest test-nav-to
-  (let [root (pnav/root (make-test-bthreads))
-        at-first-branch (pnav/to root 1)]
-    (is (= 1 (e/type (:pavlov/event at-first-branch))))
-    (is (:pavlov/branches at-first-branch))))
+  (testing "with event types"
+    (let [root (pnav/root (make-test-bthreads))
+          at-first-branch (pnav/to root 1)]
+      (is (= 1 (e/type (:pavlov/event at-first-branch))))
+      (is (:pavlov/branches at-first-branch))))
+
+  (testing "with functions"
+    (let [root (pnav/root (make-test-bthreads))
+          at-first-branch (pnav/to root (comp (partial = 1)
+                                              e/type))]
+      (is (= 1 (e/type (:pavlov/event at-first-branch))))
+      (is (:pavlov/branches at-first-branch)))))
 
 (deftest test-follow
   (let [root (pnav/root (make-test-bthreads))

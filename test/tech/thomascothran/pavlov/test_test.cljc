@@ -1,6 +1,7 @@
 (ns tech.thomascothran.pavlov.test-test
   (:require [clojure.test :refer [deftest is]]
             [tech.thomascothran.pavlov.test :as ptest]
+            [tech.thomascothran.pavlov.event :as e]
             [tech.thomascothran.pavlov.bthread :as b]))
 
 (deftest test-scenario-success
@@ -32,3 +33,25 @@
            (into #{}
                  (map #(get % :pavlov/event))
                  (get result :available-branches))))))
+
+(deftest test-branch-with-same-event-types
+  (let [bthreads
+        {:event-a (b/bids [{:request #{:event-a}}])
+         :branch (b/bids [{:request #{{:type :event-b
+                                       :flag false}
+                                      {:type :event-b
+                                       :flag true}}}])
+         :event-b-handler
+         (b/on :event-b
+               (fn [{:keys [flag]}]
+                 (when flag
+                   {:request #{:terminate}})))}
+
+        result (ptest/scenario bthreads [:event-a
+                                         (fn [event]
+                                           (and (= :event-b
+                                                   (e/type event))
+                                                (get event :flag)))
+                                         :terminate])]
+
+    (is (get result :success))))
