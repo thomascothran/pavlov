@@ -45,7 +45,7 @@
        :state state}
 
       ;; Check for deadlock
-      (and (:check-deadlock? config)
+      (and (not= false (:check-deadlock? config))
            (nil? next-event)
            (not (get-in state [:last-event :terminal])))
       {:type :deadlock
@@ -61,15 +61,14 @@
 
   Explores the state space once, checking for:
   - Safety violations (events with :invariant-violated true)
-  - Deadlocks (if :check-deadlock? is true)
-  - Liveness violations/cycles (if :check-liveness? is true)
+  - Deadlocks (unless :check-deadlock? is false)
 
   Parameters:
   - config: map with keys:
     :bthreads - the bthreads under test
     :safety-bthreads - bthreads that detect violations
     :environment-bthreads - bthreads that generate events
-    :check-deadlock? - if true, detect deadlocks (default: false)
+    :check-deadlock? - if true, detect deadlocks (default: true)
   Returns:
   - nil if no violations found
   - {:type :safety-violation :event event :path [events] :state state}

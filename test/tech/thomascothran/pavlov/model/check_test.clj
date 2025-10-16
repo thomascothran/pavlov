@@ -7,7 +7,8 @@
   (testing "Model checker should verify good-morning/good-evening alternation"
     (let [result
           (check/check
-           {:bthreads
+           {:check-deadlock? false
+            :bthreads
             {:good-morning
              (b/repeat 4 {:request #{:good-morning}})
 
