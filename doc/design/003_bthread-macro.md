@@ -107,3 +107,7 @@ Or we could do something like:
       [prev-state {:wait-on #{:fire-missiles}}]))
 
 ```
+
+## Decision
+
+Option A
