@@ -1,7 +1,7 @@
-{:paths ["src" "resources"]
- :deps {}
+{:deps {tech.thomascothran/pavlov {:local/root "./modules/pavlov"}
+        tech.thomascothran/pavlov-devtools {:local/root "./modules/pavlov-devtools"}}
  :aliases
- {:test {:extra-paths ["test"]
+ {:test {:extra-paths ["modules/pavlov/test" "modules/pavlov-devtools/test"]
          :extra-deps {org.clojure/test.check {:mvn/version "1.1.1"}
                       lambdaisland/kaocha {:mvn/version "1.91.1392"}
                       org.clojure/math.combinatorics {:mvn/version "0.3.0"}}
@@ -12,8 +12,4 @@
                      org.clojure/clojure {:mvn/version "1.11.1"}
                      thheller/shadow-cljs {:mvn/version "2.28.18"}
                      djblue/portal {:mvn/version "0.61.0"}}
-        :extra-paths ["dev"]}
-  :build {:deps {io.github.clojure/tools.build
-                 {:mvn/version "0.9.6"}
-                 slipset/deps-deploy {:mvn/version "0.2.0"}}
-          :ns-default build}}}
+        :extra-paths ["dev"]}}}

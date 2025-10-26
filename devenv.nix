@@ -29,6 +29,7 @@
   '';
   scripts.deploy.exec = ''
     clj -X:test
+    cd ./modules/pavlov
     clj -T:build ci
     env $(cat ~/.secrets/.clojars | xargs) clj -T:build deploy
   '';
