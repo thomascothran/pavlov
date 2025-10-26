@@ -1,18 +1,18 @@
 (ns ^:alpha tech.thomascothran.pavlov.viz.cytoscape
-  (:require [tech.thomascothran.pavlov.graph :as graph]
-            [tech.thomascothran.pavlov.event :as e]))
+  (:require [clojure.string :as str]
+            [tech.thomascothran.pavlov.event :as e]
+            [tech.thomascothran.pavlov.graph :as graph]))
 
 (defn- path->id
   [path]
   (pr-str path))
 
 (defn- label-for
-  [path]
-  (if (empty? path)
-    "initialize"
-    (some-> (last path)
-            ;; e/type
-            pr-str)))
+  [path event]
+  (cond
+    (empty? path) "initialize"
+    (some? event) (-> (or (e/type event) event) pr-str)
+    :else (-> (last path) pr-str)))
 
 (def ^:private state-keys
   [:last-event :next-event :requests :waits :blocks :bthread->bid :bthreads-by-priority])
@@ -39,7 +39,7 @@
                          default-state)}))
 
 (defn- node-meta
-  [path _identifier event wrapped]
+  [path event wrapped]
   (let [{saved-bthread-states :saved-bthread-states
          state :bprogram/state} (wrapped->meta wrapped)]
     {:path path
@@ -47,14 +47,31 @@
      :saved-bthread-states saved-bthread-states
      :bprogram/state state}))
 
+(defn- event-flags
+  [event]
+  (let [flag? (fn [k]
+                (boolean (and (map? event)
+                              (get event k))))]
+    {:environment? (flag? :environment)
+     :terminal? (flag? :terminal)
+     :invariant? (flag? :invariant-violated)}))
+
 (defn- node->cy-data
-  [[path {:keys [identifier event wrapped]}]]
-  {:data {:id (path->id path)
-          :label (label-for path)
-          :path path
-          :identifier identifier
-          :event event
-          :meta (node-meta path identifier event wrapped)}})
+  [[path {:keys [event wrapped]}]]
+  (let [meta (node-meta path event wrapped)
+        flags (event-flags event)
+        classes (->> [(when (:environment? flags) "environment")
+                      (when (:terminal? flags) "terminal")
+                      (when (:invariant? flags) "invariant")]
+                     (remove nil?)
+                     (str/join " "))]
+    (cond-> {:data {:id (path->id path)
+                    :label (label-for path event)
+                    :path path
+                    :event event
+                    :meta meta
+                    :flags flags}}
+      (seq classes) (assoc :classes classes))))
 
 (defn- edge->cy-data
   [{:keys [from to] :as edge}]

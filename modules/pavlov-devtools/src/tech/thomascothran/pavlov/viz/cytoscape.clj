@@ -1,5 +1,6 @@
 (ns ^:alpha tech.thomascothran.pavlov.viz.cytoscape
   (:require [clojure.string :as str]
+            [tech.thomascothran.pavlov.event :as e]
             [tech.thomascothran.pavlov.graph :as graph]))
 
 (defn- path->id
@@ -7,10 +8,11 @@
   (pr-str path))
 
 (defn- label-for
-  [path]
-  (if (empty? path)
-    "initialize"
-    (pr-str (last path))))
+  [path event]
+  (cond
+    (empty? path) "initialize"
+    (some? event) (-> (or (e/type event) event) pr-str)
+    :else (-> (last path) pr-str)))
 
 (def ^:private state-keys
   [:last-event :next-event :requests :waits :blocks :bthread->bid :bthreads-by-priority])
@@ -64,7 +66,7 @@
                      (remove nil?)
                      (str/join " "))]
     (cond-> {:data {:id (path->id path)
-                    :label (label-for path)
+                    :label (label-for path event)
                     :path path
                     :event event
                     :meta meta
