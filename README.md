@@ -432,6 +432,8 @@ See the namespace `tech.thomascothran.pavlov.subscribers.tap` for an implementat
 
 It may seem that behavioral programming makes programs both harder to reason about and harder to visualize as they execute. In fact, the opposite is the case.
 
+The pavlov devtools module is provided to help you visualize and understand program execution.
+
 ### Pavlov Program Navigator (Portal Integration)
 
 The Pavlov Program Navigator is a visual exploration tool that connects your behavioral programs (b-threads) in Clojure with Portal, allowing you to walk through possible execution paths-—including branching decisions and history—click by click.
@@ -487,7 +489,6 @@ Here is an example of how the tap publisher can be used with [portal](https://gi
 
 `pavlov` is intrinsically easier to reason about than a typical program for a few reasons:
 
-- strict separation of logic from side effects. bthreads in pavlov are pure functions
 - strong isolation of behavior. Each bthread encapsulates a single behavior and shares no state. Bthreads can be tested in isolation
 - append only programming. This is enabled by the ability of a bthread to block another bthread.
 - behavioral programming lends itself to model checking - without the need to write TLA+
