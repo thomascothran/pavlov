@@ -9,7 +9,6 @@
   :dev {:extra-deps {org.clojure/clojurescript {:mvn/version "1.11.54"}
                      nrepl/nrepl {:mvn/version "1.2.0"}
                      cider/piggieback {:mvn/version "0.4.2"}
-                     org.clojure/clojure {:mvn/version "1.11.1"}
-                     thheller/shadow-cljs {:mvn/version "2.28.18"}
-                     djblue/portal {:mvn/version "0.61.0"}}
+                     org.clojure/clojure {:mvn/version "1.12.1"}
+                     thheller/shadow-cljs {:mvn/version "2.28.18"}}
         :extra-paths ["dev"]}}}
