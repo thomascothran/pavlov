@@ -3,7 +3,6 @@
   (:require [clojure.java.io :as io]
             [clojure.string :as str]
             [jsonista.core :as json]
-            [tech.thomascothran.pavlov.graph :as graph]
             [tech.thomascothran.pavlov.viz.cytoscape :as cytoscape]))
 
 (def ^:private template-resource "viz/cytoscape/shell.html")
@@ -49,16 +48,23 @@
   "Return a browser-ready Cytoscape HTML document for `bthreads`."
   [bthreads]
   (-> bthreads
-      graph/->graph
-      -graph
+      cytoscape/graph->cytoscape
       ->page))
 
 (comment
   (require '[tech.thomascothran.pavlov.bthread :as b])
 
-  (def demo-bthreads
+  (defn make-bthreads
+    []
     {:linear (b/bids [{:request #{:begin}}
-                      {:request #{:finish}}])})
+                      {:request #{{:type :step-1}}}
+                      {:request #{{:type :step-2
+                                   :invariant-violated true}}}
+                      {:request #{{:type :step-3
+                                   :environment true}}}
+                      {:request #{{:type :step-4
+                                   :terminal true}}}])})
 
+  (spit "cytoscape-test.html" (->html (make-bthreads)))
   ;; Produces a full HTML page containing serialized Cytoscape data.
-  (subs (->html demo-bthreads) 0 200))
+  (subs (->html (make-bthreads)) 0 200))

@@ -1,5 +1,6 @@
 (ns ^:alpha tech.thomascothran.pavlov.viz.cytoscape
-  (:require [tech.thomascothran.pavlov.graph :as graph]))
+  (:require [clojure.string :as str]
+            [tech.thomascothran.pavlov.graph :as graph]))
 
 (defn- path->id
   [path]
@@ -36,23 +37,39 @@
                          default-state)}))
 
 (defn- node-meta
-  [path identifier event wrapped]
+  [path event wrapped]
   (let [{saved-bthread-states :saved-bthread-states
          state :bprogram/state} (wrapped->meta wrapped)]
     {:path path
-     :identifier identifier
      :event event
      :saved-bthread-states saved-bthread-states
      :bprogram/state state}))
 
+(defn- event-flags
+  [event]
+  (let [flag? (fn [k]
+                (boolean (and (map? event)
+                              (get event k))))]
+    {:environment? (flag? :environment)
+     :terminal? (flag? :terminal)
+     :invariant? (flag? :invariant-violated)}))
+
 (defn- node->cy-data
-  [[path {:keys [identifier event wrapped]}]]
-  {:data {:id (path->id path)
-          :label (label-for path)
-          :path path
-          :identifier identifier
-          :event event
-          :meta (node-meta path identifier event wrapped)}})
+  [[path {:keys [event wrapped]}]]
+  (let [meta (node-meta path event wrapped)
+        flags (event-flags event)
+        classes (->> [(when (:environment? flags) "environment")
+                      (when (:terminal? flags) "terminal")
+                      (when (:invariant? flags) "invariant")]
+                     (remove nil?)
+                     (str/join " "))]
+    (cond-> {:data {:id (path->id path)
+                    :label (label-for path)
+                    :path path
+                    :event event
+                    :meta meta
+                    :flags flags}}
+      (seq classes) (assoc :classes classes))))
 
 (defn- edge->cy-data
   [{:keys [from to] :as edge}]

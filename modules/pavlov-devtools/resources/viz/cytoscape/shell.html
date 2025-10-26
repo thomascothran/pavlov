@@ -57,24 +57,20 @@
         border-radius: 4px;
       }
 
-      .legend-swatch.domain {
-        background: linear-gradient(135deg, #1f2937, #334155);
+      .legend-swatch.root {
+        background: linear-gradient(135deg, #2563eb, #60a5fa);
+      }
+
+      .legend-swatch.terminal {
+        background: linear-gradient(135deg, #f97316, #fb923c);
+      }
+
+      .legend-swatch.invariant {
+        background: linear-gradient(135deg, #dc2626, #ef4444);
       }
 
       .legend-swatch.environment {
         background: linear-gradient(135deg, #0ea5e9, #38bdf8);
-      }
-
-      .legend-swatch.branch {
-        background: linear-gradient(135deg, #7c3aed, #a855f7);
-      }
-
-      .legend-swatch.rejoin {
-        background: linear-gradient(135deg, #f97316, #fb923c);
-      }
-
-      .legend-swatch.trigger {
-        background: linear-gradient(135deg, #2563eb, #60a5fa);
       }
 
       .graph-wrapper {
@@ -210,31 +206,27 @@
     <header>
       <h1>Pavlov Execution Paths</h1>
       <p style="margin: 4px 0 0; font-size: 14px; max-width: 720px;">
-        Click any node to inspect its event payload. Branch edges and environment events will be
-        styled when that metadata is available.
+        Click any node to inspect its event payload. Initial, terminal, invariant, and environment
+        events are color-coded for clarity.
       </p>
     </header>
 
-    <section class="legend" aria-label="Wireframe legend">
+    <section class="legend" aria-label="Node legend">
       <div class="legend-item">
-        <span class="legend-swatch domain"></span>
-        Domain event
+        <span class="legend-swatch root"></span>
+        Initial event
+      </div>
+      <div class="legend-item">
+        <span class="legend-swatch terminal"></span>
+        Terminal event
+      </div>
+      <div class="legend-item">
+        <span class="legend-swatch invariant"></span>
+        Invariant violation
       </div>
       <div class="legend-item">
         <span class="legend-swatch environment"></span>
-        Environment-triggered event
-      </div>
-      <div class="legend-item">
-        <span class="legend-swatch branch"></span>
-        Branch edge (scheduler choice)
-      </div>
-      <div class="legend-item">
-        <span class="legend-swatch rejoin"></span>
-        Rejoin edge (returns to main flow)
-      </div>
-      <div class="legend-item">
-        <span class="legend-swatch trigger"></span>
-        Early trigger (unlocks goal state)
+        Environment event
       </div>
     </section>
 
@@ -382,6 +374,24 @@
               }
             },
             {
+              selector: "node.terminal",
+              style: {
+                "background-color": "#f97316",
+                "background-gradient-stop-colors": "#f97316 #fb923c",
+                "border-color": "#fed7aa",
+                color: "#0f172a"
+              }
+            },
+            {
+              selector: "node.invariant",
+              style: {
+                "background-color": "#dc2626",
+                "background-gradient-stop-colors": "#dc2626 #ef4444",
+                "border-color": "#fecaca",
+                color: "#fff7ed"
+              }
+            },
+            {
               selector: "node.root",
               style: {
                 "border-width": 3,
@@ -407,37 +417,6 @@
                 "target-arrow-shape": "triangle",
                 "target-arrow-color": "#94a3b8",
                 "arrow-scale": 1.2
-              }
-            },
-            {
-              selector: "edge.branch",
-              style: {
-                "line-style": "dashed",
-                "line-color": "#7c3aed",
-                "target-arrow-color": "#7c3aed"
-              }
-            },
-            {
-              selector: "edge.trigger",
-              style: {
-                "line-style": "dashed",
-                "line-color": "#2563eb",
-                "target-arrow-color": "#2563eb"
-              }
-            },
-            {
-              selector: "edge.rejoin",
-              style: {
-                "line-style": "dotted",
-                "line-color": "#f97316",
-                "target-arrow-color": "#f97316"
-              }
-            },
-            {
-              selector: "edge.environment-edge",
-              style: {
-                "line-color": "#16a34a",
-                "target-arrow-color": "#16a34a"
               }
             }
           ]

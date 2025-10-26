@@ -1,5 +1,6 @@
 (ns ^:alpha tech.thomascothran.pavlov.viz.cytoscape
-  (:require [tech.thomascothran.pavlov.graph :as graph]))
+  (:require [tech.thomascothran.pavlov.graph :as graph]
+            [tech.thomascothran.pavlov.event :as e]))
 
 (defn- path->id
   [path]
@@ -9,7 +10,9 @@
   [path]
   (if (empty? path)
     "initialize"
-    (pr-str (last path))))
+    (some-> (last path)
+            ;; e/type
+            pr-str)))
 
 (def ^:private state-keys
   [:last-event :next-event :requests :waits :blocks :bthread->bid :bthreads-by-priority])
