@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pavlov Execution Paths</title>
+    <style>
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+        font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          sans-serif;
+        background: #f1f5f9;
+        color: #0f172a;
+      }
+
+      body {
+        display: flex;
+        flex-direction: column;
+        padding: 24px;
+        gap: 16px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 20px;
+        font-weight: 600;
+      }
+
+      .legend {
+        display: flex;
+        gap: 16px;
+        align-items: center;
+        padding: 12px 16px;
+        border-radius: 12px;
+        background: white;
+        box-shadow: 0 10px 35px -25px rgba(15, 23, 42, 0.65);
+      }
+
+      .legend-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 13px;
+      }
+
+      .legend-swatch {
+        width: 16px;
+        height: 16px;
+        border-radius: 4px;
+      }
+
+      .legend-swatch.root {
+        background: linear-gradient(135deg, #2563eb, #60a5fa);
+      }
+
+      .legend-swatch.terminal {
+        background: linear-gradient(135deg, #f97316, #fb923c);
+      }
+
+      .legend-swatch.invariant {
+        background: linear-gradient(135deg, #dc2626, #ef4444);
+      }
+
+      .legend-swatch.environment {
+        background: linear-gradient(135deg, #0ea5e9, #38bdf8);
+      }
+
+      .graph-wrapper {
+        position: relative;
+        flex: 1 1 auto;
+      }
+
+      #cy {
+        width: 100%;
+        height: 100%;
+        border-radius: 20px;
+        background: #e2e8f0;
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
+      }
+
+      #popover {
+        position: absolute;
+        min-width: 260px;
+        max-width: 320px;
+        background: white;
+        border-radius: 16px;
+        padding: 16px 18px;
+        box-shadow: 0 20px 45px -25px rgba(15, 23, 42, 0.75);
+        display: none;
+        z-index: 10;
+        border: 1px solid rgba(148, 163, 184, 0.2);
+      }
+
+      #popover.visible {
+        display: block;
+      }
+
+      #popover::after {
+        content: "";
+        position: absolute;
+        left: 50%;
+        bottom: -9px;
+        transform: translateX(-50%);
+        border-width: 9px;
+        border-style: solid;
+        border-color: #ffffff transparent transparent transparent;
+        filter: drop-shadow(0 6px 6px rgba(15, 23, 42, 0.1));
+      }
+
+      #popover.flipped::after {
+        bottom: auto;
+        top: -9px;
+        transform: translateX(-50%) rotate(180deg);
+      }
+
+      .popover-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 10px;
+      }
+
+      .popover-title {
+        font-size: 15px;
+        font-weight: 600;
+        color: #0f172a;
+      }
+
+      .popover-close {
+        border: none;
+        background: none;
+        font-size: 18px;
+        line-height: 1;
+        cursor: pointer;
+        color: #475569;
+        padding: 4px;
+      }
+
+      .popover-body {
+        display: grid;
+        gap: 10px;
+      }
+
+      .popover-empty {
+        font-size: 13px;
+        color: #475569;
+        margin: 0;
+      }
+
+      .popover-field {
+        display: grid;
+        gap: 4px;
+      }
+
+      .popover-field dt {
+        font-size: 12px;
+        font-weight: 600;
+        color: #64748b;
+        letter-spacing: 0.02em;
+        text-transform: uppercase;
+      }
+
+      .popover-field dd {
+        margin: 0;
+        font-size: 13px;
+        color: #111827;
+        word-break: break-word;
+      }
+
+      .popover-field pre {
+        margin: 0;
+        font-family: "JetBrains Mono", "Fira Code", "SFMono-Regular", monospace;
+        font-size: 12px;
+        background: #f8fafc;
+        border-radius: 10px;
+        padding: 8px 10px;
+        color: #0f172a;
+        overflow-x: auto;
+      }
+
+      @media (max-width: 768px) {
+        body {
+          padding: 16px;
+        }
+
+        .legend {
+          flex-wrap: wrap;
+          align-items: flex-start;
+        }
+
+        #popover {
+          max-width: 90vw;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Pavlov Execution Paths</h1>
+      <p style="margin: 4px 0 0; font-size: 14px; max-width: 720px;">
+        Click any node to inspect its event payload. Initial, terminal, invariant, and environment
+        events are color-coded for clarity.
+      </p>
+    </header>
+
+    <section class="legend" aria-label="Node legend">
+      <div class="legend-item">
+        <span class="legend-swatch root"></span>
+        Initial event
+      </div>
+      <div class="legend-item">
+        <span class="legend-swatch terminal"></span>
+        Terminal event
+      </div>
+      <div class="legend-item">
+        <span class="legend-swatch invariant"></span>
+        Invariant violation
+      </div>
+      <div class="legend-item">
+        <span class="legend-swatch environment"></span>
+        Environment event
+      </div>
+    </section>
+
+    <div class="graph-wrapper">
+      <div id="cy" role="presentation" aria-label="Cytoscape graph"></div>
+      <div id="popover" role="dialog" aria-modal="false" aria-hidden="true">
+        <div class="popover-header">
+          <span class="popover-title">Event</span>
+          <button type="button" class="popover-close" aria-label="Close event details">×</button>
+        </div>
+        <div class="popover-body"></div>
+      </div>
+    </div>
+
+    <script src="https://unpkg.com/cytoscape@3.27.0/dist/cytoscape.min.js"></script>
+    <script id="pavlov-cy-data" type="application/json">__PAVLOV_CY_DATA__</script>
+    <script>
+      const escapeHtml = (value) =>
+        String(value)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#39;");
+
+      const formatValue = (value) => {
+        if (value === null || value === undefined) {
+          return "—";
+        }
+
+        if (typeof value === "object") {
+          return `<pre>${escapeHtml(JSON.stringify(value, null, 2))}</pre>`;
+        }
+
+        return escapeHtml(value);
+      };
+
+      const renderMetaFields = (meta) => {
+        const entries = Object.entries(meta || {});
+        if (entries.length <= 1) {
+          return '<p class="popover-empty">No additional metadata provided.</p>';
+        }
+
+        const [, ...rest] = entries.sort(([a], [b]) => {
+          if (a === "type") return -1;
+          if (b === "type") return 1;
+          return a.localeCompare(b);
+        });
+
+        return rest
+          .map(([key, value]) => {
+            return `
+              <div class="popover-field">
+                <dt>${escapeHtml(key)}</dt>
+                <dd>${formatValue(value)}</dd>
+              </div>
+            `;
+          })
+          .join("");
+      };
+
+      const loadCyData = () => {
+        const dataEl = document.getElementById("pavlov-cy-data");
+        if (!dataEl) {
+          return { nodes: [], edges: [] };
+        }
+
+        try {
+          const parsed = JSON.parse(dataEl.textContent || "{}");
+          return {
+            nodes: parsed.nodes || [],
+            edges: parsed.edges || []
+          };
+        } catch (err) {
+          console.error("Unable to parse Pavlov Cytoscape data", err);
+          return { nodes: [], edges: [] };
+        }
+      };
+
+      const inferRootSelector = (nodes) => {
+        const rootPathNode = nodes.find((node) => {
+          const path = node?.data?.path;
+          return Array.isArray(path) && path.length === 0;
+        });
+
+        const rootId = rootPathNode?.data?.id || nodes[0]?.data?.id;
+        return rootId ? `#${CSS.escape(rootId)}` : undefined;
+      };
+
+      document.addEventListener("DOMContentLoaded", () => {
+        const wrapper = document.querySelector(".graph-wrapper");
+        const popover = document.getElementById("popover");
+        const popoverBody = popover.querySelector(".popover-body");
+        const popoverTitle = popover.querySelector(".popover-title");
+        const popoverClose = popover.querySelector(".popover-close");
+        let activeNode = null;
+
+        const { nodes, edges } = loadCyData();
+        const elements = [...nodes, ...edges];
+
+        const cy = cytoscape({
+          container: document.getElementById("cy"),
+          elements,
+          layout: {
+            name: "breadthfirst",
+            directed: true,
+            roots: inferRootSelector(nodes),
+            padding: 30,
+            spacingFactor: 1.25
+          },
+          style: [
+            {
+              selector: "node",
+              style: {
+                width: 110,
+                height: 110,
+                "border-width": 2,
+                "border-color": "#cbd5f5",
+                "background-color": "#1f2937",
+                "background-gradient-stop-colors": "#1f2937 #334155",
+                "background-gradient-stop-positions": "0 100",
+                "background-gradient-direction": "to-bottom",
+                "background-fill": "linear-gradient",
+                label: "data(label)",
+                color: "#f8fafc",
+                "font-size": 12,
+                "text-wrap": "wrap",
+                "text-max-width": 96,
+                "text-valign": "center",
+                "text-halign": "center",
+                "text-margin-y": 0,
+                "shadow-blur": 18,
+                "shadow-color": "rgba(30, 41, 59, 0.25)",
+                "shadow-offset-x": 0,
+                "shadow-offset-y": 6
+              }
+            },
+            {
+              selector: "node.environment",
+              style: {
+                "background-color": "#0ea5e9",
+                "background-gradient-stop-colors": "#0ea5e9 #38bdf8",
+                "border-color": "#bae6fd",
+                color: "#0f172a"
+              }
+            },
+            {
+              selector: "node.terminal",
+              style: {
+                "background-color": "#f97316",
+                "background-gradient-stop-colors": "#f97316 #fb923c",
+                "border-color": "#fed7aa",
+                color: "#0f172a"
+              }
+            },
+            {
+              selector: "node.invariant",
+              style: {
+                "background-color": "#dc2626",
+                "background-gradient-stop-colors": "#dc2626 #ef4444",
+                "border-color": "#fecaca",
+                color: "#fff7ed"
+              }
+            },
+            {
+              selector: "node.root",
+              style: {
+                "border-width": 3,
+                "border-color": "#2563eb"
+              }
+            },
+            {
+              selector: "node.active-popover",
+              style: {
+                "border-width": 4,
+                "border-color": "#38bdf8",
+                "shadow-blur": 24,
+                "shadow-color": "rgba(56, 189, 248, 0.4)",
+                "shadow-offset-y": 10
+              }
+            },
+            {
+              selector: "edge",
+              style: {
+                width: 3,
+                "curve-style": "bezier",
+                "line-color": "#94a3b8",
+                "target-arrow-shape": "triangle",
+                "target-arrow-color": "#94a3b8",
+                "arrow-scale": 1.2
+              }
+            }
+          ]
+        });
+
+        const rootNode = cy.nodes().filter((node) => {
+          const path = node.data("path");
+          return Array.isArray(path) && path.length === 0;
+        }).first();
+        if (rootNode && rootNode.length) {
+          rootNode.addClass("root");
+        }
+
+        const hidePopover = () => {
+          if (!activeNode) return;
+          activeNode.removeClass("active-popover");
+          activeNode = null;
+          popover.classList.remove("visible", "flipped");
+          popover.setAttribute("aria-hidden", "true");
+          popover.style.display = "none";
+        };
+
+        const positionPopover = (node) => {
+          if (!node) return;
+          const pos = node.renderedPosition();
+          const { width, height } = popover.getBoundingClientRect();
+          const containerWidth = wrapper.getBoundingClientRect().width;
+
+          let left = pos.x - width / 2;
+          left = Math.max(16, Math.min(left, containerWidth - width - 16));
+
+          let top = pos.y - height - 24;
+          let flipped = false;
+          if (top < 16) {
+            top = pos.y + 24;
+            flipped = true;
+          }
+
+          popover.style.left = `${left}px`;
+          popover.style.top = `${top}px`;
+          popover.classList.toggle("flipped", flipped);
+        };
+
+        const showPopover = (node) => {
+          const meta = node.data("meta") || {};
+          const entries = Object.entries(meta);
+          const typeEntry = entries.find(([key]) => key === "type");
+          popoverTitle.textContent = typeEntry?.[1] || node.data("label") || "Event";
+          popoverBody.innerHTML = renderMetaFields(meta);
+
+          popover.style.display = "block";
+          popover.classList.add("visible");
+          popover.setAttribute("aria-hidden", "false");
+
+          positionPopover(node);
+        };
+
+        cy.on("tap", "node", (evt) => {
+          const node = evt.target;
+          if (activeNode && activeNode.id() === node.id()) {
+            hidePopover();
+            return;
+          }
+
+          if (activeNode) {
+            hidePopover();
+          }
+
+          activeNode = node;
+          node.addClass("active-popover");
+          showPopover(node);
+        });
+
+        cy.on("tap", (evt) => {
+          if (evt.target === cy) {
+            hidePopover();
+          } else if (evt.target.isEdge && evt.target.isEdge()) {
+            hidePopover();
+          }
+        });
+
+        cy.on("pan zoom", () => {
+          if (activeNode) {
+            positionPopover(activeNode);
+          }
+        });
+
+        window.addEventListener("resize", () => {
+          if (activeNode) {
+            positionPopover(activeNode);
+          }
+        });
+
+        document.addEventListener("keydown", (event) => {
+          if (event.key === "Escape") {
+            hidePopover();
+          }
+        });
+
+        popoverClose.addEventListener("click", () => hidePopover());
+      });
+    </script>
+  </body>
+</html>
