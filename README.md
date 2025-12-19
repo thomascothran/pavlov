@@ -172,7 +172,9 @@ In this example the `:order/ready` event is only requested after both upstream e
 
 ### Sequence Bthreads
 
-`b/bids` can create a bthread out of a sequence of bids. It is only for finite, relatively short sequences.
+`b/bids` creates a bthread from a finite sequence. Items in the sequence may be:
+- Bid maps (bthreads)
+- Functions that take an event and return a bid: `(fn [event] -> bid)`
 
 For example:
 
