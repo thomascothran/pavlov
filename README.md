@@ -176,7 +176,7 @@ In this example the `:order/ready` event is only requested after both upstream e
 - Bid maps (bthreads)
 - Functions that take an event and return a bid: `(fn [event] -> bid)`
 
-For example:
+For example, with literal bids:
 
 ```clojure
 (b/bids
@@ -186,7 +186,17 @@ For example:
    :block #{:good-morning}}])
 ```
 
-This will return a bid twice, then the bthread will be deregistered.
+Or with functions that can compute bids dynamically based on the event:
+
+```clojure
+(b/bids
+ [{:wait-on #{:order-placed}}
+  (fn [event]
+    {:request #{{:type :send-confirmation
+                 :order-id (:order-id event)}}})])
+```
+
+This will return a bid for each item, then the bthread will be deregistered.
 
 Note that `b/bids` fully realizes any sequence in memory!
 
