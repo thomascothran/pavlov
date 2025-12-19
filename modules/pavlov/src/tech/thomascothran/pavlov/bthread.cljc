@@ -21,9 +21,13 @@
 (defn bids
   "Make a bthread from a finite sequence of bids.
 
-  The sequence *will* be fully realized
+  The sequence *will* be fully realized.
 
-  Items in the sequence must be bthreads.
+  Items in the sequence may be:
+  - bthreads (including bid maps)
+  - functions of event to bid: (fn [event] -> bid)
+
+  Functions are detected with `fn?` and called with the event.
 
   If nil is received, the bthread stops."
   [xs]
@@ -34,7 +38,9 @@
       (label [_] @xs')
       (notify! [_ event]
         (when-let [x (first @xs')]
-          (let [bid' (notify! x event)]
+          (let [bid' (if (fn? x)
+                       (x event)
+                       (notify! x event))]
             (vreset! xs' (rest @xs'))
             bid'))))))
 

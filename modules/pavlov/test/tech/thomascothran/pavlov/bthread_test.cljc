@@ -33,6 +33,75 @@
     (b/notify! bthread {:type :test})
     (is (nil? (b/notify! bthread {:type :test})))))
 
+(deftest test-bids-with-function
+  (testing "bids accepts a function that receives event and returns bid"
+    (let [bid-fn (constantly {:request #{:test-event1}})
+          fn-bthread (b/bids [bid-fn])
+          literal-bthread (b/bids [{:request #{:test-event1}}])]
+      (is (= {:request #{:test-event1}}
+             (b/notify! fn-bthread nil)
+             (b/notify! literal-bthread nil))
+          "Initialization")
+      (is (= nil
+             (b/notify! fn-bthread {:type :test-event})
+             (b/notify! literal-bthread {:type :test-event}))))))
+
+(deftest test-bids-with-mixed-sequence
+  (testing "bids accepts a mix of functions and literal bids"
+    (let [fn-bthread (b/bids [(constantly {:request #{:event-a}})
+                              {:request #{:event-b}}
+                              (constantly {:request #{:event-c}})])
+          literal-bthread (b/bids [{:request #{:event-a}}
+                                   {:request #{:event-b}}
+                                   {:request #{:event-c}}])]
+      (is (= {:request #{:event-a}}
+             (b/notify! fn-bthread nil)
+             (b/notify! literal-bthread nil))
+          "First bid (from function)")
+      (is (= {:request #{:event-b}}
+             (b/notify! fn-bthread nil)
+             (b/notify! literal-bthread nil))
+          "Second bid (literal)")
+      (is (= {:request #{:event-c}}
+             (b/notify! fn-bthread nil)
+             (b/notify! literal-bthread nil))
+          "Third bid (from function)")
+      (is (= nil
+             (b/notify! fn-bthread nil)
+             (b/notify! literal-bthread nil))
+          "Sequence exhausted"))))
+
+(deftest test-bids-function-returning-nil
+  (testing "function returning nil behaves like nil item in sequence"
+    (let [fn-bthread (b/bids [(fn [_event] nil)])
+          literal-bthread (b/bids [nil])]
+      (is (= nil
+             (b/notify! fn-bthread nil)
+             (b/notify! literal-bthread nil))
+          "Both should return nil when first item is nil/returns nil"))))
+
+(deftest test-bids-function-receives-event
+  (testing "function in bids receives the event argument"
+    (let [received-events (atom [])
+          fn-bthread (b/bids [(fn [event]
+                                (swap! received-events conj event)
+                                {:request #{:got-event}})])]
+      (b/notify! fn-bthread nil) ;; initialization
+      (is (= [nil] @received-events)
+          "Function should have received the nil initialization event")
+
+      ;; Reset and test with a real event
+      (reset! received-events [])
+      (let [fn-bthread2 (b/bids [(fn [event]
+                                   (swap! received-events conj event)
+                                   {:request #{:got-event}})])]
+        (b/notify! fn-bthread2 {:type :my-event :data 123})
+        (is (= [{:type :my-event :data 123}] @received-events)
+            "Function should have received the actual event")))))
+
+(comment
+  (test-bids-with-function))
+
 (deftest test-repeat
   (let [bthread (b/repeat {:request #{:test}})
         _ (doseq [_ (range 3)]
@@ -162,8 +231,8 @@
           [prev-state {:wait-on #{:event-a}}]
 
           :event-a
-          [prev-state {:request #{{:type  :event-b}}}])
+          [prev-state {:request #{{:type :event-b}}}])
         bid1 (b/notify! bthread nil)
         bid2 (b/notify! bthread {:type :event-a})]
     (is (= {:wait-on #{:event-a}} bid1))
-    (is (= {:request #{{:type  :event-b}}} bid2))))
+    (is (= {:request #{{:type :event-b}}} bid2))))
