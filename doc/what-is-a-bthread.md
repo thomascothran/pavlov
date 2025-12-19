@@ -104,7 +104,13 @@ Writing step functions directly is flexible but verbose. Pavlov provides conveni
 
 ### `b/bids` — finite scripted behavior
 
-Use `b/bids` when you want to replay a finite sequence of pre-built bids. The bthread walks the sequence once and removes itself when the sequence is exhausted.
+Use `b/bids` when you want to replay a finite sequence of bids. The bthread walks the sequence once and removes itself when the sequence is exhausted.
+
+Items in the sequence may be:
+- Bid maps (or any bthread)
+- Functions of event to bid: `(fn [event] -> bid)`
+
+Functions are detected with `fn?` and called with the current event, allowing bids to be computed dynamically.
 
 ```clojure
 (def staged-requests
@@ -121,6 +127,17 @@ Use `b/bids` when you want to replay a finite sequence of pre-built bids. The bt
 ;;     {:request #{:prep/finish}}
 ;;     {:request #{:ship}}
 ;;     nil]
+```
+
+You can also mix literal bids with functions that compute bids from event data:
+
+```clojure
+(def order-flow
+  (b/bids
+   [{:wait-on #{:order/placed}}
+    (fn [event]
+      {:request #{{:type :order/confirm
+                   :order-id (:order-id event)}}})]))
 ```
 
 ### `b/on` — react to a specific event
