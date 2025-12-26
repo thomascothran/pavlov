@@ -5,7 +5,7 @@
 
 (defn- path->id
   [path]
-  (pr-str path))
+  (format "node-%08x" (bit-and (hash path) 0xffffffff)))
 
 (defn- label-for
   [path event]
@@ -39,10 +39,11 @@
                          default-state)}))
 
 (defn- node-meta
-  [path event wrapped]
+  [path identifier event wrapped]
   (let [{saved-bthread-states :saved-bthread-states
          state :bprogram/state} (wrapped->meta wrapped)]
     {:path path
+     :identifier identifier
      :event event
      :saved-bthread-states saved-bthread-states
      :bprogram/state state}))
@@ -57,8 +58,8 @@
      :invariant? (flag? :invariant-violated)}))
 
 (defn- node->cy-data
-  [[path {:keys [event wrapped]}]]
-  (let [meta (node-meta path event wrapped)
+  [[path {:keys [identifier event wrapped]}]]
+  (let [meta (node-meta path identifier event wrapped)
         flags (event-flags event)
         classes (->> [(when (:environment? flags) "environment")
                       (when (:terminal? flags) "terminal")
@@ -68,6 +69,7 @@
     (cond-> {:data {:id (path->id path)
                     :label (label-for path event)
                     :path path
+                    :identifier identifier
                     :event event
                     :meta meta
                     :flags flags}}
@@ -88,7 +90,11 @@
   ;; => {:nodes [...]
   ;;     :edges [...]}"
   [graph]
-  {:nodes (->> graph :nodes (sort-by key) (map node->cy-data) vec)
+  {:nodes (->> graph
+               :nodes
+               (sort-by (juxt (comp count key) (comp pr-str key)))
+               (map node->cy-data)
+               vec)
    :edges (->> graph :edges (map edge->cy-data) vec)})
 
 (defn graph->cytoscape

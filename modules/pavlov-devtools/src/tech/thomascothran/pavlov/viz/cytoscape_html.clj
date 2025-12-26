@@ -12,11 +12,8 @@
 (def ^:private data-placeholder "__PAVLOV_CY_DATA__")
 
 (defn- fetch-template []
-  (if-let [resource (io/resource template-resource)]
-    (slurp resource)
-    (let [file (io/file template-fallback)]
-      (when (.exists file)
-        (slurp file)))))
+  (let [resource (io/resource template-resource)]
+    (slurp resource)))
 
 (defn- load-template []
   (or (fetch-template)
@@ -52,19 +49,18 @@
       ->page))
 
 (comment
-  (require '[tech.thomascothran.pavlov.bthread :as b])
+  (do (require '[tech.thomascothran.pavlov.bthread :as b])
 
-  (defn make-bthreads
-    []
-    {:linear (b/bids [{:request #{:begin}}
-                      {:request #{{:type :step-1}}}
-                      {:request #{{:type :step-2
-                                   :invariant-violated true}}}
-                      {:request #{{:type :step-3
-                                   :environment true}}}
-                      {:request #{{:type :step-4
-                                   :terminal true}}}])})
+      (defn make-bthreads
+        []
+        {:linear (b/bids [{:request #{:begin}}
+                          {:request #{{:type :step-1a}
+                                      {:type :step-1b}}}
+                          {:request #{{:type :step-2
+                                       :invariant-violated true}}}
+                          {:request #{{:type :step-3
+                                       :environment true}}}
+                          {:request #{{:type :step-4
+                                       :terminal true}}}])})
 
-  (spit "cytoscape-test.html" (->html (make-bthreads)))
-  ;; Produces a full HTML page containing serialized Cytoscape data.
-  (subs (->html (make-bthreads)) 0 200))
+      (spit "cytoscape-test6.html" (->html (make-bthreads))))) ;; Produces a full HTML page containing serialized Cytoscape data.

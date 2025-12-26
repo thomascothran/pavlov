@@ -38,8 +38,9 @@
                  :edges [{:from []
                           :to [:a]
                           :event :a}]}
+          path->id @#'cytoscape/path->id
           result (cytoscape/-graph->cytoscape graph)]
-      (is (= {:nodes [{:data {:id "[]"
+      (is (= {:nodes [{:data {:id (path->id [])
                               :label "initialize"
                               :path []
                               :identifier :root
@@ -54,8 +55,11 @@
                                                       :waits {}
                                                       :blocks {}
                                                       :bthread->bid {:single nil}
-                                                      :bthreads-by-priority #{:single}}}}}
-                      {:data {:id "[:a]"
+                                                      :bthreads-by-priority #{:single}}}
+                              :flags {:environment? false
+                                      :invariant? false
+                                      :terminal? false}}}
+                      {:data {:id (path->id [:a])
                               :label ":a"
                               :path [:a]
                               :identifier :foo
@@ -70,10 +74,13 @@
                                                       :waits {:foo #{:single}}
                                                       :blocks {:foo #{:single}}
                                                       :bthread->bid {:single {:request #{:foo}}}
-                                                      :bthreads-by-priority #{:single}}}}}]
-              :edges [{:data {:id "[]->[:a]"
-                              :source "[]"
-                              :target "[:a]"
+                                                      :bthreads-by-priority #{:single}}}
+                              :flags {:environment? false
+                                      :invariant? false
+                                      :terminal? false}}}]
+              :edges [{:data {:id (str (path->id []) "->" (path->id [:a]))
+                              :source (path->id [])
+                              :target (path->id [:a])
                               :event :a
                               :from []
                               :to [:a]}}]}

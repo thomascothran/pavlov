@@ -58,19 +58,19 @@
       }
 
       .legend-swatch.root {
-        background: linear-gradient(135deg, #2563eb, #60a5fa);
+        background: linear-gradient(135deg, #009E73, #00684E);
       }
 
       .legend-swatch.terminal {
-        background: linear-gradient(135deg, #f97316, #fb923c);
+        background: linear-gradient(135deg, #3F51B5, #2C3A86);
       }
 
       .legend-swatch.invariant {
-        background: linear-gradient(135deg, #dc2626, #ef4444);
+        background: linear-gradient(135deg, #D32F2F, #8E1F1F);
       }
 
       .legend-swatch.environment {
-        background: linear-gradient(135deg, #0ea5e9, #38bdf8);
+        background: linear-gradient(135deg, #0072B2, #004E7C);
       }
 
       .graph-wrapper {
@@ -325,6 +325,12 @@
         let activeNode = null;
 
         const { nodes, edges } = loadCyData();
+        nodes.forEach((node) => {
+          if (node && node.data) {
+            const { identifier, ...restData } = node.data;
+            node.data = restData;
+          }
+        });
         const elements = [...nodes, ...edges];
 
         const cy = cytoscape({
@@ -338,88 +344,110 @@
             spacingFactor: 1.25
           },
           style: [
-            {
-              selector: "node",
-              style: {
-                width: 110,
-                height: 110,
-                "border-width": 2,
-                "border-color": "#cbd5f5",
-                "background-color": "#1f2937",
-                "background-gradient-stop-colors": "#1f2937 #334155",
-                "background-gradient-stop-positions": "0 100",
-                "background-gradient-direction": "to-bottom",
-                "background-fill": "linear-gradient",
-                label: "data(label)",
-                color: "#f8fafc",
-                "font-size": 12,
-                "text-wrap": "wrap",
-                "text-max-width": 96,
-                "text-valign": "center",
-                "text-halign": "center",
-                "text-margin-y": 0,
-                "shadow-blur": 18,
-                "shadow-color": "rgba(30, 41, 59, 0.25)",
-                "shadow-offset-x": 0,
-                "shadow-offset-y": 6
-              }
-            },
-            {
-              selector: "node.environment",
-              style: {
-                "background-color": "#0ea5e9",
-                "background-gradient-stop-colors": "#0ea5e9 #38bdf8",
-                "border-color": "#bae6fd",
-                color: "#0f172a"
-              }
-            },
-            {
-              selector: "node.terminal",
-              style: {
-                "background-color": "#f97316",
-                "background-gradient-stop-colors": "#f97316 #fb923c",
-                "border-color": "#fed7aa",
-                color: "#0f172a"
-              }
-            },
-            {
-              selector: "node.invariant",
-              style: {
-                "background-color": "#dc2626",
-                "background-gradient-stop-colors": "#dc2626 #ef4444",
-                "border-color": "#fecaca",
-                color: "#fff7ed"
-              }
-            },
-            {
-              selector: "node.root",
-              style: {
-                "border-width": 3,
-                "border-color": "#2563eb"
-              }
-            },
-            {
-              selector: "node.active-popover",
-              style: {
-                "border-width": 4,
-                "border-color": "#38bdf8",
-                "shadow-blur": 24,
-                "shadow-color": "rgba(56, 189, 248, 0.4)",
-                "shadow-offset-y": 10
-              }
-            },
-            {
-              selector: "edge",
-              style: {
-                width: 3,
-                "curve-style": "bezier",
-                "line-color": "#94a3b8",
-                "target-arrow-shape": "triangle",
-                "target-arrow-color": "#94a3b8",
-                "arrow-scale": 1.2
-              }
+          {
+            selector: "node",
+            style: {
+              width: 110,
+              height: 110,
+              "border-width": 2,
+              "border-color": "#11161A",                 // slate border
+              "background-color": "#263238",             // slate fill
+              "background-gradient-stop-colors": "#263238 #3A4A54",
+              "background-gradient-stop-positions": "0 100",
+              "background-gradient-direction": "to-bottom",
+              "background-fill": "linear-gradient",
+              label: "data(label)",
+              color: "#FFFFFF",
+              "font-size": 12,
+              "text-wrap": "wrap",
+              "text-max-width": 96,
+              "text-valign": "center",
+              "text-halign": "center",
+              "text-margin-y": 0,
+              "shadow-blur": 18,
+              "shadow-color": "rgba(30, 41, 59, 0.25)",
+              "shadow-offset-x": 0,
+              "shadow-offset-y": 6
             }
-          ]
+          },
+
+          // Environment event — Blue
+          {
+            selector: "node.environment",
+            style: {
+              "background-color": "#0072B2",
+              "background-gradient-stop-colors": "#0072B2 #1686C5",
+              "border-color": "#004E7C",
+              color: "#FFFFFF"
+            }
+          },
+
+          // Terminal event — Indigo
+          {
+            selector: "node.terminal",
+            style: {
+              "background-color": "#3F51B5",
+              "background-gradient-stop-colors": "#3F51B5 #5364C4",
+              "border-color": "#2C3A86",
+              color: "#FFFFFF"
+            }
+          },
+
+          // Invariant violation — Red (unchanged semantics)
+          {
+            selector: "node.invariant",
+            style: {
+              "background-color": "#D32F2F",
+              "background-gradient-stop-colors": "#D32F2F #E04848",
+              "border-color": "#8E1F1F",
+              color: "#FFFFFF"
+            }
+          },
+
+          // Initial event — Green
+          {
+            selector: "node.initial",
+            style: {
+              "background-color": "#009E73",
+              "background-gradient-stop-colors": "#009E73 #14B087",
+              "border-color": "#00684E",
+              color: "#FFFFFF"
+            }
+          },
+
+          // Root/highlight states (keep your UX affordances)
+          {
+            selector: "node.root",
+            style: {
+              "border-width": 3,
+              "border-color": "#263238" // selected ring color from Scheme A
+            }
+          },
+          {
+            selector: "node.active-popover",
+            style: {
+              "border-width": 4,
+              "border-color": "#263238",
+              "shadow-blur": 24,
+              "shadow-color": "rgba(56, 189, 248, 0.4)",
+              "shadow-offset-y": 10
+            }
+          },
+
+          // Edges (unchanged)
+          {
+            selector: "edge",
+            style: {
+              width: 3,
+              "curve-style": "bezier",
+              "line-color": "#94a3b8",
+              "target-arrow-shape": "triangle",
+              "target-arrow-color": "#94a3b8",
+              "arrow-scale": 1.2
+            }
+          }
+        ]
+
         });
 
         const rootNode = cy.nodes().filter((node) => {
