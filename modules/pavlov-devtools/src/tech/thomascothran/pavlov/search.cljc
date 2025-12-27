@@ -146,5 +146,5 @@
         (let [saved-states (get wrapped :saved-bthread-states)
               bthread->bid (get-in wrapped
                                    [:bprogram/state :bthread->bid])
-              last-event (get-in wrapped [:bprogram/state :last-event])]
-          [last-event saved-states bthread->bid])))))
+              last-event-terminal (get-in wrapped [:bprogram/state :last-event :terminal])]
+          [last-event-terminal saved-states bthread->bid])))))
