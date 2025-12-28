@@ -48,6 +48,13 @@
       cytoscape/graph->cytoscape
       ->page))
 
+(defn lts->html
+  "Return a browser-ready Cytoscape HTML document for an LTS."
+  [lts]
+  (-> lts
+      cytoscape/lts->cytoscape
+      ->page))
+
 (comment
   (do (require '[tech.thomascothran.pavlov.bthread :as b])
 

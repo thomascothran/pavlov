@@ -65,12 +65,8 @@
         background: linear-gradient(135deg, #3F51B5, #2C3A86);
       }
 
-      .legend-swatch.invariant {
-        background: linear-gradient(135deg, #D32F2F, #8E1F1F);
-      }
-
-      .legend-swatch.environment {
-        background: linear-gradient(135deg, #0072B2, #004E7C);
+      .legend-swatch.deadlock {
+        background: linear-gradient(135deg, #DC2626, #991B1B);
       }
 
       .graph-wrapper {
@@ -206,27 +202,22 @@
     <header>
       <h1>Pavlov Execution Paths</h1>
       <p style="margin: 4px 0 0; font-size: 14px; max-width: 720px;">
-        Click any node to inspect its event payload. Initial, terminal, invariant, and environment
-        events are color-coded for clarity.
+        Click any node or edge to inspect its data. States are color-coded by type.
       </p>
     </header>
 
     <section class="legend" aria-label="Node legend">
       <div class="legend-item">
         <span class="legend-swatch root"></span>
-        Initial event
+        Root state
       </div>
       <div class="legend-item">
         <span class="legend-swatch terminal"></span>
-        Terminal event
+        Terminal state
       </div>
       <div class="legend-item">
-        <span class="legend-swatch invariant"></span>
-        Invariant violation
-      </div>
-      <div class="legend-item">
-        <span class="legend-swatch environment"></span>
-        Environment event
+        <span class="legend-swatch deadlock"></span>
+        Deadlock state
       </div>
     </section>
 
@@ -266,17 +257,12 @@
 
       const renderMetaFields = (meta) => {
         const entries = Object.entries(meta || {});
-        if (entries.length <= 1) {
+        if (entries.length === 0) {
           return '<p class="popover-empty">No additional metadata provided.</p>';
         }
 
-        const [, ...rest] = entries.sort(([a], [b]) => {
-          if (a === "type") return -1;
-          if (b === "type") return 1;
-          return a.localeCompare(b);
-        });
-
-        return rest
+        return entries
+          .sort(([a], [b]) => a.localeCompare(b))
           .map(([key, value]) => {
             return `
               <div class="popover-field">
@@ -286,6 +272,22 @@
             `;
           })
           .join("");
+      };
+
+      const renderEventData = (event) => {
+        if (event === null || event === undefined) {
+          return '<p class="popover-empty">No event data.</p>';
+        }
+
+        if (typeof event === "string") {
+          return `<p class="popover-empty">${escapeHtml(event)}</p>`;
+        }
+
+        if (typeof event === "object") {
+          return `<pre>${escapeHtml(JSON.stringify(event, null, 2))}</pre>`;
+        }
+
+        return `<p class="popover-empty">${escapeHtml(String(event))}</p>`;
       };
 
       const loadCyData = () => {
@@ -306,14 +308,14 @@
         }
       };
 
-      const inferRootSelector = (nodes) => {
-        const rootPathNode = nodes.find((node) => {
-          const path = node?.data?.path;
-          return Array.isArray(path) && path.length === 0;
-        });
-
-        const rootId = rootPathNode?.data?.id || nodes[0]?.data?.id;
-        return rootId ? `#${CSS.escape(rootId)}` : undefined;
+      const findRootNode = (nodes) => {
+        // Find node with "root" class
+        const rootNode = nodes.find((node) => node.classes === "root");
+        if (rootNode) {
+          return `#${CSS.escape(rootNode.data.id)}`;
+        }
+        // Fallback to first node
+        return nodes[0]?.data?.id ? `#${CSS.escape(nodes[0].data.id)}` : undefined;
       };
 
       document.addEventListener("DOMContentLoaded", () => {
@@ -322,15 +324,9 @@
         const popoverBody = popover.querySelector(".popover-body");
         const popoverTitle = popover.querySelector(".popover-title");
         const popoverClose = popover.querySelector(".popover-close");
-        let activeNode = null;
+        let activeElement = null; // Can be node or edge
 
         const { nodes, edges } = loadCyData();
-        nodes.forEach((node) => {
-          if (node && node.data) {
-            const { identifier, ...restData } = node.data;
-            node.data = restData;
-          }
-        });
         const elements = [...nodes, ...edges];
 
         const cy = cytoscape({
@@ -339,136 +335,114 @@
           layout: {
             name: "breadthfirst",
             directed: true,
-            roots: inferRootSelector(nodes),
+            roots: findRootNode(nodes),
             padding: 30,
             spacingFactor: 1.25
           },
           style: [
-          {
-            selector: "node",
-            style: {
-              width: 110,
-              height: 110,
-              "border-width": 2,
-              "border-color": "#11161A",                 // slate border
-              "background-color": "#263238",             // slate fill
-              "background-gradient-stop-colors": "#263238 #3A4A54",
-              "background-gradient-stop-positions": "0 100",
-              "background-gradient-direction": "to-bottom",
-              "background-fill": "linear-gradient",
-              label: "data(label)",
-              color: "#FFFFFF",
-              "font-size": 12,
-              "text-wrap": "wrap",
-              "text-max-width": 96,
-              "text-valign": "center",
-              "text-halign": "center",
-              "text-margin-y": 0,
-              "shadow-blur": 18,
-              "shadow-color": "rgba(30, 41, 59, 0.25)",
-              "shadow-offset-x": 0,
-              "shadow-offset-y": 6
-            }
-          },
+            // Default node style
+            {
+              selector: "node",
+              style: {
+                width: 60,
+                height: 60,
+                "border-width": 2,
+                "border-color": "#64748b",
+                "background-color": "#475569",
+                label: "data(label)",
+                color: "#FFFFFF",
+                "font-size": 12,
+                "text-wrap": "wrap",
+                "text-max-width": 96,
+                "text-valign": "center",
+                "text-halign": "center",
+                "shadow-blur": 12,
+                "shadow-color": "rgba(30, 41, 59, 0.2)",
+                "shadow-offset-x": 0,
+                "shadow-offset-y": 4
+              }
+            },
 
-          // Environment event — Blue
-          {
-            selector: "node.environment",
-            style: {
-              "background-color": "#0072B2",
-              "background-gradient-stop-colors": "#0072B2 #1686C5",
-              "border-color": "#004E7C",
-              color: "#FFFFFF"
-            }
-          },
+            // Root state — Green
+            {
+              selector: "node.root",
+              style: {
+                "background-color": "#009E73",
+                "border-color": "#00684E",
+                "border-width": 3
+              }
+            },
 
-          // Terminal event — Indigo
-          {
-            selector: "node.terminal",
-            style: {
-              "background-color": "#3F51B5",
-              "background-gradient-stop-colors": "#3F51B5 #5364C4",
-              "border-color": "#2C3A86",
-              color: "#FFFFFF"
-            }
-          },
+            // Terminal state — Indigo/Blue
+            {
+              selector: "node.terminal",
+              style: {
+                "background-color": "#3F51B5",
+                "border-color": "#2C3A86"
+              }
+            },
 
-          // Invariant violation — Red (unchanged semantics)
-          {
-            selector: "node.invariant",
-            style: {
-              "background-color": "#D32F2F",
-              "background-gradient-stop-colors": "#D32F2F #E04848",
-              "border-color": "#8E1F1F",
-              color: "#FFFFFF"
-            }
-          },
+            // Deadlock state — Red
+            {
+              selector: "node.deadlock",
+              style: {
+                "background-color": "#DC2626",
+                "border-color": "#991B1B"
+              }
+            },
 
-          // Initial event — Green
-          {
-            selector: "node.initial",
-            style: {
-              "background-color": "#009E73",
-              "background-gradient-stop-colors": "#009E73 #14B087",
-              "border-color": "#00684E",
-              color: "#FFFFFF"
-            }
-          },
+            // Active popover state
+            {
+              selector: "node.active-popover",
+              style: {
+                "border-width": 4,
+                "shadow-blur": 20,
+                "shadow-color": "rgba(56, 189, 248, 0.5)"
+              }
+            },
 
-          // Root/highlight states (keep your UX affordances)
-          {
-            selector: "node.root",
-            style: {
-              "border-width": 3,
-              "border-color": "#263238" // selected ring color from Scheme A
-            }
-          },
-          {
-            selector: "node.active-popover",
-            style: {
-              "border-width": 4,
-              "border-color": "#263238",
-              "shadow-blur": 24,
-              "shadow-color": "rgba(56, 189, 248, 0.4)",
-              "shadow-offset-y": 10
-            }
-          },
+            // Edge style with labels
+            {
+              selector: "edge",
+              style: {
+                width: 2,
+                "curve-style": "bezier",
+                "line-color": "#94a3b8",
+                "target-arrow-shape": "triangle",
+                "target-arrow-color": "#94a3b8",
+                "arrow-scale": 1,
+                label: "data(label)",
+                "font-size": 11,
+                color: "#475569",
+                "text-background-color": "#f1f5f9",
+                "text-background-opacity": 0.9,
+                "text-background-padding": "3px",
+                "text-margin-y": -10
+              }
+            },
 
-          // Edges (unchanged)
-          {
-            selector: "edge",
-            style: {
-              width: 3,
-              "curve-style": "bezier",
-              "line-color": "#94a3b8",
-              "target-arrow-shape": "triangle",
-              "target-arrow-color": "#94a3b8",
-              "arrow-scale": 1.2
+            // Active edge
+            {
+              selector: "edge.active-popover",
+              style: {
+                "line-color": "#3b82f6",
+                "target-arrow-color": "#3b82f6",
+                width: 3
+              }
             }
-          }
-        ]
-
+          ]
         });
 
-        const rootNode = cy.nodes().filter((node) => {
-          const path = node.data("path");
-          return Array.isArray(path) && path.length === 0;
-        }).first();
-        if (rootNode && rootNode.length) {
-          rootNode.addClass("root");
-        }
-
         const hidePopover = () => {
-          if (!activeNode) return;
-          activeNode.removeClass("active-popover");
-          activeNode = null;
+          if (!activeElement) return;
+          activeElement.removeClass("active-popover");
+          activeElement = null;
           popover.classList.remove("visible", "flipped");
           popover.setAttribute("aria-hidden", "true");
           popover.style.display = "none";
         };
 
-        const positionPopover = (node) => {
-          if (!node) return;
+        const positionPopoverForNode = (node) => {
           const pos = node.renderedPosition();
           const { width, height } = popover.getBoundingClientRect();
           const containerWidth = wrapper.getBoundingClientRect().width;
@@ -488,53 +462,110 @@
           popover.classList.toggle("flipped", flipped);
         };
 
-        const showPopover = (node) => {
+        const positionPopoverForEdge = (edge) => {
+          const midpoint = edge.midpoint();
+          const renderedMidpoint = {
+            x: cy.pan().x + midpoint.x * cy.zoom(),
+            y: cy.pan().y + midpoint.y * cy.zoom()
+          };
+          const { width, height } = popover.getBoundingClientRect();
+          const containerWidth = wrapper.getBoundingClientRect().width;
+
+          let left = renderedMidpoint.x - width / 2;
+          left = Math.max(16, Math.min(left, containerWidth - width - 16));
+
+          let top = renderedMidpoint.y - height - 24;
+          let flipped = false;
+          if (top < 16) {
+            top = renderedMidpoint.y + 24;
+            flipped = true;
+          }
+
+          popover.style.left = `${left}px`;
+          popover.style.top = `${top}px`;
+          popover.classList.toggle("flipped", flipped);
+        };
+
+        const showNodePopover = (node) => {
           const meta = node.data("meta") || {};
-          const entries = Object.entries(meta);
-          const typeEntry = entries.find(([key]) => key === "type");
-          popoverTitle.textContent = typeEntry?.[1] || node.data("label") || "Event";
+          popoverTitle.textContent = "State";
           popoverBody.innerHTML = renderMetaFields(meta);
 
           popover.style.display = "block";
           popover.classList.add("visible");
           popover.setAttribute("aria-hidden", "false");
 
-          positionPopover(node);
+          positionPopoverForNode(node);
+        };
+
+        const showEdgePopover = (edge) => {
+          const event = edge.data("event");
+          const label = edge.data("label") || "Transition";
+          popoverTitle.textContent = label;
+          popoverBody.innerHTML = renderEventData(event);
+
+          popover.style.display = "block";
+          popover.classList.add("visible");
+          popover.setAttribute("aria-hidden", "false");
+
+          positionPopoverForEdge(edge);
         };
 
         cy.on("tap", "node", (evt) => {
           const node = evt.target;
-          if (activeNode && activeNode.id() === node.id()) {
+          if (activeElement && activeElement.id() === node.id()) {
             hidePopover();
             return;
           }
 
-          if (activeNode) {
+          if (activeElement) {
             hidePopover();
           }
 
-          activeNode = node;
+          activeElement = node;
           node.addClass("active-popover");
-          showPopover(node);
+          showNodePopover(node);
+        });
+
+        cy.on("tap", "edge", (evt) => {
+          const edge = evt.target;
+          if (activeElement && activeElement.id() === edge.id()) {
+            hidePopover();
+            return;
+          }
+
+          if (activeElement) {
+            hidePopover();
+          }
+
+          activeElement = edge;
+          edge.addClass("active-popover");
+          showEdgePopover(edge);
         });
 
         cy.on("tap", (evt) => {
           if (evt.target === cy) {
             hidePopover();
-          } else if (evt.target.isEdge && evt.target.isEdge()) {
-            hidePopover();
           }
         });
 
         cy.on("pan zoom", () => {
-          if (activeNode) {
-            positionPopover(activeNode);
+          if (activeElement) {
+            if (activeElement.isNode()) {
+              positionPopoverForNode(activeElement);
+            } else if (activeElement.isEdge()) {
+              positionPopoverForEdge(activeElement);
+            }
           }
         });
 
         window.addEventListener("resize", () => {
-          if (activeNode) {
-            positionPopover(activeNode);
+          if (activeElement) {
+            if (activeElement.isNode()) {
+              positionPopoverForNode(activeElement);
+            } else if (activeElement.isEdge()) {
+              positionPopoverForEdge(activeElement);
+            }
           }
         });
 

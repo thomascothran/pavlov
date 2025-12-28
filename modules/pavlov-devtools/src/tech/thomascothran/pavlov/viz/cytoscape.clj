@@ -158,7 +158,7 @@
                             is-deadlock?)
                        (assoc :classes "deadlock")))))
      :edges (vec (for [{:keys [from to event]} edges]
-                   {:data {:id (str "edge-" (pr-str from) "->" (pr-str to))
+                   {:data {:id (str "edge-" (pr-str from) "->" (pr-str to) "-" (pr-str event))
                            :source (pr-str from)
                            :target (pr-str to)
                            :label (str (e/type event))
