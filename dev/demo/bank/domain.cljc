@@ -117,9 +117,9 @@
                 [(make-bthreads-v1)
                  (make-environment-bthreads-v1)]))
 
-      (graph/->graph btrds)
-      (spit "cytoscape-bank.html"
-            (ch/->html (into [] btrds)))))
+      (spit "cytoscape-bank2.html"
+            (-> (graph/->lts btrds)
+                (ch/lts->html)))))
 
 ;; More rules to consider:
 ;;
