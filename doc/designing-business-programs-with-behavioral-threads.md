@@ -201,7 +201,7 @@ By requesting *both* alternatives in an unordered collection, we indicate that e
 
 Pavlov has a built-in visualizer for bprograms that lets us see the bthreads and their states as the program executes.
 
-![bprogram visualizer](./assets/bprogram-visualizer.png)
+![bprogram visualizer](./assets/cytoscape-viz.png)
 
 The visualizer exports as an html file:
 
