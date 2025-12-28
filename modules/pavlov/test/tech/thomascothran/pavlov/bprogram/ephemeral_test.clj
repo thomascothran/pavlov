@@ -233,3 +233,13 @@
   (is true
       @(bpe/execute! {:wait-forever (b/bids [{:wait-on #{:godot}}])}
                      {:kill-after 50})))
+
+(deftest test-wait-and-request-same-event
+  (let [bthread
+        (b/bids [{:request #{:a}
+                  :wait-on #{:a}}
+                 {:request #{{:type :b
+                              :terminal true}}}])
+        result @(bpe/execute! {:test-bthread bthread})]
+    (is (= {:type :b, :terminal true}
+           result))))
