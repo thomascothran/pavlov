@@ -108,3 +108,58 @@
   (-> bthreads
       graph/->graph
       -graph->cytoscape))
+
+(defn lts->cytoscape
+  "Convert an LTS (Labeled Transition System) to Cytoscape format.
+  
+  Takes an LTS map with keys:
+  - :root - the root state identifier
+  - :nodes - map of state-id to state-data
+  - :edges - vector of edge maps with :from, :to, :event
+  - :truncated - boolean indicating if the LTS was truncated
+  
+  Returns a map with:
+  - :nodes - vector of Cytoscape node elements
+  - :edges - vector of Cytoscape edge elements"
+  [{:keys [root nodes edges]}]
+  ;; Compute sets for node classification
+  (let [nodes-with-outgoing (into #{} (map :from) edges)
+        terminal-nodes (into #{}
+                             (comp (filter #(-> % :event :terminal))
+                                   (map :to))
+                             edges)
+        nodes-with-incoming (into #{} (map :to) edges)]
+    {:nodes (vec (for [[node-id node-data] nodes]
+                   (let [has-outgoing? (contains? nodes-with-outgoing node-id)
+                         is-terminal? (contains? terminal-nodes node-id)
+                         is-root? (= node-id root)
+                         has-incoming? (contains? nodes-with-incoming node-id)
+                         is-deadlock? (and (not has-outgoing?)
+                                           (not is-terminal?)
+                                           (not is-root?)
+                                           has-incoming?)]
+                     (cond-> {:data {:id (pr-str node-id)
+                                     :label ""
+                                     :meta node-data}}
+                       ;; Priority order: root > terminal > deadlock
+                       ;; Root takes highest precedence
+                       is-root?
+                       (assoc :classes "root")
+
+                       ;; Terminal: has incoming terminal edge AND no outgoing edges
+                       (and (not is-root?)
+                            is-terminal?
+                            (not has-outgoing?))
+                       (assoc :classes "terminal")
+
+                       ;; Deadlock: has incoming edge, no outgoing, not terminal, not root
+                       (and (not is-root?)
+                            (not is-terminal?)
+                            is-deadlock?)
+                       (assoc :classes "deadlock")))))
+     :edges (vec (for [{:keys [from to event]} edges]
+                   {:data {:id (str "edge-" (pr-str from) "->" (pr-str to))
+                           :source (pr-str from)
+                           :target (pr-str to)
+                           :label (str (:type event))
+                           :event event}}))}))
