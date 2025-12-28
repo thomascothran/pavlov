@@ -158,9 +158,11 @@
                             is-deadlock?)
                        (assoc :classes "deadlock")))))
      :edges (vec (for [{:keys [from to event]} edges]
-                   {:data {:id (str "edge-" (path->id from) "->" (path->id to))
-                           :source (path->id from)
-                           :target (path->id to)
-                           :label (str (e/type event))
-                           :event event}}))
+                   (cond-> {:data {:id (str "edge-" (path->id from) "->" (path->id to))
+                                   :source (path->id from)
+                                   :target (path->id to)
+                                   :label (str (e/type event))
+                                   :event event}}
+                     (get event :invariant-violated)
+                     (assoc :classes "invariant-violated"))))
      :layout {:name "breadthfirst"}}))

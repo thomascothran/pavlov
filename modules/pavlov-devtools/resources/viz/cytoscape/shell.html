@@ -85,7 +85,7 @@
       #popover {
         position: absolute;
         min-width: 260px;
-        max-width: 320px;
+        max-width: 600px;
         background: white;
         border-radius: 16px;
         padding: 16px 18px;
@@ -180,6 +180,7 @@
         padding: 8px 10px;
         color: #0f172a;
         overflow-x: auto;
+        max-width: 100%;
       }
 
       @media (max-width: 768px) {
@@ -261,8 +262,23 @@
           return '<p class="popover-empty">No additional metadata provided.</p>';
         }
 
+        // Custom field order for node state display
+        const fieldOrder = [
+          "blocks",
+          "requests",
+          "waits",
+          "bthreads-by-priority",
+          "bthread->bid",
+          "saved-bthread-states"
+        ];
+
+        const getOrderIndex = (key) => {
+          const idx = fieldOrder.indexOf(key);
+          return idx === -1 ? fieldOrder.length : idx;
+        };
+
         return entries
-          .sort(([a], [b]) => a.localeCompare(b))
+          .sort(([a], [b]) => getOrderIndex(a) - getOrderIndex(b))
           .map(([key, value]) => {
             return `
               <div class="popover-field">
@@ -427,6 +443,16 @@
               style: {
                 "line-color": "#3b82f6",
                 "target-arrow-color": "#3b82f6",
+                width: 3
+              }
+            },
+
+            // Invariant violated edge — Red
+            {
+              selector: "edge.invariant-violated",
+              style: {
+                "line-color": "#DC2626",
+                "target-arrow-color": "#DC2626",
                 width: 3
               }
             }
