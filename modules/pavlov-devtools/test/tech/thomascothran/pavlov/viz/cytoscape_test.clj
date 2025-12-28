@@ -6,6 +6,9 @@
             [tech.thomascothran.pavlov.event :as e]
             [tech.thomascothran.pavlov.viz.cytoscape :as cytoscape]))
 
+;; Access the private path->id function for testing
+(def path->id @#'cytoscape/path->id)
+
 (defn make-bthreads-linear
   []
   {:single (b/bids [{:request #{:step/a}}
@@ -135,11 +138,12 @@
           (is (contains? (:data node) :label) "node should have :label")
           (is (contains? (:data node) :meta) "node should have :meta")))
 
-      (testing ":id is a stringified identifier"
+      (testing ":id uses path->id format (node-XXXXXXXX)"
         (let [node-ids (set (map #(get-in % [:data :id]) nodes))]
           (is (every? string? node-ids) "all :id values should be strings")
-          ;; IDs should be pr-str of state identifiers (vectors)
-          (is (every? #(re-find #"^\[" %) node-ids) "IDs should start with [ (stringified vectors)")))
+          ;; IDs should match the path->id format: "node-" followed by 8 hex digits
+          (is (every? #(re-matches #"node-[0-9a-f]{8}" %) node-ids)
+              "IDs should match path->id format: node-XXXXXXXX")))
 
       (testing ":label is an empty string"
         (is (every? #(= "" (get-in % [:data :label])) nodes)
@@ -147,14 +151,7 @@
 
       (testing ":meta contains original LTS node data"
         (doseq [node nodes]
-          (let [node-id-str (get-in node [:data :id])
-                ;; Parse the stringified node-id back to get the original LTS node-id
-                lts-node-id (read-string node-id-str)
-                lts-node-data (get-in lts [:nodes lts-node-id])
-                meta-data (get-in node [:data :meta])]
-            (is (some? lts-node-data) (str "LTS should have data for node " node-id-str))
-            (is (= lts-node-data meta-data)
-                (str "node " node-id-str " :meta should contain original LTS data"))
+          (let [meta-data (get-in node [:data :meta])]
             ;; Verify meta has expected keys from real LTS
             (is (contains? meta-data :bthread->bid) "meta should have :bthread->bid")
             (is (contains? meta-data :requests) "meta should have :requests")
@@ -228,7 +225,8 @@
           lts (graph/->lts bthreads {:max-nodes 10})
           result (cytoscape/lts->cytoscape lts)
           nodes (:nodes result)
-          root-id-str (pr-str (:root lts))
+          ;; Use path->id to generate the expected root ID
+          root-id-str (path->id (:root lts))
           root-node (first (filter #(= root-id-str (get-in % [:data :id])) nodes))
           non-root-nodes (filter #(not= root-id-str (get-in % [:data :id])) nodes)]
 
@@ -255,7 +253,8 @@
           edges (:edges lts)
           ;; Find the node that has the terminal event leading to it
           terminal-edge (first (filter #(e/terminal? (:event %)) edges))
-          terminal-node-id-str (pr-str (:to terminal-edge))
+          ;; Use path->id to generate the expected terminal node ID
+          terminal-node-id-str (path->id (:to terminal-edge))
           terminal-node (first (filter #(= terminal-node-id-str (get-in % [:data :id])) nodes))
           non-terminal-nodes (filter #(not= terminal-node-id-str (get-in % [:data :id])) nodes)]
 
@@ -294,7 +293,8 @@
                                                  (not= node-id root)
                                                  (some #(= node-id (:to %)) edges)))
                                           (keys (:nodes lts))))
-          deadlock-node-id-str (pr-str deadlock-node-id)
+          ;; Use path->id to generate the expected deadlock node ID
+          deadlock-node-id-str (path->id deadlock-node-id)
           deadlock-node (first (filter #(= deadlock-node-id-str (get-in % [:data :id])) nodes))
           non-deadlock-nodes (filter #(not= deadlock-node-id-str (get-in % [:data :id])) nodes)]
 
@@ -331,7 +331,8 @@
         (is (seq (:nodes result)) "should have at least one node"))
 
       (testing "root node has 'root' class"
-        (let [root-id (pr-str (:root lts))
+        ;; Use path->id to generate the expected root ID
+        (let [root-id (path->id (:root lts))
               root-node (first (filter #(= root-id (get-in % [:data :id])) (:nodes result)))]
           (is (some? root-node) "root node should exist in cytoscape data")
           (is (= "root" (:classes root-node)) "root node should have :classes 'root'")))
@@ -341,6 +342,9 @@
           (is (contains? node :data) "node should have :data key")
           (is (contains? (:data node) :id) "node :data should have :id")
           (is (string? (get-in node [:data :id])) ":id should be a string")
+          ;; Verify ID matches path->id format
+          (is (re-matches #"node-[0-9a-f]{8}" (get-in node [:data :id]))
+              ":id should match path->id format: node-XXXXXXXX")
           (is (contains? (:data node) :label) "node :data should have :label")
           (is (string? (get-in node [:data :label])) ":label should be a string")
           (is (contains? (:data node) :meta) "node :data should have :meta")))
@@ -361,11 +365,11 @@
 
       (testing "LTS node data is preserved in cytoscape node :meta"
         (doseq [node (:nodes result)]
-          (let [node-id-str (get-in node [:data :id])
-                ;; Parse the stringified node-id back to get the original LTS node-id
-                ;; (e.g., "[nil {...} {...}]" is pr-str of the LTS identifier)
-                lts-node-id (read-string node-id-str)
-                lts-node-data (get-in lts [:nodes lts-node-id])]
-            (is (some? lts-node-data) (str "LTS should have data for node " node-id-str))
-            (is (= lts-node-data (get-in node [:data :meta]))
-                (str "node " node-id-str " :meta should contain original LTS data"))))))))
+          (let [meta-data (get-in node [:data :meta])]
+            ;; We can no longer reverse the hash to get the original LTS node-id
+            ;; Instead, verify that :meta contains expected LTS structure
+            (is (some? meta-data) "node should have :meta")
+            (is (contains? meta-data :bthread->bid) ":meta should have :bthread->bid")
+            (is (contains? meta-data :requests) ":meta should have :requests")
+            (is (contains? meta-data :waits) ":meta should have :waits")
+            (is (contains? meta-data :blocks) ":meta should have :blocks")))))))

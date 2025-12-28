@@ -111,13 +111,13 @@
 
 (defn lts->cytoscape
   "Convert an LTS (Labeled Transition System) to Cytoscape format.
-  
+
   Takes an LTS map with keys:
   - :root - the root state identifier
   - :nodes - map of state-id to state-data
   - :edges - vector of edge maps with :from, :to, :event
   - :truncated - boolean indicating if the LTS was truncated
-  
+
   Returns a map with:
   - :nodes - vector of Cytoscape node elements
   - :edges - vector of Cytoscape edge elements"
@@ -138,7 +138,7 @@
                                            (not is-terminal?)
                                            (not is-root?)
                                            has-incoming?)]
-                     (cond-> {:data {:id (pr-str node-id)
+                     (cond-> {:data {:id (path->id node-id)
                                      :label ""
                                      :meta node-data}}
                        ;; Priority order: root > terminal > deadlock
@@ -158,8 +158,9 @@
                             is-deadlock?)
                        (assoc :classes "deadlock")))))
      :edges (vec (for [{:keys [from to event]} edges]
-                   {:data {:id (str "edge-" (pr-str from) "->" (pr-str to) "-" (pr-str event))
-                           :source (pr-str from)
-                           :target (pr-str to)
+                   {:data {:id (str "edge-" (path->id from) "->" (path->id to))
+                           :source (path->id from)
+                           :target (path->id to)
                            :label (str (e/type event))
-                           :event event}}))}))
+                           :event event}}))
+     :layout {:name "breadthfirst"}}))
