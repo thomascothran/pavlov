@@ -3,6 +3,7 @@
             [clojure.test :refer [deftest is testing]]
             [tech.thomascothran.pavlov.graph :as graph]
             [tech.thomascothran.pavlov.bthread :as b]
+            [tech.thomascothran.pavlov.event :as e]
             [tech.thomascothran.pavlov.viz.cytoscape :as cytoscape]))
 
 (defn make-bthreads-linear
@@ -97,28 +98,30 @@
 
 (deftest lts->cytoscape-basic-structure
   (testing "converts simple LTS to cytoscape format with correct structure"
-    (let [lts {:root :state-a
-               :nodes {:state-a {:some "data"}
-                       :state-b {:other "data"}}
-               :edges [{:from :state-a :to :state-b :event {:type :my-event}}]
-               :truncated false}
+    (let [;; Create real bthreads: one requests :a then :b
+          bthreads {:simple (b/bids [{:request #{:a}}
+                                     {:request #{:b}}])}
+          ;; Generate real LTS
+          lts (graph/->lts bthreads {:max-nodes 10})
           result (cytoscape/lts->cytoscape lts)]
+
       (testing "result has expected keys"
         (is (contains? result :nodes))
         (is (contains? result :edges)))
+
       (testing "result has correct counts"
-        (is (= 2 (count (:nodes result))) "should have 2 nodes")
-        (is (= 1 (count (:edges result))) "should have 1 edge")))))
+        ;; We should have 3 nodes: initial, after :a, after :b
+        (is (= 3 (count (:nodes result))) "should have 3 nodes")
+        ;; We should have 2 edges: one for :a, one for :b
+        (is (= 2 (count (:edges result))) "should have 2 edges")))))
 
 (deftest lts->cytoscape-node-data-structure
   (testing "each node has correct data structure with id, label, and meta"
-    (let [lts {:root :state-a
-               :nodes {:state-a {:bthread->bid {:bt1 {:request #{:e1}}}
-                                 :requests {:e1 #{:bt1}}}
-                       :state-b {:bthread->bid {:bt1 {:wait #{:e2}}}
-                                 :waits {:e2 #{:bt1}}}}
-               :edges [{:from :state-a :to :state-b :event {:type :e1}}]
-               :truncated false}
+    (let [;; Create real bthreads with named events
+          bthreads {:bt1 (b/bids [{:request #{:e1}}
+                                  {:request #{:e2}}])}
+          ;; Generate real LTS
+          lts (graph/->lts bthreads {:max-nodes 10})
           result (cytoscape/lts->cytoscape lts)
           nodes (:nodes result)]
 
@@ -135,34 +138,36 @@
       (testing ":id is a stringified identifier"
         (let [node-ids (set (map #(get-in % [:data :id]) nodes))]
           (is (every? string? node-ids) "all :id values should be strings")
-          (is (contains? node-ids ":state-a") "should contain stringified :state-a")
-          (is (contains? node-ids ":state-b") "should contain stringified :state-b")))
+          ;; IDs should be pr-str of state identifiers (vectors)
+          (is (every? #(re-find #"^\[" %) node-ids) "IDs should start with [ (stringified vectors)")))
 
       (testing ":label is an empty string"
         (is (every? #(= "" (get-in % [:data :label])) nodes)
             "all :label values should be empty strings"))
 
       (testing ":meta contains original LTS node data"
-        (let [state-a-node (first (filter #(= ":state-a" (get-in % [:data :id])) nodes))
-              state-b-node (first (filter #(= ":state-b" (get-in % [:data :id])) nodes))]
-          (is (= {:bthread->bid {:bt1 {:request #{:e1}}}
-                  :requests {:e1 #{:bt1}}}
-                 (get-in state-a-node [:data :meta]))
-              "state-a meta should contain original node data")
-          (is (= {:bthread->bid {:bt1 {:wait #{:e2}}}
-                  :waits {:e2 #{:bt1}}}
-                 (get-in state-b-node [:data :meta]))
-              "state-b meta should contain original node data"))))))
+        (doseq [node nodes]
+          (let [node-id-str (get-in node [:data :id])
+                ;; Parse the stringified node-id back to get the original LTS node-id
+                lts-node-id (read-string node-id-str)
+                lts-node-data (get-in lts [:nodes lts-node-id])
+                meta-data (get-in node [:data :meta])]
+            (is (some? lts-node-data) (str "LTS should have data for node " node-id-str))
+            (is (= lts-node-data meta-data)
+                (str "node " node-id-str " :meta should contain original LTS data"))
+            ;; Verify meta has expected keys from real LTS
+            (is (contains? meta-data :bthread->bid) "meta should have :bthread->bid")
+            (is (contains? meta-data :requests) "meta should have :requests")
+            (is (contains? meta-data :waits) "meta should have :waits")
+            (is (contains? meta-data :blocks) "meta should have :blocks")))))))
 
 (deftest lts->cytoscape-edge-data-structure
   (testing "each edge has correct data structure"
-    (let [lts {:root :state-a
-               :nodes {:state-a {:some "data"}
-                       :state-b {:other "data"}
-                       :state-c {:more "data"}}
-               :edges [{:from :state-a :to :state-b :event {:type :my-event :payload {:x 1}}}
-                       {:from :state-b :to :state-c :event {:type :another-event :payload {:y 2}}}]
-               :truncated false}
+    (let [;; Create bthreads that produce multiple edges
+          bthreads {:simple (b/bids [{:request #{:my-event}}
+                                     {:request #{:another-event}}])}
+          ;; Generate real LTS
+          lts (graph/->lts bthreads {:max-nodes 10})
           result (cytoscape/lts->cytoscape lts)
           edges (:edges result)
           nodes (:nodes result)
@@ -197,6 +202,7 @@
                 (str ":target " target " should reference a valid node ID")))))
 
       (testing ":label is the stringified event type"
+        ;; Real events are keywords, so label should be their string representation
         (let [first-edge (first edges)
               second-edge (second edges)]
           (is (= ":my-event" (get-in first-edge [:data :label]))
@@ -205,28 +211,26 @@
               "second edge label should be stringified event type")))
 
       (testing ":event contains the full event data"
+        ;; Real events are keywords (not maps)
         (let [first-edge (first edges)
               second-edge (second edges)]
-          (is (= {:type :my-event :payload {:x 1}}
-                 (get-in first-edge [:data :event]))
-              "first edge should contain full event data")
-          (is (= {:type :another-event :payload {:y 2}}
-                 (get-in second-edge [:data :event]))
-              "second edge should contain full event data"))))))
+          (is (= :my-event (get-in first-edge [:data :event]))
+              "first edge should contain the keyword event")
+          (is (= :another-event (get-in second-edge [:data :event]))
+              "second edge should contain the keyword event"))))))
 
 (deftest lts->cytoscape-root-node-class
   (testing "root node is marked with 'root' CSS class"
-    (let [lts {:root :state-a
-               :nodes {:state-a {:some "data"}
-                       :state-b {:other "data"}
-                       :state-c {:more "data"}}
-               :edges [{:from :state-a :to :state-b :event {:type :e1}}
-                       {:from :state-b :to :state-c :event {:type :e2}}]
-               :truncated false}
+    (let [;; Create simple bthreads
+          bthreads {:simple (b/bids [{:request #{:e1}}
+                                     {:request #{:e2}}])}
+          ;; Generate real LTS
+          lts (graph/->lts bthreads {:max-nodes 10})
           result (cytoscape/lts->cytoscape lts)
           nodes (:nodes result)
-          root-node (first (filter #(= ":state-a" (get-in % [:data :id])) nodes))
-          non-root-nodes (filter #(not= ":state-a" (get-in % [:data :id])) nodes)]
+          root-id-str (pr-str (:root lts))
+          root-node (first (filter #(= root-id-str (get-in % [:data :id])) nodes))
+          non-root-nodes (filter #(not= root-id-str (get-in % [:data :id])) nodes)]
 
       (testing "root node has :classes 'root'"
         (is (some? root-node) "root node should exist")
@@ -241,17 +245,19 @@
 
 (deftest lts->cytoscape-terminal-node-class
   (testing "terminal nodes are marked with 'terminal' CSS class"
-    (let [lts {:root :state-a
-               :nodes {:state-a {:some "data"}
-                       :state-b {:other "data"}
-                       :state-c {:final "data"}}
-               :edges [{:from :state-a :to :state-b :event {:type :e1}}
-                       {:from :state-b :to :state-c :event {:type :e2 :terminal true}}]
-               :truncated false}
+    (let [;; Create bthreads where last event has :terminal true
+          bthreads {:simple (b/bids [{:request #{:e1}}
+                                     {:request #{{:type :e2 :terminal true}}}])}
+          ;; Generate real LTS
+          lts (graph/->lts bthreads {:max-nodes 10})
           result (cytoscape/lts->cytoscape lts)
           nodes (:nodes result)
-          terminal-node (first (filter #(= ":state-c" (get-in % [:data :id])) nodes))
-          non-terminal-nodes (filter #(not= ":state-c" (get-in % [:data :id])) nodes)]
+          edges (:edges lts)
+          ;; Find the node that has the terminal event leading to it
+          terminal-edge (first (filter #(e/terminal? (:event %)) edges))
+          terminal-node-id-str (pr-str (:to terminal-edge))
+          terminal-node (first (filter #(= terminal-node-id-str (get-in % [:data :id])) nodes))
+          non-terminal-nodes (filter #(not= terminal-node-id-str (get-in % [:data :id])) nodes)]
 
       (testing "terminal node has :classes 'terminal'"
         (is (some? terminal-node) "terminal node should exist")
@@ -266,17 +272,31 @@
 
 (deftest lts->cytoscape-deadlock-node-class
   (testing "deadlock nodes are marked with 'deadlock' CSS class"
-    (let [lts {:root :state-a
-               :nodes {:state-a {:some "data"}
-                       :state-b {:other "data"}
-                       :state-c {:stuck "data"}}
-               :edges [{:from :state-a :to :state-b :event {:type :e1}}
-                       {:from :state-b :to :state-c :event {:type :e2}}] ; NO :terminal true
-               :truncated false}
+    (let [;; Create bthreads where execution ends without terminal event
+          ;; This creates a deadlock: bthread waits for :e2 but no one requests it
+          bthreads {:requester (b/bids [{:request #{:e1}}])
+                    :blocker (b/bids [{:wait-on #{:e1}}
+                                      {:block #{:e2}}])}
+          ;; Generate real LTS
+          lts (graph/->lts bthreads {:max-nodes 10})
           result (cytoscape/lts->cytoscape lts)
           nodes (:nodes result)
-          deadlock-node (first (filter #(= ":state-c" (get-in % [:data :id])) nodes))
-          non-deadlock-nodes (filter #(not= ":state-c" (get-in % [:data :id])) nodes)]
+          edges (:edges lts)
+          ;; Find leaf nodes (nodes with no outgoing edges)
+          nodes-with-outgoing (into #{} (map :from) edges)
+          terminal-nodes (into #{} (comp (filter #(e/terminal? (:event %)))
+                                         (map :to)) edges)
+          root (:root lts)
+          ;; Deadlock node: has incoming edge, no outgoing edges, not terminal, not root
+          deadlock-node-id (first (filter (fn [node-id]
+                                            (and (not (contains? nodes-with-outgoing node-id))
+                                                 (not (contains? terminal-nodes node-id))
+                                                 (not= node-id root)
+                                                 (some #(= node-id (:to %)) edges)))
+                                          (keys (:nodes lts))))
+          deadlock-node-id-str (pr-str deadlock-node-id)
+          deadlock-node (first (filter #(= deadlock-node-id-str (get-in % [:data :id])) nodes))
+          non-deadlock-nodes (filter #(not= deadlock-node-id-str (get-in % [:data :id])) nodes)]
 
       (testing "deadlock node has :classes 'deadlock'"
         (is (some? deadlock-node) "deadlock node should exist")
@@ -311,7 +331,7 @@
         (is (seq (:nodes result)) "should have at least one node"))
 
       (testing "root node has 'root' class"
-        (let [root-id (str (:root lts))
+        (let [root-id (pr-str (:root lts))
               root-node (first (filter #(= root-id (get-in % [:data :id])) (:nodes result)))]
           (is (some? root-node) "root node should exist in cytoscape data")
           (is (= "root" (:classes root-node)) "root node should have :classes 'root'")))
@@ -349,5 +369,3 @@
             (is (some? lts-node-data) (str "LTS should have data for node " node-id-str))
             (is (= lts-node-data (get-in node [:data :meta]))
                 (str "node " node-id-str " :meta should contain original LTS data"))))))))
-
-

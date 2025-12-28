@@ -161,5 +161,5 @@
                    {:data {:id (str "edge-" (pr-str from) "->" (pr-str to))
                            :source (pr-str from)
                            :target (pr-str to)
-                           :label (str (:type event))
+                           :label (str (e/type event))
                            :event event}}))}))
