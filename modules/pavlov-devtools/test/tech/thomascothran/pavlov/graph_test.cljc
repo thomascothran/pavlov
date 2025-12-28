@@ -46,6 +46,15 @@
   []
   {:looper (b/repeat {:request #{:a}})})
 
+(defn make-bthreads-many-steps
+  "Create a bthread that goes through 20 sequential steps."
+  []
+  (let [steps (vec (for [i (range 20)]
+                     (if (even? i)
+                       {:request #{:a}}
+                       {:request #{:b}})))]
+    {:stepper (b/bids steps)}))
+
 (comment
   (tap> (pnav/root (make-branching-bthreads))))
 
@@ -255,3 +264,20 @@
       ;; (initial state + one or two states in the cycle)
       (is (<= (count nodes) 3)
           "Cyclic bthread should create minimal nodes (not infinitely many)"))))
+
+(deftest lts-max-nodes-limit
+  (testing "LTS respects :max-nodes limit"
+    (let [lts (graph/->lts (make-bthreads-many-steps) {:max-nodes 10})
+          nodes (:nodes lts)]
+      (is (<= (count nodes) 10)
+          "Should not exceed max-nodes limit")))
+
+  (testing "LTS returns :truncated true when limit is hit"
+    (let [lts (graph/->lts (make-bthreads-many-steps) {:max-nodes 10})]
+      (is (= true (:truncated lts))
+          "Should indicate truncation when max-nodes limit is hit")))
+
+  (testing "LTS returns :truncated false when limit is not hit"
+    (let [lts (graph/->lts (make-bthreads-simple-linear))] ;; small graph, no limit
+      (is (= false (:truncated lts))
+          "Should indicate no truncation when exploration completes normally"))))
