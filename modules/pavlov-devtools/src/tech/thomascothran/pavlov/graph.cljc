@@ -83,6 +83,7 @@
   making convergence visible in the graph.
 
   Returns a map with:
+    :root      - Identifier of the initial state
     :nodes     - Map of state-identifier -> node data
     :edges     - Vector of {:from id, :to id, :event e}
     :truncated - true if exploration was cut short by limits
@@ -100,35 +101,39 @@
 
   Example:
     (->lts {:a bthread-a :b bthread-b})
-    ;; => {:nodes {...} :edges [...] :truncated false}
+    ;; => {:root root-id :nodes {...} :edges [...] :truncated false}
 
     (->lts bthreads {:max-nodes 100})
-    ;; => {:nodes {...} :edges [...] :truncated true}"
+    ;; => {:root root-id :nodes {...} :edges [...] :truncated true}"
   ([bthreads] (->lts bthreads {:max-nodes 100}))
   ([bthreads {:keys [max-nodes] :as _opts}]
-   (let [nav (search/make-navigator bthreads)]
-     (search/bfs-reduce
-      nav
-      (fn [{:keys [edges nodes truncated]} wrapped]
-        ;; Check if we've reached the max-nodes limit before processing
-        (if (and max-nodes (>= (count nodes) max-nodes))
-          (reduced {:edges edges :nodes nodes :truncated true})
-          (let [identifier (search/identifier nav wrapped)
-                ;; Add the current node to the nodes map
-                nodes (assoc nodes identifier (->node-value wrapped))
-                ;; Check again after adding current node
-                stop-after-current? (and max-nodes (>= (count nodes) max-nodes))
-                successors (if stop-after-current?
-                             [] ;; Don't process successors if we've hit the limit
-                             (search/succ nav wrapped))
-                [edges nodes] (reduce (fn [[edges nodes] {:keys [state event]}]
-                                        (let [succ-identifier (search/identifier nav state)]
-                                          [(conj edges {:from identifier
-                                                        :to succ-identifier
-                                                        :event event})
-                                           ;; Also add successor nodes
-                                           (assoc nodes succ-identifier (->node-value state))]))
-                                      [edges nodes]
-                                      successors)]
-            {:edges edges :nodes nodes :truncated (or truncated false)})))
-      {:edges [] :nodes {} :truncated false}))))
+   (let [nav (search/make-navigator bthreads)
+         root-wrapped (search/root nav)
+         root-id (search/identifier nav root-wrapped)]
+     (assoc
+      (search/bfs-reduce
+       nav
+       (fn [{:keys [edges nodes truncated]} wrapped]
+         ;; Check if we've reached the max-nodes limit before processing
+         (if (and max-nodes (>= (count nodes) max-nodes))
+           (reduced {:edges edges :nodes nodes :truncated true})
+           (let [identifier (search/identifier nav wrapped)
+                 ;; Add the current node to the nodes map
+                 nodes (assoc nodes identifier (->node-value wrapped))
+                 ;; Check again after adding current node
+                 stop-after-current? (and max-nodes (>= (count nodes) max-nodes))
+                 successors (if stop-after-current?
+                              [] ;; Don't process successors if we've hit the limit
+                              (search/succ nav wrapped))
+                 [edges nodes] (reduce (fn [[edges nodes] {:keys [state event]}]
+                                         (let [succ-identifier (search/identifier nav state)]
+                                           [(conj edges {:from identifier
+                                                         :to succ-identifier
+                                                         :event event})
+                                            ;; Also add successor nodes
+                                            (assoc nodes succ-identifier (->node-value state))]))
+                                       [edges nodes]
+                                       successors)]
+             {:edges edges :nodes nodes :truncated (or truncated false)})))
+       {:edges [] :nodes {} :truncated false})
+      :root root-id))))

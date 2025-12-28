@@ -161,7 +161,22 @@
           "Node should NOT contain :name->bthread key")
 
       (is (not (contains? node-value :bprogram/state))
-          "Node should NOT contain :bprogram/state key (structure is now flattened)"))))
+          "Node should NOT contain :bprogram/state key (structure is now flattened)")))
+
+  (testing "LTS has a :root key identifying the initial state"
+    (let [lts (graph/->lts (make-bthreads-simple-linear))
+          nodes (:nodes lts)
+          edges (:edges lts)
+          root (:root lts)]
+
+      (is (some? root)
+          "LTS should have a :root key")
+
+      (is (contains? nodes root)
+          "The :root value should be one of the node identifiers")
+
+      (is (not-any? #(= root (:to %)) edges)
+          "The :root node should have no incoming edges"))))
 
 (deftest lts-simple-branch-flow
   (testing "LTS has branching edges for :a and :b from same state"
