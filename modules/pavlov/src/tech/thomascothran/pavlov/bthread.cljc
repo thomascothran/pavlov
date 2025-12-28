@@ -85,13 +85,19 @@
   ([x] (repeat nil x))
   ([n x]
    (let [repeat-forever? (nil? n)
-         step-fn
+         infinite-step-fn (fn [_ _] [:infinite x])
+         finite-step-fn
          (fn [invocations _]
            (let [invocations' (or invocations 1)]
              (if (and (not repeat-forever?)
                       (< n invocations'))
                [(inc invocations') nil]
-               [(inc invocations') x])))]
+               [(inc invocations') x])))
+
+         step-fn
+         (if repeat-forever?
+           infinite-step-fn
+           finite-step-fn)]
      (step step-fn))))
 
 (defn on

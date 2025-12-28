@@ -197,6 +197,29 @@ Note that we are using these environment bthreads to *simulate* events; we would
 
 By requesting *both* alternatives in an unordered collection, we indicate that either event can occur. This lets us use Pavlov's bthread explorer to click through the execution paths of our application.
 
+#### Pavlov Bprogram Visualizer
+
+Pavlov has a built-in visualizer for bprograms that lets us see the bthreads and their states as the program executes.
+
+![bprogram visualizer](./assets/cytoscape-viz.png)
+
+The visualizer exports as an html file:
+
+```clojure
+(do (require '[tech.thomascothran.pavlov.viz.cytoscape-html :as ch])
+    (require '[tech.thomascothran.pavlov.graph :as graph])
+
+    (def btrds
+      (reduce into
+              (safety-bthreads-v1)
+              [(make-bthreads-v1)
+               (make-environment-bthreads-v1)]))
+
+    (spit "bank-rules.html"
+          (-> (graph/->lts btrds)
+              (ch/lts->html))))
+```
+
 #### Pavlov Program Explorer
 
 Using `nav`, we can open up our bthreads in Portal and click through all the diverging paths. Or you (or an LLM) can use nav at the REPL.

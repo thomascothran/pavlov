@@ -104,9 +104,22 @@
   (-> (reduce into (safety-bthreads-v1)
               [(make-bthreads-v1)
                (make-environment-bthreads-v1)])
-
       (pvp/bthreads->navigable)
       (tap>)))
+
+(comment
+  (do (require '[tech.thomascothran.pavlov.viz.cytoscape-html :as ch])
+      (require '[tech.thomascothran.pavlov.graph :as graph])
+
+      (def btrds
+        (reduce into
+                (safety-bthreads-v1)
+                [(make-bthreads-v1)
+                 (make-environment-bthreads-v1)]))
+
+      (spit "cytoscape-bank2.html"
+            (-> (graph/->lts btrds)
+                (ch/lts->html)))))
 
 ;; More rules to consider:
 ;;
