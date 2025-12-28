@@ -16,7 +16,7 @@
   (atom nil))
 
 (defn start-nrepl!
-  ([] (start-nrepl! {:port 7888}))
+  ([] (start-nrepl! {:port 9898}))
   ([{:keys [port]}]
    (spit ".nrepl-port" port)
    (reset! !nrepl-server
