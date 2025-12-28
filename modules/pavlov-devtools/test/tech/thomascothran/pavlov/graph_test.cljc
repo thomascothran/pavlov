@@ -41,6 +41,11 @@
    :post-converge (b/bids [{:wait-on #{:a :b}} ;; wait for first branch
                            {:request #{:x :y}}])})
 
+(defn make-bthreads-cycle
+  "Create a bthread that infinitely loops requesting :a."
+  []
+  {:looper (b/repeat {:request #{:a}})})
+
 (comment
   (tap> (pnav/root (make-branching-bthreads))))
 
@@ -222,3 +227,31 @@
           "The :y edge should branch from the converged state (same as :x)")
       (is (= (:from x-edge) (:from y-edge))
           "Both :x and :y should branch from the same converged state"))))
+
+(deftest lts-cycle
+  (testing "LTS completes without hanging on cyclic bthread"
+    (let [lts (graph/->lts (make-bthreads-cycle))]
+      (is (some? lts)
+          "LTS should complete and return a result")))
+
+  (testing "LTS has a self-loop edge for repeated event"
+    (let [lts (graph/->lts (make-bthreads-cycle))
+          edges (:edges lts)
+          a-edges (filter #(= :a (:event %)) edges)]
+      (is (seq a-edges)
+          "Should have at least one edge for event :a")
+
+      ;; Check if any edge is a self-loop
+      (let [self-loop (first (filter #(= (:from %) (:to %)) a-edges))]
+        (is (some? self-loop)
+            "Should have a self-loop edge where :from equals :to"))))
+
+  (testing "LTS cycle creates minimal node set"
+    (let [lts (graph/->lts (make-bthreads-cycle))
+          nodes (:nodes lts)]
+      (is (map? nodes)
+          "Should have a :nodes map")
+      ;; With a pure cycle, we should have a very small number of nodes
+      ;; (initial state + one or two states in the cycle)
+      (is (<= (count nodes) 3)
+          "Cyclic bthread should create minimal nodes (not infinitely many)"))))
