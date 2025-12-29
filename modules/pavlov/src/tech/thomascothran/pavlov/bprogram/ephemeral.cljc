@@ -1,4 +1,42 @@
 (ns tech.thomascothran.pavlov.bprogram.ephemeral
+  "Run behavioral programs (bprograms) that coordinate bthreads.
+
+   This namespace provides two main entry points:
+
+   - `execute!` - Run a bprogram and get a promise of the terminal event.
+     Use this when you want to treat a bprogram like a function call.
+
+   - `make-program!` - Create a bprogram you can interact with via
+     `submit-event!`, `subscribe!`, and `stop!`. Use this for long-running
+     or interactive programs.
+
+   ## Bthread Priority
+
+   Bthreads can be provided as either:
+
+   - **Map** (non-deterministic priority): `{:bt1 bthread1, :bt2 bthread2}`
+   - **Vector of tuples** (deterministic priority): `[[:bt1 bthread1] [:bt2 bthread2]]`
+
+   When using a vector, earlier bthreads have higher priority. This matters
+   when multiple bthreads request events—the highest priority bthread's
+   request is selected first.
+
+   ## Example
+
+   ```clojure
+   (require '[tech.thomascothran.pavlov.bthread :as b])
+   (require '[tech.thomascothran.pavlov.bprogram.ephemeral :as bpe])
+
+   ;; Simple execution - returns promise of terminal event
+   @(bpe/execute!
+     [[:step-1 (b/bids [{:request #{:a}}])]
+      [:step-2 (b/bids [{:wait-on #{:a}}
+                        {:request #{{:type :done :terminal true}}}])]]
+     {:kill-after 1000})
+   ;; => {:type :done, :terminal true}
+   ```
+
+   See `tech.thomascothran.pavlov.bthread` for creating bthreads."
   (:refer-clojure :exclude [run!])
   (:require [tech.thomascothran.pavlov.bprogram.proto :as bprogram]
             [tech.thomascothran.pavlov.event :as event]
@@ -124,31 +162,48 @@
      :cljs (get-in program-opts [:stopped :promise])))
 
 (defn make-program!
-  "Create a behavioral program comprising bthreads.
+  "Create a long-running behavioral program from bthreads.
 
-  Usage
-  ------
+  Use this when you need to interact with the program over time via
+  `submit-event!`, `subscribe!`, or `stop!`. For simpler fire-and-forget
+  execution, see `execute!`.
+
+  Parameters
+  ----------
+  - `named-bthreads` - bthreads with names, as either:
+    + Map (non-deterministic priority): `{:name1 bthread1, :name2 bthread2}`
+    + Vector of tuples (deterministic priority): `[[:name1 bthread1] [:name2 bthread2]]`
+
+  - `opts` - optional map:
+    + `:subscribers` - map of subscriber-name to `(fn [event bprogram] ...)`.
+      Subscribers can return `{:event some-event}` to inject events.
+    + `:publisher` - custom event publisher (advanced)
+    + `:in-queue` - custom input queue (advanced, CLJ only)
+
+  Returns the bprogram, which implements:
+  - `(bprogram/submit-event! program event)` - send an external event
+  - `(bprogram/subscribe! program key f)` - add a subscriber
+  - `(bprogram/stop! program)` - gracefully terminate, returns promise
+  - `(bprogram/kill! program)` - force terminate, returns promise
+  - `(bprogram/bthread->bids program)` - introspect current bids
+
+  Example
+  -------
   ```clojure
-  (make-program! {:bthread1 bthread1
-                  :bthread2 bthread2}...)
-  ```
+  (require '[tech.thomascothran.pavlov.bthread :as b])
+  (require '[tech.thomascothran.pavlov.bprogram.ephemeral :as bpe])
+  (require '[tech.thomascothran.pavlov.bprogram.proto :as bp])
 
-  But note that bthread priority is random.
+  (def program
+    (bpe/make-program!
+      [[:greeter (b/on :greet
+                       (fn [e] {:request #{{:type :greeted}}}))]]
+      {:subscribers {:logger (fn [e _] (println \"Event:\" e))}}))
 
-  ```clojure
-  (make-program! [[:bthread1 bthread1]
-                  [:bthread2 bthread2]...])
-  ```
-
-
-  To control bthread priority:
-
-  `opts` is a map of options for the behavioral program.
-  Bthreads are supplied as individual arguments after opts.
-  Their priority is determined by the order in which they are supplied.
-  Earlier bthreads have higher priority.
-
-  Returns the behavioral program."
+  (bp/submit-event! program {:type :greet})
+  @(bp/stop! program)
+  ;; => {:type :pavlov/terminate, :terminal true}
+  ```"
   ([named-bthreads] (make-program! named-bthreads nil))
   ([named-bthreads opts]
    (let [initial-state (state/init named-bthreads)
@@ -189,31 +244,57 @@
      bprogram)))
 
 (defn execute!
-  "Execute a behavioral program.
+  "Execute a behavioral program and return a promise of the terminal event.
 
-  Usage
-  ------
+  This is the simplest way to run a bprogram. It handles the full lifecycle:
+  starts the program, runs until termination, and returns the final event.
+  Automatically adds a deadlock detector that terminates if no events can
+  be selected.
+
+  Parameters
+  ----------
+  - `bthreads` - bthreads with names, as either:
+    + Map (non-deterministic priority): `{:name1 bthread1, :name2 bthread2}`
+    + Vector of tuples (deterministic priority): `[[:name1 bthread1] [:name2 bthread2]]`
+
+  - `opts` - optional map:
+    + `:kill-after` - milliseconds after which to force-terminate the program
+    + `:request-event` - an event to request at startup (kicks off the program)
+    + `:subscribers` - map of subscriber-name to `(fn [event bprogram] ...)`
+
+  Returns a promise/future that delivers the terminal event when the program
+  ends. Dereference with `@` or `deref` to block until completion.
+
+  Termination occurs when:
+  - A bthread requests an event with `:terminal true`
+  - No unblocked events can be selected (deadlock)
+  - `:kill-after` timeout expires
+
+  Example with deterministic priority
+  -----------------------------------
   ```clojure
-  (make-program! {:bthread1 bthread1
-                  :bthread2 bthread2}...)
+  (require '[tech.thomascothran.pavlov.bthread :as b])
+  (require '[tech.thomascothran.pavlov.bprogram.ephemeral :as bpe])
+
+  ;; Vector of tuples gives :producer priority over :consumer
+  @(bpe/execute!
+    [[:producer (b/bids [{:request #{:data-ready}}])]
+     [:consumer (b/bids [{:wait-on #{:data-ready}}
+                         {:request #{{:type :done :terminal true}}}])]]
+    {:kill-after 1000})
+  ;; => {:type :done, :terminal true}
   ```
 
-  But note that bthread priority is random when bthreads are defined
-  with a map.
-
+  Example with non-deterministic priority
+  ---------------------------------------
   ```clojure
-  (make-program! [[:bthread1 bthread1]
-                  [:bthread2 bthread2]...])
-  ```
-
-  Returns a promise delivered with the value of the
-  terminal event.
-
-  Options
-  -------
-  - `:request-event`: request an event. This is used to kick off the
-  bprogram
-  "
+  ;; Map has non-deterministic priority - either bthread could go first
+  @(bpe/execute!
+    {:bt-a (b/bids [{:request #{:event-a}}])
+     :bt-b (b/bids [{:request #{:event-b}}])}
+    {:kill-after 1000})
+  ;; => {:type :tech.thomascothran.pavlov.bprogram.ephemeral/deadlock, :terminal true}
+  ```"
   ([bthreads]
    (execute! bthreads nil))
   ([bthreads opts]
