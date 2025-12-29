@@ -318,3 +318,56 @@
             "Cycle should not be empty")
         (is (= #{:ping :pong} (set (:cycle result)))
             "Cycle should contain the ping-pong events")))))
+
+(deftest livelock-check-disabled
+  (testing "When :check-livelock? is false, livelock should not be reported"
+    (let [result (check/check
+                  {:bthreads {:ping-pong
+                              (b/round-robin [{:request #{:ping}}
+                                              {:request #{:pong}}])}
+                   :check-livelock? false})]
+      (is (nil? result)
+          "Should not detect livelock when :check-livelock? is false"))))
+
+(deftest livelock-with-terminating-branch
+  (testing "Livelock detected even when one branch terminates"
+    ;; Create a scenario where:
+    ;; - Bthread 1 requests :terminate (terminal event)
+    ;; - Bthread 2 requests :loop-start, which leads to infinite ping-pong
+    ;; At the first sync point, model checker explores both branches.
+    ;; The :terminate branch leads to termination (OK).
+    ;; The :loop-start branch leads to livelock (VIOLATION).
+    (let [terminating-branch
+          (b/bids [{:request #{{:type :terminate :terminal true}}}])
+
+          looping-branch
+          (b/step
+           (fn [state event]
+             (case (or state :waiting)
+               :waiting (if (= :loop-start event)
+                          [:ping {:request #{:ping}}]
+                          [:waiting {:request #{:loop-start}}])
+               :ping [:pong {:request #{:pong}}]
+               :pong [:ping {:request #{:ping}}])))
+
+          result (check/check
+                  {:bthreads {:terminating terminating-branch
+                              :looping looping-branch}
+                   :check-livelock? true})]
+      (is (some? result)
+          "Should detect a livelock even though one branch terminates")
+      (when result
+        (is (= :livelock (:type result))
+            "Violation type should be :livelock")
+        (is (vector? (:path result))
+            "Should include the path")
+        ;; The path shows the events to reach the cycle entry.
+        ;; It includes :loop-start which enters the looping branch.
+        (is (some #(= :loop-start %) (:path result))
+            "Path should contain :loop-start event that enters the looping branch")
+        (is (vector? (:cycle result))
+            "Should include the cycle")
+        (is (seq (:cycle result))
+            "Cycle should not be empty")
+        (is (= #{:ping :pong} (set (:cycle result)))
+            "Cycle should contain the ping-pong events")))))
