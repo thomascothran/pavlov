@@ -6,7 +6,8 @@
 
   The main entry point is the `check` function which builds an LTS graph
   and analyzes it for violations."
-  (:require [tech.thomascothran.pavlov.graph :as graph]))
+  (:require [clojure.set :as set]
+            [tech.thomascothran.pavlov.graph :as graph]))
 
 ;; Internal implementation details below
 
@@ -202,11 +203,12 @@
         ;; Only proceed if nodes-reaching-terminal succeeded
         (let [;; Trapped nodes = all nodes - can-reach-terminal
               all-nodes (set (keys (:nodes lts)))
-              trapped-nodes (clojure.set/difference all-nodes can-reach-terminal)]
+              trapped-nodes (set/difference all-nodes can-reach-terminal)]
 
           ;; If there are trapped nodes, look for cycles
           (when (seq trapped-nodes)
-            (when-let [{:keys [cycle-path cycle-entry-node]} (find-cycle-in-nodes lts trapped-nodes)]
+            (when-let [{:keys [cycle-path cycle-entry-node]}
+                       (find-cycle-in-nodes lts trapped-nodes)]
               {:type :livelock
                :path (or (find-path lts cycle-entry-node) [])
                :cycle cycle-path})))))))
@@ -231,21 +233,41 @@
   - nil if no violations found
   - {:type :livelock :path [events] :cycle [events]}
   - {:type :safety-violation :event event :path [events] :state state}
-  - {:type :deadlock :path [events] :state state}"
+  - {:type :deadlock :path [events] :state state}
+  - {:type :truncated :max-nodes N :message \"...\"} if exploration was truncated"
   [config]
   (let [all-bthreads (assemble-all-bthreads config)
         ;; Build LTS graph
         lts-opts (cond-> {}
                    (:max-nodes config) (assoc :max-nodes (:max-nodes config)))
-        lts (graph/->lts all-bthreads lts-opts)]
+        lts (graph/->lts all-bthreads lts-opts)
+        truncated? (:truncated lts)]
 
     ;; Check for violations in priority order: livelock > safety > deadlock
     ;; Wrap livelock check in try-catch to handle edge cases like circular node IDs
-    (or (try
-          (find-livelocks lts config)
-          (catch StackOverflowError _e
-            ;; Skip livelock detection if it causes stack overflow
-            ;; (This can happen with complex node IDs containing error objects)
-            nil))
-        (find-safety-violations lts)
-        (find-deadlocks lts config))))
+    (let [violation (or (try
+                          (find-livelocks lts config)
+                          (catch StackOverflowError _e
+                            ;; Skip livelock detection if it causes stack overflow
+                            ;; (This can happen with complex node IDs containing error objects)
+                            nil))
+                        (find-safety-violations lts)
+                        ;; Don't report deadlocks if truncated (likely false positives)
+                        (when-not truncated?
+                          (find-deadlocks lts config)))]
+      (cond
+        ;; Real violation found
+        (and violation truncated?)
+        (assoc violation :truncated true)
+
+        violation
+        violation
+
+        ;; No violation but graph was truncated
+        truncated?
+        {:type :truncated
+         :max-nodes (:max-nodes config)
+         :message "State space exploration truncated. Results may be incomplete."}
+
+        ;; No violation, no truncation
+        :else nil))))

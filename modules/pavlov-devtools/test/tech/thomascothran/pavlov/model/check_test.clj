@@ -371,3 +371,27 @@
             "Cycle should not be empty")
         (is (= #{:ping :pong} (set (:cycle result)))
             "Cycle should contain the ping-pong events")))))
+
+(deftest truncation-warning-when-max-nodes-exceeded
+  (testing "Should warn when state space exploration is truncated due to max-nodes limit"
+    (let [;; Create a bthread that generates many unique states
+          ;; Each state increments a counter and requests a unique event
+          counter-bthread (b/step
+                           (fn [state _event]
+                             (let [n (or state 0)]
+                               [(inc n) {:request #{(keyword (str "event-" n))}}])))
+
+          result (check/check
+                  {:bthreads {:counter counter-bthread}
+                   :max-nodes 5})] ;; Very small limit to force truncation
+
+      (is (some? result)
+          "Should return a result when truncated")
+
+      (when result
+        (is (= :truncated (:type result))
+            "Violation type should be :truncated")
+        (is (= 5 (:max-nodes result))
+            "Should report the max-nodes limit")
+        (is (string? (:message result))
+            "Should include a message about truncation")))))
