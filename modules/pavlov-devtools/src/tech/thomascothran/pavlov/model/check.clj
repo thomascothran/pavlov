@@ -455,14 +455,24 @@
            trapped (set/difference all-nodes can-reach)]
        (when (seq trapped)
          (when-let [{:keys [cycle-path]} (find-cycle-in-nodes lts trapped)]
-           ;; For cycles with :eventually, check if any event in cycle matches
-           ;; The cycle-path contains keywords, so we check directly
-           (when eventually
+           ;; Check if cycle satisfies the liveness property
+           (cond
+             ;; For :eventually shorthand, check if any event in cycle matches
+             eventually
              (when-not (some #(contains? eventually %) cycle-path)
                {:type :liveness-violation
                 :property property-key
                 :quantifier :universal
-                :cycle cycle-path}))))))))
+                :cycle cycle-path})
+
+             ;; For :predicate, convert cycle to minimal event maps and run predicate
+             predicate
+             (let [cycle-as-trace (mapv (fn [kw] {:type kw}) cycle-path)]
+               (when-not (predicate cycle-as-trace)
+                 {:type :liveness-violation
+                  :property property-key
+                  :quantifier :universal
+                  :cycle cycle-path})))))))))
 
 (defn- check-existential-liveness
   "Check an existential liveness property: at least one path must satisfy the predicate.
@@ -477,14 +487,20 @@
 
         ;; Check if any cycle satisfies the predicate
         cycle-satisfies?
-        (when eventually
-          (when-let [can-reach (nodes-reaching-terminal lts)]
-            (let [all-nodes (set (keys (:nodes lts)))
-                  trapped (set/difference all-nodes can-reach)]
-              (when (seq trapped)
-                (when-let [{:keys [cycle-path]} (find-cycle-in-nodes lts trapped)]
-                  ;; For cycles with :eventually, check if any event in cycle matches
-                  (some #(contains? eventually %) cycle-path))))))]
+        (when-let [can-reach (nodes-reaching-terminal lts)]
+          (let [all-nodes (set (keys (:nodes lts)))
+                trapped (set/difference all-nodes can-reach)]
+            (when (seq trapped)
+              (when-let [{:keys [cycle-path]} (find-cycle-in-nodes lts trapped)]
+                (cond
+                  ;; For :eventually shorthand, check if any event in cycle matches
+                  eventually
+                  (some #(contains? eventually %) cycle-path)
+
+                  ;; For :predicate, convert cycle to minimal event maps and run predicate
+                  predicate
+                  (let [cycle-as-trace (mapv (fn [kw] {:type kw}) cycle-path)]
+                    (predicate cycle-as-trace)))))))]
 
     ;; Return violation if neither terminating paths nor cycles satisfy
     (when-not (or terminating-path-satisfies? cycle-satisfies?)
@@ -504,7 +520,14 @@
   that checks if any event in the trace has a type in the :eventually set."
   [lts config]
   (when-let [liveness-props (:liveness config)]
-    (let [terminal-node-ids (terminal-nodes lts)]
+    (let [terminal-node-ids (terminal-nodes lts)
+          ;; Also find deadlock nodes - these are leaf nodes that are not terminal
+          {:keys [edges nodes]} lts
+          nodes-with-outgoing (into #{} (map :from edges))
+          leaf-nodes (remove nodes-with-outgoing (keys nodes))
+          deadlock-node-ids (set (remove terminal-node-ids leaf-nodes))
+          ;; Combine terminal and deadlock nodes for liveness checking
+          nodes-to-check (into terminal-node-ids deadlock-node-ids)]
       ;; Check each liveness property
       (some (fn [[property-key prop]]
               (let [{:keys [quantifier predicate eventually]} prop
@@ -517,10 +540,10 @@
                     prop-with-predicate (assoc prop :predicate predicate)]
                 (case quantifier
                   :universal
-                  (check-universal-liveness lts property-key prop-with-predicate terminal-node-ids)
+                  (check-universal-liveness lts property-key prop-with-predicate nodes-to-check)
 
                   :existential
-                  (check-existential-liveness lts property-key prop-with-predicate terminal-node-ids))))
+                  (check-existential-liveness lts property-key prop-with-predicate nodes-to-check))))
             liveness-props))))
 
 (defn check

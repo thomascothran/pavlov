@@ -684,3 +684,144 @@
             "Should include the cycle")
         (is (= #{:ping :pong} (set (:cycle result)))
             "Cycle should contain the ping-pong events that loop forever")))))
+
+(deftest universal-liveness-predicate-checks-cycles
+  (testing "Universal liveness with PREDICATE (not :eventually) should check cycles for violations"
+    ;; A bthread that loops forever on :ping/:pong (infinite cycle)
+    ;; Liveness property with CUSTOM PREDICATE (not :eventually shorthand) requires :payment
+    ;; Expected: :liveness-violation because cycle doesn't contain :payment
+    ;; Current behavior: Returns nil (BUG — cycles not checked with :predicate)
+    ;;
+    ;; We disable structural livelock checking to isolate liveness behavior
+    (let [result (check/check
+                  {:bthreads {:ping-pong
+                              (b/round-robin [{:request #{:ping}}
+                                              {:request #{:pong}}])}
+                   :check-livelock? false ;; Disable structural livelock to isolate liveness
+                   :liveness
+                   {:payment-required
+                    {:quantifier :universal
+                     ;; Use CUSTOM PREDICATE (not :eventually) to expose the bug
+                     :predicate (fn [trace]
+                                  (some #(= :payment (tech.thomascothran.pavlov.event/type %)) trace))}}})]
+
+      ;; This test SHOULD fail with current implementation
+      ;; because cycles are not checked when using :predicate
+      (is (some? result)
+          "Should detect liveness violation in cycle when using :predicate")
+
+      (when result
+        (is (= :liveness-violation (:type result))
+            "Violation type should be :liveness-violation (not :livelock)")
+        (is (= :payment-required (:property result))
+            "Should identify which property was violated")
+        (is (= :universal (:quantifier result))
+            "Should report the quantifier used")
+        (is (vector? (:cycle result))
+            "Should include the cycle that violated the property")
+        (is (= #{:ping :pong} (set (:cycle result)))
+            "Cycle should show the ping-pong events that loop forever without payment")))))
+
+(deftest existential-liveness-predicate-checks-cycles
+  (testing "Existential liveness with PREDICATE (not :eventually) should check cycles for satisfaction"
+    ;; A bthread that loops forever on :payment/:ack (infinite cycle)
+    ;; Liveness property with CUSTOM PREDICATE (not :eventually shorthand) requires :payment to occur on SOME path
+    ;; Expected: nil (NO violation) because the cycle DOES contain :payment, satisfying the existential property
+    ;; Current buggy behavior: Returns {:type :liveness-violation ...} (BUG — cycles not checked, only terminating paths)
+    ;;
+    ;; We disable structural livelock checking to isolate liveness behavior
+    (let [result (check/check
+                  {:bthreads {:payment-loop
+                              (b/round-robin [{:request #{:payment}}
+                                              {:request #{:ack}}])}
+                   :check-livelock? false ;; Disable structural livelock to isolate liveness
+                   :liveness
+                   {:payment-possible
+                    {:quantifier :existential
+                     ;; Use CUSTOM PREDICATE (not :eventually) to expose the bug
+                     :predicate (fn [trace]
+                                  (some #(= :payment (tech.thomascothran.pavlov.event/type %)) trace))}}})]
+
+      ;; This test SHOULD fail with current implementation
+      ;; because cycles are not checked when using :predicate — only terminating paths
+      ;; The bug causes a false positive: it reports a violation when there shouldn't be one
+      (is (nil? result)
+          "Should return nil when existential liveness property is satisfied in cycle using :predicate"))))
+
+(deftest universal-liveness-checks-deadlock-paths
+  (testing "Universal liveness property should be checked on paths that end in deadlock"
+    ;; This is Cycle 3.3: Liveness on Deadlock Path
+    ;; A bthread that requests :process then deadlocks (no terminal event, no more bids)
+    ;; Liveness property requires :payment to occur on ALL paths
+    ;; Expected: :liveness-violation because the deadlock path doesn't have :payment
+    ;; Current behavior: Returns {:type :deadlock ...} (liveness not checked on deadlock paths)
+    ;;
+    ;; Key insight: Since liveness has higher priority than deadlock in our priority order,
+    ;; if we properly check liveness on deadlock paths, we should get a liveness violation,
+    ;; NOT a deadlock.
+    (let [result (check/check
+                  {:bthreads {:process-then-deadlock
+                              ;; Request :process then deadlock (no more bids, no terminal event)
+                              (b/bids [{:request #{:process}}])}
+                   :check-deadlock? true ;; Enable deadlock checking
+                   :liveness
+                   {:payment-required
+                    {:quantifier :universal
+                     :eventually #{:payment}}}})]
+
+      ;; This test SHOULD fail with current implementation
+      ;; Expected: {:type :liveness-violation ...}
+      ;; Actual: {:type :deadlock ...}
+      (is (some? result)
+          "Should detect a violation (either liveness or deadlock)")
+
+      (when result
+        (is (= :liveness-violation (:type result))
+            "Violation type should be :liveness-violation (NOT :deadlock) - liveness has higher priority")
+        (is (= :payment-required (:property result))
+            "Should identify which property was violated")
+        (is (= :universal (:quantifier result))
+            "Should report the quantifier used")
+        (is (vector? (:trace result))
+            "Should include the trace that violated the property")
+        (is (= [:process] (:trace result))
+            "Trace should show the :process event before deadlock, without :payment")))))
+
+(deftest invalid-quantifier-throws-error
+  (testing "Invalid quantifier (typo) throws clear error"
+    ;; User provides :univrsal (missing 'e') instead of :universal
+    ;; Current: Throws IllegalArgumentException: No matching clause: :univrsal
+    ;; Expected: Either a clear error message OR graceful handling
+    ;;
+    ;; For now, we document and test the current behavior (throwing an exception)
+    ;; We can improve the error message later if needed
+    (is (thrown-with-msg?
+         IllegalArgumentException
+         #"No matching clause"
+         (check/check
+          {:bthreads {:simple (b/bids [{:request #{{:type :done :terminal true}}}])}
+           :liveness
+           {:payment-required
+            {:quantifier :univrsal ;; TYPO - should be :universal
+             :eventually #{:payment}}}}))
+        "Should throw IllegalArgumentException for invalid quantifier")))
+
+(deftest empty-bthreads-returns-nil
+  (testing "Empty bthreads returns deadlock (empty program has no events and cannot terminate)"
+    ;; What happens when we call check with no bthreads?
+    ;; Actual behavior: Returns {:type :deadlock ...}
+    ;; Rationale: An empty program has no events to execute and no way to reach
+    ;; a terminal state, so it's technically deadlocked at the initial state.
+    (let [result-map (check/check {:bthreads {}})]
+      (is (= :deadlock (:type result-map))
+          "Empty bthreads map should return deadlock")
+      (is (= [] (:path result-map))
+          "Path should be empty (deadlocked at initial state)")
+      (is (= {} (get-in result-map [:state :bthread->bid]))
+          "State should have no bthreads"))
+
+    (let [result-vec (check/check {:bthreads []})]
+      (is (= :deadlock (:type result-vec))
+          "Empty bthreads vector should also return deadlock")
+      (is (= [] (:path result-vec))
+          "Path should be empty (deadlocked at initial state)"))))
