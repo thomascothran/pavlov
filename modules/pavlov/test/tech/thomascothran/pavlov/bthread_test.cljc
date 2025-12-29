@@ -172,6 +172,31 @@
           "Should decrement state"))))
 
 (deftest test-step-function-error
+  (let [throw-instantly
+        (b/step (fn [state event]
+                  (throw (ex-info "boom" {:state state
+                                          :event event}))))
+        bid1 (b/notify! throw-instantly nil)
+        bid2 (b/notify! throw-instantly (-> bid1
+                                            (get :request)
+                                            first))]
+    (is (nil? bid2)))
+  (let [throw-after-init
+        (b/step (fn [state event]
+                  (if event
+                    (throw (ex-info "boom" {:state state
+                                            :event event}))
+                    {:request #{{:type :init-done}}})))
+        bid1 (b/notify! throw-after-init nil)
+        bid2 (b/notify! throw-after-init (-> bid1
+                                             (get :request)
+                                             first))
+        bid3 (b/notify! throw-after-init (-> bid2
+                                             (get :request)
+                                             first))]
+    (is (nil? bid3))))
+
+(deftest test-step-function-error-output
   (testing "When a bthread step function throws an error
     Should emit a terminal event with an error
     And that event should be terminal"
