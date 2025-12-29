@@ -32,7 +32,7 @@
     cd ./modules/pavlov
     clj -T:build ci
     env $(cat ~/.secrets/.clojars | xargs) clj -T:build deploy
-    cd ~/modules/pavlov-devtools
+    cd ../pavlov-devtools
     clj -T:build ci
   '';
   scripts.squint-watch.exec = ''
