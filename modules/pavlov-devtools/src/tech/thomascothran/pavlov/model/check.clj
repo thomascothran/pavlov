@@ -134,7 +134,7 @@
 
 (defn- find-cycle-in-nodes
   "Find a cycle in the given set of nodes using DFS.
-  Returns {:cycle-path [events]} or nil."
+  Returns {:cycle-path [events] :cycle-entry-node node-id} or nil."
   [lts trapped-nodes]
   (let [{:keys [edges root]} lts
         ;; Build adjacency map for trapped nodes only
@@ -158,7 +158,8 @@
                 ;; Found a cycle!
                 (contains? visited-in-path node)
                 (let [cycle-start-idx (get visited-in-path node)]
-                  {:cycle-path (subvec path-events cycle-start-idx)})
+                  {:cycle-path (subvec path-events cycle-start-idx)
+                   :cycle-entry-node node})
 
                 ;; Already explored this node fully
                 (visited-fully node)
@@ -205,9 +206,9 @@
 
           ;; If there are trapped nodes, look for cycles
           (when (seq trapped-nodes)
-            (when-let [{:keys [cycle-path]} (find-cycle-in-nodes lts trapped-nodes)]
+            (when-let [{:keys [cycle-path cycle-entry-node]} (find-cycle-in-nodes lts trapped-nodes)]
               {:type :livelock
-               :path [] ;; TODO: compute path from root to cycle start
+               :path (or (find-path lts cycle-entry-node) [])
                :cycle cycle-path})))))))
 
 (defn check

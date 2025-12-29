@@ -278,3 +278,43 @@
             "Should include the cycle")
         (is (seq (:cycle result))
             "Cycle should not be empty")))))
+
+(deftest livelock-after-events
+  (testing "Livelock after executing some events should report both path and cycle"
+    ;; Use b/step to create a proper state machine that:
+    ;; 1. Waits for :setup
+    ;; 2. Then loops forever with :ping/:pong
+    (let [wait-then-loop
+          (b/step
+           (fn [state event]
+             (case (or state :waiting)
+               :waiting (if (= :setup event)
+                          [:ping {:request #{:ping}}]
+                          [:waiting {:wait-on #{:setup}}])
+               :ping [:pong {:request #{:pong}}]
+               :pong [:ping {:request #{:ping}}])))
+
+          result (check/check
+                  {:bthreads {:setup-once
+                              ;; Requests setup, then terminates
+                              (b/bids [{:request #{:setup}}])
+                              :wait-then-loop
+                              wait-then-loop}
+                   :check-livelock? true})]
+      (is (some? result)
+          "Should detect a livelock")
+      (when result
+        (is (= :livelock (:type result))
+            "Violation type should be :livelock")
+        (is (vector? (:path result))
+            "Should include the path")
+        (is (seq (:path result))
+            "Path should not be empty - should contain :setup")
+        (is (= [:setup] (:path result))
+            "Path should contain the :setup event before the cycle")
+        (is (vector? (:cycle result))
+            "Should include the cycle")
+        (is (seq (:cycle result))
+            "Cycle should not be empty")
+        (is (= #{:ping :pong} (set (:cycle result)))
+            "Cycle should contain the ping-pong events")))))
