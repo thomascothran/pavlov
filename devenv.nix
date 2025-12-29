@@ -34,6 +34,7 @@
     env $(cat ~/.secrets/.clojars | xargs) clj -T:build deploy
     cd ../pavlov-devtools
     clj -T:build ci
+    env $(cat ~/.secrets/.clojars | xargs) clj -T:build deploy
   '';
   scripts.squint-watch.exec = ''
     npx squint watch
