@@ -1,11 +1,210 @@
 (ns tech.thomascothran.pavlov.model.check
   "Model checking for behavioral programs.
 
-  This namespace provides model checking capabilities for behavioral programs
-  by implementing state-space exploration and graph analysis.
+  This namespace provides exhaustive state-space exploration to verify
+  behavioral programs. It detects bugs that might only occur in specific
+  execution paths or event orderings.
 
-  The main entry point is the `check` function which builds an LTS graph
-  and analyzes it for violations."
+  ## Quick Start
+
+  ```clojure
+  (require '[tech.thomascothran.pavlov.model.check :as check])
+  (require '[tech.thomascothran.pavlov.bthread :as b])
+
+  ;; Check a simple program for deadlocks
+  (check/check
+    {:bthreads {:my-bthread (b/bids [{:request #{:hello}}
+                                     {:request #{{:type :done :terminal true}}}])}})
+  ;; => nil (no violations found)
+  ```
+
+  ## The `check` Function
+
+  The main entry point. It builds a Labeled Transition System (LTS) graph
+  from your bthreads and analyzes it for violations.
+
+  ### Configuration Options
+
+  | Key | Type | Default | Description |
+  |-----|------|---------|-------------|
+  | `:bthreads` | map/vec | required | The bthreads under test |
+  | `:safety-bthreads` | map/vec | nil | Bthreads that emit `:invariant-violated` events |
+  | `:environment-bthreads` | map/vec | nil | Bthreads simulating external inputs |
+  | `:check-deadlock?` | bool | true | Whether to detect deadlocks |
+  | `:check-livelock?` | bool | true | Whether to detect livelocks (infinite loops) |
+  | `:liveness` | map | nil | Liveness properties to verify (see below) |
+  | `:max-nodes` | int | nil | Limit state space exploration |
+
+  ### Return Values
+
+  Returns `nil` if no violations found. Otherwise returns a map with `:type`:
+
+  - `:livelock` — Program stuck in infinite loop
+  - `:liveness-violation` — Required event never occurs
+  - `:safety-violation` — Invariant violated
+  - `:deadlock` — Program stuck, no events possible
+  - `:truncated` — Exploration hit `:max-nodes` limit
+
+  ## Violation Types
+
+  ### Deadlock Detection
+
+  A deadlock occurs when no events can be selected and no terminal event
+  has occurred. The program is stuck.
+
+  ```clojure
+  ;; This will deadlock - requests event then has nothing to do
+  (check/check
+    {:bthreads {:stuck (b/bids [{:request #{:something}}])}})
+  ;; => {:type :deadlock, :path [:something], :state {...}}
+  ```
+
+  To mark successful completion, use `:terminal true`:
+
+  ```clojure
+  ;; This terminates successfully - no deadlock
+  (check/check
+    {:bthreads {:ok (b/bids [{:request #{{:type :done :terminal true}}}])}})
+  ;; => nil
+  ```
+
+  ### Livelock Detection
+
+  A livelock occurs when the program runs forever in a cycle without
+  ever reaching a terminal state.
+
+  ```clojure
+  ;; Infinite ping-pong loop - never terminates
+  (check/check
+    {:bthreads {:loop (b/round-robin [{:request #{:ping}}
+                                      {:request #{:pong}}])}})
+  ;; => {:type :livelock, :path [], :cycle [:ping :pong]}
+  ```
+
+  Disable with `:check-livelock? false` if cycles are intentional.
+
+  ### Safety Violations
+
+  Use safety bthreads to assert invariants. When they detect a bad state,
+  they emit an event with `:invariant-violated true`.
+
+  ```clojure
+  (check/check
+    {:bthreads {:worker (b/bids [{:request #{:work}}
+                                 {:request #{:work}}  ;; oops, double work
+                                 {:request #{{:type :done :terminal true}}}])}
+     :safety-bthreads
+     {:no-double-work
+      (b/step (fn [event state]
+                (let [new-state (update state :work-count (fnil inc 0))]
+                  (if (> (:work-count new-state) 1)
+                    ;; Violation! Emit invariant-violated event
+                    [(b/bids [{:request #{{:type :double-work-error
+                                           :invariant-violated true}}}])
+                     new-state]
+                    ;; OK, continue monitoring
+                    [nil new-state])))
+              {})}})
+  ;; => {:type :safety-violation, :event {:type :double-work-error, ...}, ...}
+  ```
+
+  ### Liveness Properties
+
+  Liveness properties assert that \"something good eventually happens.\"
+  Use the `:liveness` option to specify properties.
+
+  #### Universal Quantifier (`:universal`)
+
+  The property must be satisfied on ALL execution paths.
+
+  ```clojure
+  ;; Assert: payment MUST eventually occur on every path
+  (check/check
+    {:bthreads {:flow (b/bids [{:request #{:process}}
+                               {:request #{{:type :done :terminal true}}}])}
+     :liveness
+     {:payment-required
+      {:quantifier :universal
+       :eventually #{:payment}}}})
+  ;; => {:type :liveness-violation,
+  ;;     :property :payment-required,
+  ;;     :quantifier :universal,
+  ;;     :trace [:process :done]}
+  ```
+
+  #### Existential Quantifier (`:existential`)
+
+  The property must be satisfied on AT LEAST ONE path.
+
+  ```clojure
+  ;; Assert: payment must be POSSIBLE (at least one path has it)
+  (check/check
+    {:bthreads {:path-a (b/bids [{:request #{:payment}}
+                                 {:request #{{:type :done-a :terminal true}}}])
+                :path-b (b/bids [{:request #{:skip}}
+                                 {:request #{{:type :done-b :terminal true}}}])}
+     :liveness
+     {:payment-possible
+      {:quantifier :existential
+       :eventually #{:payment}}}})
+  ;; => nil (satisfied - path-a has payment)
+  ```
+
+  #### Predicate Form
+
+  For complex conditions, use `:predicate` instead of `:eventually`:
+
+  ```clojure
+  (check/check
+    {:bthreads {...}
+     :liveness
+     {:order-complete
+      {:quantifier :universal
+       :predicate (fn [trace]
+                    ;; trace is a vector of event maps
+                    (let [types (map #(tech.thomascothran.pavlov.event/type %) trace)]
+                      (and (some #{:payment} types)
+                           (some #{:shipment} types))))}}})
+  ```
+
+  ## Environment Bthreads
+
+  Use `:environment-bthreads` to simulate external inputs or
+  nondeterministic choices. The model checker explores all possibilities.
+
+  ```clojure
+  (check/check
+    {:bthreads {:handler (b/on #{:success :failure}
+                           (fn [event]
+                             (if (= :success (e/type event))
+                               (b/bids [{:request #{{:type :done :terminal true}}}])
+                               (b/bids [{:request #{:retry}}
+                                        {:request #{{:type :done :terminal true}}}]))))}
+     :environment-bthreads
+     {:external-api (b/bids [{:request #{:success :failure}}])}})
+  ```
+
+  ## Violation Priority
+
+  When multiple issues exist, violations are reported in this order:
+
+  1. **Livelock** — Most severe (pegs CPU)
+  2. **Liveness violation** — Required property never satisfied
+  3. **Safety violation** — Bad state reached
+  4. **Deadlock** — Program stuck
+
+  ## Performance
+
+  The model checker explores all reachable states. Use `:max-nodes` to
+  limit exploration for large state spaces:
+
+  ```clojure
+  (check/check
+    {:bthreads {...}
+     :max-nodes 10000})
+  ;; => {:type :truncated, :max-nodes 10000, :message \"...\"}
+  ;;    if limit reached without finding violations
+  ``` "
   (:require [clojure.set :as set]
             [tech.thomascothran.pavlov.event :as e]
             [tech.thomascothran.pavlov.graph :as graph]))
@@ -361,34 +560,31 @@
         lts-opts (cond-> {}
                    (:max-nodes config) (assoc :max-nodes (:max-nodes config)))
         lts (graph/->lts all-bthreads lts-opts)
-        truncated? (:truncated lts)]
-
-    ;; Check for violations in priority order: livelock > liveness > safety > deadlock
-    ;; Wrap livelock check in try-catch to handle edge cases like circular node IDs
-    (let [violation (or (try
-                          (find-livelocks lts config)
-                          (catch StackOverflowError _e
-                            ;; Skip livelock detection if it causes stack overflow
-                            ;; (This can happen with complex node IDs containing error objects)
-                            nil))
-                        (find-liveness-violations lts config)
-                        (find-safety-violations lts)
+        truncated? (:truncated lts)
+        ;; Check for violations in priority order: livelock > liveness > safety > deadlock
+        ;; Wrap livelock check in try-catch to handle edge cases like circular node IDs
+        violation (or (try
+                        (find-livelocks lts config)
+                        (catch StackOverflowError _e
+                          (throw (ex-info "livelock detection failed due to stack overflow. Possible circular node IDs."
+                                          {:lts lts
+                                           :config config}))))
+                      (find-liveness-violations lts config)
+                      (find-safety-violations lts)
                         ;; Don't report deadlocks if truncated (likely false positives)
-                        (when-not truncated?
-                          (find-deadlocks lts config)))]
-      (cond
-        ;; Real violation found
-        (and violation truncated?)
-        (assoc violation :truncated true)
+                      (when-not truncated?
+                        (find-deadlocks lts config)))]
+    (cond
+      (and violation truncated?)
+      (assoc violation :truncated true)
 
-        violation
-        violation
+      violation violation
 
-        ;; No violation but graph was truncated
-        truncated?
-        {:type :truncated
-         :max-nodes (:max-nodes config)
-         :message "State space exploration truncated. Results may be incomplete."}
+      ;; No violation but graph was truncated
+      truncated?
+      {:type :truncated
+       :max-nodes (:max-nodes config)
+       :message "State space exploration truncated. Results may be incomplete."}
 
-        ;; No violation, no truncation
-        :else nil))))
+      ;; No violation, no truncation
+      :else nil)))
