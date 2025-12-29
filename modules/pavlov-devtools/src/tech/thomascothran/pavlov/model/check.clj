@@ -37,13 +37,22 @@
 
   ### Return Values
 
-  Returns `nil` if no violations found. Otherwise returns a map with `:type`:
+  Returns `nil` if no violations found. Otherwise returns a categorized map
+  with violation vectors (only non-empty categories are included):
 
-  - `:livelock` — Program stuck in infinite loop
-  - `:liveness-violation` — Required event never occurs
-  - `:safety-violation` — Invariant violated
-  - `:deadlock` — Program stuck, no events possible
-  - `:truncated` — Exploration hit `:max-nodes` limit
+  ```clojure
+  {:livelocks [{:path [...] :cycle [...]}]
+   :liveness-violations [{:property ... :quantifier ... :trace [...]}]
+   :safety-violations [{:event {...} :path [...] :state {...}}]
+   :deadlocks [{:path [...] :state {...}}]
+   :truncated true}  ;; optional flag when max-nodes exceeded
+  ```
+
+  - `:livelocks` — Programs stuck in infinite loops
+  - `:liveness-violations` — Required events never occur
+  - `:safety-violations` — Invariants violated
+  - `:deadlocks` — Programs stuck, no events possible
+  - `:truncated` — Boolean flag when exploration hit `:max-nodes` limit
 
   ## Violation Types
 
@@ -56,7 +65,7 @@
   ;; This will deadlock - requests event then has nothing to do
   (check/check
     {:bthreads {:stuck (b/bids [{:request #{:something}}])}})
-  ;; => {:type :deadlock, :path [:something], :state {...}}
+  ;; => {:deadlocks [{:path [:something], :state {...}}]}
   ```
 
   To mark successful completion, use `:terminal true`:
@@ -78,7 +87,7 @@
   (check/check
     {:bthreads {:loop (b/round-robin [{:request #{:ping}}
                                       {:request #{:pong}}])}})
-  ;; => {:type :livelock, :path [], :cycle [:ping :pong]}
+  ;; => {:livelocks [{:path [], :cycle [:ping :pong]}]}
   ```
 
   Disable with `:check-livelock? false` if cycles are intentional.
@@ -105,7 +114,7 @@
                     ;; OK, continue monitoring
                     [nil new-state])))
               {})}})
-  ;; => {:type :safety-violation, :event {:type :double-work-error, ...}, ...}
+  ;; => {:safety-violations [{:event {:type :double-work-error, ...}, :path [...], :state {...}}]}
   ```
 
   ### Liveness Properties
@@ -126,10 +135,9 @@
      {:payment-required
       {:quantifier :universal
        :eventually #{:payment}}}})
-  ;; => {:type :liveness-violation,
-  ;;     :property :payment-required,
-  ;;     :quantifier :universal,
-  ;;     :trace [:process :done]}
+  ;; => {:liveness-violations [{:property :payment-required,
+  ;;                            :quantifier :universal,
+  ;;                            :trace [:process :done]}]}
   ```
 
   #### Existential Quantifier (`:existential`)
@@ -184,14 +192,15 @@
      {:external-api (b/bids [{:request #{:success :failure}}])}})
   ```
 
-  ## Violation Priority
+  ## Multiple Violations
 
-  When multiple issues exist, violations are reported in this order:
+  When multiple issues exist, ALL violations are returned in a single categorized map.
+  Fix violations in this recommended order (most severe first):
 
-  1. **Livelock** — Most severe (pegs CPU)
-  2. **Liveness violation** — Required property never satisfied
-  3. **Safety violation** — Bad state reached
-  4. **Deadlock** — Program stuck
+  1. **Livelocks** — Most severe (pegs CPU at 100%)
+  2. **Liveness violations** — Required properties never satisfied
+  3. **Safety violations** — Bad states reached
+  4. **Deadlocks** — Programs stuck
 
   ## Performance
 
@@ -202,8 +211,10 @@
   (check/check
     {:bthreads {...}
      :max-nodes 10000})
-  ;; => {:type :truncated, :max-nodes 10000, :message \"...\"}
+  ;; => {:truncated true}
   ;;    if limit reached without finding violations
+  ;; Or: {:deadlocks [...], :truncated true}
+  ;;    if violations found before truncation
   ``` "
   (:require [clojure.set :as set]
             [tech.thomascothran.pavlov.event :as e]
@@ -252,19 +263,17 @@
         nil))))
 
 (defn- find-safety-violations
-  "Scan LTS edges for safety violations.
-  Returns violation map or nil."
+  "Scan LTS edges for all safety violations.
+  Returns a vector of violation maps (without :type key)."
   [lts]
   (let [{:keys [edges nodes]} lts]
-    (some (fn [{:keys [from to event]}]
-            (when (get event :invariant-violated)
-              (let [path (find-path lts from) ;; Path to the node BEFORE the violation
-                    state (get nodes to)]
-                {:type :safety-violation
-                 :event event
-                 :path path
-                 :state state})))
-          edges)))
+    (vec (for [{:keys [from to event]} edges
+               :when (get event :invariant-violated)]
+           (let [path (find-path lts from) ;; Path to the node BEFORE the violation
+                 state (get nodes to)]
+             {:event event
+              :path path
+              :state state})))))
 
 (defn- terminal-nodes
   "Find all terminal nodes in the LTS.
@@ -276,9 +285,9 @@
        set))
 
 (defn- find-deadlocks
-  "Find deadlocks in the LTS graph.
+  "Find all deadlocks in the LTS graph.
   A deadlock is a leaf node that is not a terminal node.
-  Returns violation map or nil."
+  Returns a vector of deadlock maps (without :type key)."
   [lts config]
   (when (not= false (:check-deadlock? config))
     (let [{:keys [edges nodes]} lts
@@ -290,12 +299,12 @@
           leaf-nodes (remove nodes-with-outgoing (keys nodes))
           ;; Deadlock = leaf node that is not terminal
           deadlock-nodes (remove terminal-node-ids leaf-nodes)]
-      (when-let [deadlock-id (first deadlock-nodes)]
-        (let [path (find-path lts deadlock-id)
-              state (get nodes deadlock-id)]
-          {:type :deadlock
-           :path path
-           :state state})))))
+      ;; Return ALL deadlocks as a vector
+      (vec (for [deadlock-id deadlock-nodes]
+             (let [path (find-path lts deadlock-id)
+                   state (get nodes deadlock-id)]
+               {:path path
+                :state state}))))))
 
 (defn- nodes-reaching-terminal
   "Find all nodes that can reach a terminal node.
@@ -385,8 +394,9 @@
       nil)))
 
 (defn- find-livelocks
-  "Find livelocks in the LTS graph.
-  A livelock is a cycle where no node can reach a terminal state."
+  "Find all livelocks in the LTS graph.
+  A livelock is a cycle where no node can reach a terminal state.
+  Returns a vector of livelock maps (without :type key)."
   [lts config]
   (when (not= false (:check-livelock? config))
     ;; Early exit if graph is empty or has no edges
@@ -398,12 +408,13 @@
               trapped-nodes (set/difference all-nodes can-reach-terminal)]
 
           ;; If there are trapped nodes, look for cycles
+          ;; Note: We only return the first cycle found, but as a vector
+          ;; Future enhancement could find multiple distinct cycles
           (when (seq trapped-nodes)
             (when-let [{:keys [cycle-path cycle-entry-node]}
                        (find-cycle-in-nodes lts trapped-nodes)]
-              {:type :livelock
-               :path (or (find-path lts cycle-entry-node) [])
-               :cycle cycle-path})))))))
+              [{:path (or (find-path lts cycle-entry-node) [])
+                :cycle cycle-path}])))))))
 
 (defn- find-path-with-full-events
   "Find a path from root to target node, returning full event maps.
@@ -434,49 +445,46 @@
 
 (defn- check-universal-liveness
   "Check a universal liveness property: all paths must satisfy the predicate.
-  Returns a violation if ANY path fails the predicate."
+  Returns a vector of violations (one for each path that fails the predicate)."
   [lts property-key {:keys [predicate eventually]} terminal-node-ids]
-  (or
-   ;; First check terminating paths
-   (some (fn [terminal-node-id]
-           (let [full-event-trace (find-path-with-full-events lts terminal-node-id)
-                 keyword-trace (find-path lts terminal-node-id)]
-             ;; If predicate returns falsy, this is a violation
-             (when-not (predicate full-event-trace)
-               {:type :liveness-violation
-                :property property-key
+  (let [;; Collect all terminating path violations
+        terminating-violations
+        (vec (for [terminal-node-id terminal-node-ids
+                   :let [full-event-trace (find-path-with-full-events lts terminal-node-id)
+                         keyword-trace (find-path lts terminal-node-id)]
+                   :when (not (predicate full-event-trace))]
+               {:property property-key
                 :quantifier :universal
-                :trace keyword-trace})))
-         terminal-node-ids)
+                :trace keyword-trace}))
 
-   ;; Then check trapped cycles
-   (when-let [can-reach (nodes-reaching-terminal lts)]
-     (let [all-nodes (set (keys (:nodes lts)))
-           trapped (set/difference all-nodes can-reach)]
-       (when (seq trapped)
-         (when-let [{:keys [cycle-path]} (find-cycle-in-nodes lts trapped)]
-           ;; Check if cycle satisfies the liveness property
-           (cond
-             ;; For :eventually shorthand, check if any event in cycle matches
-             eventually
-             (when-not (some #(contains? eventually %) cycle-path)
-               {:type :liveness-violation
-                :property property-key
-                :quantifier :universal
-                :cycle cycle-path})
+        ;; Check trapped cycles
+        cycle-violations
+        (when-let [can-reach (nodes-reaching-terminal lts)]
+          (let [all-nodes (set (keys (:nodes lts)))
+                trapped (set/difference all-nodes can-reach)]
+            (when (seq trapped)
+              (when-let [{:keys [cycle-path]} (find-cycle-in-nodes lts trapped)]
+                ;; Check if cycle satisfies the liveness property
+                (let [violation? (cond
+                                   ;; For :eventually shorthand, check if any event in cycle matches
+                                   eventually
+                                   (not (some #(contains? eventually %) cycle-path))
 
-             ;; For :predicate, convert cycle to minimal event maps and run predicate
-             predicate
-             (let [cycle-as-trace (mapv (fn [kw] {:type kw}) cycle-path)]
-               (when-not (predicate cycle-as-trace)
-                 {:type :liveness-violation
-                  :property property-key
-                  :quantifier :universal
-                  :cycle cycle-path})))))))))
+                                   ;; For :predicate, convert cycle to minimal event maps and run predicate
+                                   predicate
+                                   (let [cycle-as-trace (mapv (fn [kw] {:type kw}) cycle-path)]
+                                     (not (predicate cycle-as-trace))))]
+                  (when violation?
+                    [{:property property-key
+                      :quantifier :universal
+                      :cycle cycle-path}]))))))]
+
+    ;; Combine all violations
+    (vec (concat terminating-violations cycle-violations))))
 
 (defn- check-existential-liveness
   "Check an existential liveness property: at least one path must satisfy the predicate.
-  Returns a violation if NO path satisfies the predicate."
+  Returns a vector with one violation if NO path satisfies the predicate, or empty vector if satisfied."
   [lts property-key {:keys [predicate eventually]} terminal-node-ids]
   (let [;; Check terminating paths
         terminating-path-satisfies?
@@ -502,22 +510,24 @@
                   (let [cycle-as-trace (mapv (fn [kw] {:type kw}) cycle-path)]
                     (predicate cycle-as-trace)))))))]
 
-    ;; Return violation if neither terminating paths nor cycles satisfy
-    (when-not (or terminating-path-satisfies? cycle-satisfies?)
-      {:type :liveness-violation
-       :property property-key
-       :quantifier :existential})))
+    ;; Return violation vector if neither terminating paths nor cycles satisfy
+    (if (or terminating-path-satisfies? cycle-satisfies?)
+      []
+      [{:property property-key
+        :quantifier :existential}])))
 
 (defn- find-liveness-violations
   "Check liveness properties against the LTS graph.
-  For universal quantifier: returns violation if ANY path fails the predicate.
+  For universal quantifier: returns violations for each path that fails the predicate.
   For existential quantifier: returns violation if NO path satisfies the predicate.
 
   Checks both terminating paths and trapped cycles.
 
   Supports :eventually shorthand: instead of providing a :predicate function,
   you can provide :eventually with a set of event types. This creates a predicate
-  that checks if any event in the trace has a type in the :eventually set."
+  that checks if any event in the trace has a type in the :eventually set.
+
+  Returns a vector of all liveness violations (without :type key)."
   [lts config]
   (when-let [liveness-props (:liveness config)]
     (let [terminal-node-ids (terminal-nodes lts)
@@ -528,23 +538,23 @@
           deadlock-node-ids (set (remove terminal-node-ids leaf-nodes))
           ;; Combine terminal and deadlock nodes for liveness checking
           nodes-to-check (into terminal-node-ids deadlock-node-ids)]
-      ;; Check each liveness property
-      (some (fn [[property-key prop]]
-              (let [{:keys [quantifier predicate eventually]} prop
-                    ;; Transform :eventually to :predicate
-                    predicate (or predicate
-                                  (when eventually
-                                    (fn [trace]
-                                      (some #(contains? eventually (e/type %)) trace))))
-                    ;; Create prop with predicate for helpers
-                    prop-with-predicate (assoc prop :predicate predicate)]
-                (case quantifier
-                  :universal
-                  (check-universal-liveness lts property-key prop-with-predicate nodes-to-check)
+      ;; Collect violations from all liveness properties
+      (vec (mapcat (fn [[property-key prop]]
+                     (let [{:keys [quantifier predicate eventually]} prop
+                           ;; Transform :eventually to :predicate
+                           predicate (or predicate
+                                         (when eventually
+                                           (fn [trace]
+                                             (some #(contains? eventually (e/type %)) trace))))
+                           ;; Create prop with predicate for helpers
+                           prop-with-predicate (assoc prop :predicate predicate)]
+                       (case quantifier
+                         :universal
+                         (check-universal-liveness lts property-key prop-with-predicate nodes-to-check)
 
-                  :existential
-                  (check-existential-liveness lts property-key prop-with-predicate nodes-to-check))))
-            liveness-props))))
+                         :existential
+                         (check-existential-liveness lts property-key prop-with-predicate nodes-to-check))))
+                   liveness-props)))))
 
 (defn check
   "Model check a behavioral program for safety violations.
@@ -564,13 +574,15 @@
     :check-deadlock? - if true, detect deadlocks (default: true)
     :liveness - map of liveness properties to check (optional)
     :max-nodes - maximum nodes to explore (optional)
+
   Returns:
   - nil if no violations found
-  - {:type :livelock :path [events] :cycle [events]}
-  - {:type :liveness-violation :property <key> :quantifier <q> :trace [events]}
-  - {:type :safety-violation :event event :path [events] :state state}
-  - {:type :deadlock :path [events] :state state}
-  - {:type :truncated :max-nodes N :message \"...\"} if exploration was truncated"
+  - A map with violation categories (only non-empty categories included):
+    {:livelocks [{:path [...] :cycle [...]}]
+     :liveness-violations [{:property ... :quantifier ... :trace [...]}]
+     :safety-violations [{:event ... :path [...] :state {...}}]
+     :deadlocks [{:path [...] :state {...}}]
+     :truncated true}  ;; optional flag when max-nodes exceeded"
   [config]
   (let [all-bthreads (assemble-all-bthreads config)
         ;; Build LTS graph
@@ -578,30 +590,29 @@
                    (:max-nodes config) (assoc :max-nodes (:max-nodes config)))
         lts (graph/->lts all-bthreads lts-opts)
         truncated? (:truncated lts)
-        ;; Check for violations in priority order: livelock > liveness > safety > deadlock
+
+        ;; Collect all violations (each find-* returns a vector)
         ;; Wrap livelock check in try-catch to handle edge cases like circular node IDs
-        violation (or (try
-                        (find-livelocks lts config)
-                        (catch StackOverflowError _e
-                          (throw (ex-info "livelock detection failed due to stack overflow. Possible circular node IDs."
-                                          {:lts lts
-                                           :config config}))))
-                      (find-liveness-violations lts config)
-                      (find-safety-violations lts)
-                        ;; Don't report deadlocks if truncated (likely false positives)
-                      (when-not truncated?
-                        (find-deadlocks lts config)))]
-    (cond
-      (and violation truncated?)
-      (assoc violation :truncated true)
+        livelocks (try
+                    (find-livelocks lts config)
+                    (catch StackOverflowError _e
+                      (throw (ex-info "livelock detection failed due to stack overflow. Possible circular node IDs."
+                                      {:lts lts
+                                       :config config}))))
+        liveness-violations (find-liveness-violations lts config)
+        safety-violations (find-safety-violations lts)
+        ;; Don't report deadlocks if truncated (likely false positives)
+        deadlocks (when-not truncated?
+                    (find-deadlocks lts config))
 
-      violation violation
+        ;; Build categorized result map - only include non-empty categories
+        result (cond-> {}
+                 (seq livelocks) (assoc :livelocks livelocks)
+                 (seq liveness-violations) (assoc :liveness-violations liveness-violations)
+                 (seq safety-violations) (assoc :safety-violations safety-violations)
+                 (seq deadlocks) (assoc :deadlocks deadlocks)
+                 truncated? (assoc :truncated true))]
 
-      ;; No violation but graph was truncated
-      truncated?
-      {:type :truncated
-       :max-nodes (:max-nodes config)
-       :message "State space exploration truncated. Results may be incomplete."}
-
-      ;; No violation, no truncation
-      :else nil)))
+    ;; Return nil if no violations and not truncated
+    (when (or (seq result) truncated?)
+      result)))

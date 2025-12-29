@@ -45,8 +45,13 @@
           "Should detect deadlock")
 
       (when result
-        (is (= :deadlock (:type result))
-            "Violation type should be :deadlock")))))
+        ;; New format: check for :deadlocks vector
+        (is (seq (:deadlocks result))
+            "Should have deadlocks in new format")
+
+        (when (seq (:deadlocks result))
+          (is (map? (first (:deadlocks result)))
+              "First deadlock should be a map"))))))
 
 (deftest simple-deadlock
   (let [result (check/check
@@ -54,7 +59,9 @@
                  [[:test (b/bids [{:request #{{:type :a}}}
                                   {:request #{{:type :b}}}])]]
                  :check-deadlock? true})]
-    (is result)))
+    ;; New format: check for :deadlocks vector
+    (is (seq (:deadlocks result))
+        "Should detect deadlock in new format")))
 
 (deftest deadlock-after-first-event
   (testing "Model checker should detect deadlock after first event"
@@ -77,11 +84,13 @@
           "Should detect deadlock after first event")
 
       (when result
-        (is (= :deadlock (:type result))
-            "Violation type should be :deadlock")
+        ;; New format: check for :deadlocks vector
+        (is (seq (:deadlocks result))
+            "Should have deadlocks in new format")
 
-        (is (= [:first-event] (:path result))
-            "Path should show :first-event happened before deadlock")))))
+        (when-let [deadlock (first (:deadlocks result))]
+          (is (= [:first-event] (:path deadlock))
+              "Path should show :first-event happened before deadlock"))))))
 
 (deftest deadlock-not-triggered-on-terminal-event
   ;; Catches the case where the state of a bthread does not change
@@ -100,7 +109,9 @@
                                                     :terminal true}}}))}
         result (check/check {:bthreads bthreads
                              :check-deadlock? true})]
-    (is result)))
+    ;; New format: check for :deadlocks vector
+    (is (seq (:deadlocks result))
+        "Should detect deadlock in new format")))
 
 (deftest error-thrown-in-step-fn
   (let [bthreads {:throw
@@ -115,7 +126,10 @@
                               {:request #{{:type :init-done}}})))}
         result (check/check {:bthreads bthreads
                              :check-deadlock? true})]
-    (is result)))
+    ;; New format: check for violations (could be safety or deadlock)
+    (is (or (seq (:safety-violations result))
+            (seq (:deadlocks result)))
+        "Should detect some violation in new format")))
 
 (defn make-update-sync-bthreads
   []
@@ -153,7 +167,9 @@
   ;; same state can be identified as dupes
   (let [violation (check/check {:bthreads (make-update-sync-bthreads)
                                 :check-deadlock? true})]
-    (is violation)))
+    ;; New format: check for :deadlocks vector
+    (is (seq (:deadlocks violation))
+        "Should detect deadlock in new format")))
 
 (deftest simple-invariant-violation
   (testing "Model checker should detect invariant violations"
@@ -168,11 +184,13 @@
           "Should detect violation")
 
       (when result
-        (is (= :safety-violation (:type result))
-            "Violation type should be :safety-violation")
+        ;; New format: check for :safety-violations vector
+        (is (seq (:safety-violations result))
+            "Should have safety violations in new format")
 
-        (is (= :violation (:type (:event result)))
-            "The violating event should have type :violation")))))
+        (when-let [violation (first (:safety-violations result))]
+          (is (= :violation (:type (:event violation)))
+              "The violating event should have type :violation"))))))
 
 (deftest branching-exploration-required-test
   (testing "Model checker should explore all branches when multiple events could be selected"
@@ -195,9 +213,13 @@
           "Should find a violation (but only because it takes the :event-a path)")
 
       (when result
-        (is (= :safety-violation (:type result)))
-        (is (= [:event-a] (:path result))
-            "Path should show only :event-a was explored")))))
+        ;; New format: check for :safety-violations vector
+        (is (seq (:safety-violations result))
+            "Should have safety violations in new format")
+
+        (when-let [violation (first (:safety-violations result))]
+          (is (= [:event-a] (:path violation))
+              "Path should show only :event-a was explored"))))))
 
 (deftest directly-check-branching
   (testing "Model checker should explore all branches when multiple events could be selected"
@@ -272,12 +294,15 @@
       (is (some? result)
           "Should detect a livelock")
       (when result
-        (is (= :livelock (:type result))
-            "Violation type should be :livelock")
-        (is (vector? (:cycle result))
-            "Should include the cycle")
-        (is (seq (:cycle result))
-            "Cycle should not be empty")))))
+        ;; New format: check for :livelocks vector
+        (is (seq (:livelocks result))
+            "Should have livelocks in new format")
+
+        (when-let [livelock (first (:livelocks result))]
+          (is (vector? (:cycle livelock))
+              "Should include the cycle")
+          (is (seq (:cycle livelock))
+              "Cycle should not be empty"))))))
 
 (deftest livelock-after-events
   (testing "Livelock after executing some events should report both path and cycle"
@@ -304,20 +329,23 @@
       (is (some? result)
           "Should detect a livelock")
       (when result
-        (is (= :livelock (:type result))
-            "Violation type should be :livelock")
-        (is (vector? (:path result))
-            "Should include the path")
-        (is (seq (:path result))
-            "Path should not be empty - should contain :setup")
-        (is (= [:setup] (:path result))
-            "Path should contain the :setup event before the cycle")
-        (is (vector? (:cycle result))
-            "Should include the cycle")
-        (is (seq (:cycle result))
-            "Cycle should not be empty")
-        (is (= #{:ping :pong} (set (:cycle result)))
-            "Cycle should contain the ping-pong events")))))
+        ;; New format: check for :livelocks vector
+        (is (seq (:livelocks result))
+            "Should have livelocks in new format")
+
+        (when-let [livelock (first (:livelocks result))]
+          (is (vector? (:path livelock))
+              "Should include the path")
+          (is (seq (:path livelock))
+              "Path should not be empty - should contain :setup")
+          (is (= [:setup] (:path livelock))
+              "Path should contain the :setup event before the cycle")
+          (is (vector? (:cycle livelock))
+              "Should include the cycle")
+          (is (seq (:cycle livelock))
+              "Cycle should not be empty")
+          (is (= #{:ping :pong} (set (:cycle livelock)))
+              "Cycle should contain the ping-pong events"))))))
 
 (deftest livelock-check-disabled
   (testing "When :check-livelock? is false, livelock should not be reported"
@@ -357,20 +385,23 @@
       (is (some? result)
           "Should detect a livelock even though one branch terminates")
       (when result
-        (is (= :livelock (:type result))
-            "Violation type should be :livelock")
-        (is (vector? (:path result))
-            "Should include the path")
-        ;; The path shows the events to reach the cycle entry.
-        ;; It includes :loop-start which enters the looping branch.
-        (is (some #(= :loop-start %) (:path result))
-            "Path should contain :loop-start event that enters the looping branch")
-        (is (vector? (:cycle result))
-            "Should include the cycle")
-        (is (seq (:cycle result))
-            "Cycle should not be empty")
-        (is (= #{:ping :pong} (set (:cycle result)))
-            "Cycle should contain the ping-pong events")))))
+        ;; New format: check for :livelocks vector
+        (is (seq (:livelocks result))
+            "Should have livelocks in new format")
+
+        (when-let [livelock (first (:livelocks result))]
+          (is (vector? (:path livelock))
+              "Should include the path")
+          ;; The path shows the events to reach the cycle entry.
+          ;; It includes :loop-start which enters the looping branch.
+          (is (some #(= :loop-start %) (:path livelock))
+              "Path should contain :loop-start event that enters the looping branch")
+          (is (vector? (:cycle livelock))
+              "Should include the cycle")
+          (is (seq (:cycle livelock))
+              "Cycle should not be empty")
+          (is (= #{:ping :pong} (set (:cycle livelock)))
+              "Cycle should contain the ping-pong events"))))))
 
 (deftest truncation-warning-when-max-nodes-exceeded
   (testing "Should warn when state space exploration is truncated due to max-nodes limit"
@@ -389,12 +420,9 @@
           "Should return a result when truncated")
 
       (when result
-        (is (= :truncated (:type result))
-            "Violation type should be :truncated")
-        (is (= 5 (:max-nodes result))
-            "Should report the max-nodes limit")
-        (is (string? (:message result))
-            "Should include a message about truncation")))))
+        ;; New format: :truncated is a boolean flag
+        (is (true? (:truncated result))
+            "Should have :truncated true when max-nodes exceeded")))))
 
 (deftest universal-liveness-violation-on-terminating-path
   (testing "Universal liveness property violated when path terminates without satisfying predicate"
@@ -419,16 +447,19 @@
           "Should detect liveness violation")
 
       (when result
-        (is (= :liveness-violation (:type result))
-            "Violation type should be :liveness-violation")
-        (is (= :payment-required (:property result))
-            "Should identify which property was violated")
-        (is (= :universal (:quantifier result))
-            "Should report the quantifier used")
-        (is (vector? (:trace result))
-            "Should include the trace that violated the property")
-        (is (= [:done] (:trace result))
-            "Trace should show the path that terminated without payment")))))
+        ;; New format: check for :liveness-violations vector
+        (is (seq (:liveness-violations result))
+            "Should have liveness violations in new format")
+
+        (when-let [violation (first (:liveness-violations result))]
+          (is (= :payment-required (:property violation))
+              "Should identify which property was violated")
+          (is (= :universal (:quantifier violation))
+              "Should report the quantifier used")
+          (is (vector? (:trace violation))
+              "Should include the trace that violated the property")
+          (is (= [:done] (:trace violation))
+              "Trace should show the path that terminated without payment"))))))
 
 (deftest universal-liveness-satisfied-on-terminating-path
   (testing "Universal liveness property satisfied when payment occurs before termination"
@@ -473,16 +504,19 @@
           "Should detect liveness violation")
 
       (when result
-        (is (= :liveness-violation (:type result))
-            "Violation type should be :liveness-violation")
-        (is (= :payment-required (:property result))
-            "Should identify which property was violated")
-        (is (= :universal (:quantifier result))
-            "Should report the quantifier used")
-        (is (vector? (:trace result))
-            "Should include the trace that violated the property")
-        (is (= [:done] (:trace result))
-            "Trace should show the path that terminated without payment")))))
+        ;; New format: check for :liveness-violations vector
+        (is (seq (:liveness-violations result))
+            "Should have liveness violations in new format")
+
+        (when-let [violation (first (:liveness-violations result))]
+          (is (= :payment-required (:property violation))
+              "Should identify which property was violated")
+          (is (= :universal (:quantifier violation))
+              "Should report the quantifier used")
+          (is (vector? (:trace violation))
+              "Should include the trace that violated the property")
+          (is (= [:done] (:trace violation))
+              "Trace should show the path that terminated without payment"))))))
 
 (deftest universal-liveness-violation-in-cycle
   (testing "Universal liveness property violated when trapped in cycle without satisfying event"
@@ -506,16 +540,19 @@
           "Should detect liveness violation in cycle")
 
       (when result
-        (is (= :liveness-violation (:type result))
-            "Violation type should be :liveness-violation (not :livelock)")
-        (is (= :payment-required (:property result))
-            "Should identify which property was violated")
-        (is (= :universal (:quantifier result))
-            "Should report the quantifier used")
-        (is (vector? (:cycle result))
-            "Should include the cycle that violated the property")
-        (is (= #{:ping :pong} (set (:cycle result)))
-            "Cycle should show the ping-pong events that loop forever without payment")))))
+        ;; New format: check for :liveness-violations vector
+        (is (seq (:liveness-violations result))
+            "Should have liveness violations in new format (not :livelocks)")
+
+        (when-let [violation (first (:liveness-violations result))]
+          (is (= :payment-required (:property violation))
+              "Should identify which property was violated")
+          (is (= :universal (:quantifier violation))
+              "Should report the quantifier used")
+          (is (vector? (:cycle violation))
+              "Should include the cycle that violated the property")
+          (is (= #{:ping :pong} (set (:cycle violation)))
+              "Cycle should show the ping-pong events that loop forever without payment"))))))
 
 (deftest universal-liveness-satisfied-in-cycle-still-reports-livelock
   (testing "Universal liveness satisfied in cycle, but structural livelock still reported"
@@ -540,16 +577,19 @@
           "Should detect a structural livelock even though liveness is satisfied")
 
       (when result
-        (is (= :livelock (:type result))
-            "Violation type should be :livelock (NOT :liveness-violation)")
-        (is (vector? (:cycle result))
-            "Should include the cycle")
-        ;; Verify that the cycle contains :payment, which satisfies the liveness property
-        (is (some #(= :payment %) (:cycle result))
-            "Cycle should contain :payment event, satisfying the liveness property")
-        ;; Verify the cycle is what we expect
-        (is (= #{:payment :ack} (set (:cycle result)))
-            "Cycle should contain :payment and :ack events")))))
+        ;; New format: check for :livelocks vector (NOT :liveness-violations)
+        (is (seq (:livelocks result))
+            "Should have livelocks in new format (NOT :liveness-violations)")
+
+        (when-let [livelock (first (:livelocks result))]
+          (is (vector? (:cycle livelock))
+              "Should include the cycle")
+          ;; Verify that the cycle contains :payment, which satisfies the liveness property
+          (is (some #(= :payment %) (:cycle livelock))
+              "Cycle should contain :payment event, satisfying the liveness property")
+          ;; Verify the cycle is what we expect
+          (is (= #{:payment :ack} (set (:cycle livelock)))
+              "Cycle should contain :payment and :ack events"))))))
 
 (deftest existential-liveness-satisfied-one-path
   (testing "Existential liveness property satisfied when ANY path satisfies it"
@@ -610,12 +650,15 @@
                      :eventually #{:payment}}}})]
 
       ;; Should return liveness-violation because NO path satisfies the property
-      (is (= :liveness-violation (:type result))
+      ;; New format: check for :liveness-violations vector
+      (is (seq (:liveness-violations result))
           "Should detect liveness violation when no path satisfies existential property")
-      (is (= :payment-possible (:property result))
-          "Should identify which property was violated")
-      (is (= :existential (:quantifier result))
-          "Should report the existential quantifier"))))
+
+      (when-let [violation (first (:liveness-violations result))]
+        (is (= :payment-possible (:property violation))
+            "Should identify which property was violated")
+        (is (= :existential (:quantifier violation))
+            "Should report the existential quantifier")))))
 
 (deftest multiple-liveness-properties-reports-first-violation
   (testing "Multiple liveness properties checked, reporting first violation found"
@@ -642,18 +685,21 @@
           "Should detect liveness violation")
 
       (when result
-        (is (= :liveness-violation (:type result))
-            "Violation type should be :liveness-violation")
-        (is (= :shipment-ok (:property result))
-            "Should identify :shipment-ok as the violated property (not :payment-ok)")
-        (is (= :universal (:quantifier result))
-            "Should report the quantifier used")
-        (is (vector? (:trace result))
-            "Should include the trace that violated the property")
-        ;; The trace should show :payment then :done
-        ;; :payment satisfies :payment-ok, but :shipment is never requested
-        (is (= #{:payment :done} (set (:trace result)))
-            "Trace should contain :payment and :done events")))))
+        ;; New format: check for :liveness-violations vector
+        (is (seq (:liveness-violations result))
+            "Should have liveness violations in new format")
+
+        (when-let [violation (first (:liveness-violations result))]
+          (is (= :shipment-ok (:property violation))
+              "Should identify :shipment-ok as the violated property (not :payment-ok)")
+          (is (= :universal (:quantifier violation))
+              "Should report the quantifier used")
+          (is (vector? (:trace violation))
+              "Should include the trace that violated the property")
+          ;; The trace should show :payment then :done
+          ;; :payment satisfies :payment-ok, but :shipment is never requested
+          (is (= #{:payment :done} (set (:trace violation)))
+              "Trace should contain :payment and :done events"))))))
 
 (deftest priority-livelock-before-liveness-violation
   (testing "Structural livelock is reported before liveness violation"
@@ -678,12 +724,17 @@
           "Should detect a violation")
 
       (when result
-        (is (= :livelock (:type result))
-            "Violation type should be :livelock (NOT :liveness-violation) - structural livelock has priority")
-        (is (vector? (:cycle result))
-            "Should include the cycle")
-        (is (= #{:ping :pong} (set (:cycle result)))
-            "Cycle should contain the ping-pong events that loop forever")))))
+        ;; New format: both :livelocks and :liveness-violations may be present
+        ;; but :livelocks should be present (structural livelock has priority in old format,
+        ;; in new format both are returned but livelocks should be there)
+        (is (seq (:livelocks result))
+            "Should have livelocks in new format (structural livelock has priority)")
+
+        (when-let [livelock (first (:livelocks result))]
+          (is (vector? (:cycle livelock))
+              "Should include the cycle")
+          (is (= #{:ping :pong} (set (:cycle livelock)))
+              "Cycle should contain the ping-pong events that loop forever"))))))
 
 (deftest universal-liveness-predicate-checks-cycles
   (testing "Universal liveness with PREDICATE (not :eventually) should check cycles for violations"
@@ -711,16 +762,19 @@
           "Should detect liveness violation in cycle when using :predicate")
 
       (when result
-        (is (= :liveness-violation (:type result))
-            "Violation type should be :liveness-violation (not :livelock)")
-        (is (= :payment-required (:property result))
-            "Should identify which property was violated")
-        (is (= :universal (:quantifier result))
-            "Should report the quantifier used")
-        (is (vector? (:cycle result))
-            "Should include the cycle that violated the property")
-        (is (= #{:ping :pong} (set (:cycle result)))
-            "Cycle should show the ping-pong events that loop forever without payment")))))
+        ;; New format: check for :liveness-violations vector (not :livelocks)
+        (is (seq (:liveness-violations result))
+            "Should have liveness violations in new format (not :livelocks)")
+
+        (when-let [violation (first (:liveness-violations result))]
+          (is (= :payment-required (:property violation))
+              "Should identify which property was violated")
+          (is (= :universal (:quantifier violation))
+              "Should report the quantifier used")
+          (is (vector? (:cycle violation))
+              "Should include the cycle that violated the property")
+          (is (= #{:ping :pong} (set (:cycle violation)))
+              "Cycle should show the ping-pong events that loop forever without payment"))))))
 
 (deftest existential-liveness-predicate-checks-cycles
   (testing "Existential liveness with PREDICATE (not :eventually) should check cycles for satisfaction"
@@ -776,16 +830,22 @@
           "Should detect a violation (either liveness or deadlock)")
 
       (when result
-        (is (= :liveness-violation (:type result))
-            "Violation type should be :liveness-violation (NOT :deadlock) - liveness has higher priority")
-        (is (= :payment-required (:property result))
-            "Should identify which property was violated")
-        (is (= :universal (:quantifier result))
-            "Should report the quantifier used")
-        (is (vector? (:trace result))
-            "Should include the trace that violated the property")
-        (is (= [:process] (:trace result))
-            "Trace should show the :process event before deadlock, without :payment")))))
+        ;; New format: both violations may be present
+        ;; In the new format, we return ALL violations, so we might have both
+        ;; :liveness-violations and :deadlocks
+        ;; But we should at least have :liveness-violations
+        (is (seq (:liveness-violations result))
+            "Should have liveness violations in new format (liveness has higher priority)")
+
+        (when-let [violation (first (:liveness-violations result))]
+          (is (= :payment-required (:property violation))
+              "Should identify which property was violated")
+          (is (= :universal (:quantifier violation))
+              "Should report the quantifier used")
+          (is (vector? (:trace violation))
+              "Should include the trace that violated the property")
+          (is (= [:process] (:trace violation))
+              "Trace should show the :process event before deadlock, without :payment"))))))
 
 (deftest invalid-quantifier-throws-error
   (testing "Invalid quantifier (typo) throws clear error"
@@ -813,15 +873,280 @@
     ;; Rationale: An empty program has no events to execute and no way to reach
     ;; a terminal state, so it's technically deadlocked at the initial state.
     (let [result-map (check/check {:bthreads {}})]
-      (is (= :deadlock (:type result-map))
-          "Empty bthreads map should return deadlock")
-      (is (= [] (:path result-map))
-          "Path should be empty (deadlocked at initial state)")
-      (is (= {} (get-in result-map [:state :bthread->bid]))
-          "State should have no bthreads"))
+      ;; New format: check for :deadlocks vector
+      (is (seq (:deadlocks result-map))
+          "Empty bthreads map should return deadlock in new format")
+
+      (when-let [deadlock (first (:deadlocks result-map))]
+        (is (= [] (:path deadlock))
+            "Path should be empty (deadlocked at initial state)")
+        (is (= {} (get-in deadlock [:state :bthread->bid]))
+            "State should have no bthreads")))
 
     (let [result-vec (check/check {:bthreads []})]
-      (is (= :deadlock (:type result-vec))
-          "Empty bthreads vector should also return deadlock")
-      (is (= [] (:path result-vec))
-          "Path should be empty (deadlocked at initial state)"))))
+      ;; New format: check for :deadlocks vector
+      (is (seq (:deadlocks result-vec))
+          "Empty bthreads vector should also return deadlock in new format")
+
+      (when-let [deadlock (first (:deadlocks result-vec))]
+        (is (= [] (:path deadlock))
+            "Path should be empty (deadlocked at initial state)")))))
+
+;; =============================================================================
+;; Phase 4: New return format tests
+;; =============================================================================
+
+(deftest new-format-single-deadlock
+  (testing "Single deadlock returns in new format {:deadlocks [...]}"
+    (let [result (check/check
+                  {:bthreads {:simple
+                              (b/bids [{:request #{{:type :a}}}
+                                       {:request #{{:type :b}}}])}
+                   :check-deadlock? true})]
+
+      (is (some? result)
+          "Should detect deadlock")
+
+      (when result
+        ;; New format: no top-level :type key
+        (is (nil? (:type result))
+            "Result should NOT have top-level :type key in new format")
+
+        ;; New format: :deadlocks is a vector
+        (is (vector? (:deadlocks result))
+            "Result should have :deadlocks as a vector")
+
+        (is (= 1 (count (:deadlocks result)))
+            "Should have exactly one deadlock")
+
+        (let [deadlock (first (:deadlocks result))]
+          ;; Individual violation does NOT have :type key
+          (is (nil? (:type deadlock))
+              "Individual deadlock should NOT have :type key")
+
+          (is (vector? (:path deadlock))
+              "Deadlock should have :path")
+
+          (is (map? (:state deadlock))
+              "Deadlock should have :state"))))))
+
+(deftest new-format-single-livelock
+  (testing "Single livelock returns in new format {:livelocks [...]}"
+    (let [result (check/check
+                  {:bthreads {:ping-pong
+                              (b/round-robin [{:request #{:ping}}
+                                              {:request #{:pong}}])}
+                   :check-livelock? true})]
+
+      (is (some? result)
+          "Should detect livelock")
+
+      (when result
+        ;; New format: no top-level :type key
+        (is (nil? (:type result))
+            "Result should NOT have top-level :type key in new format")
+
+        ;; New format: :livelocks is a vector
+        (is (vector? (:livelocks result))
+            "Result should have :livelocks as a vector")
+
+        (is (= 1 (count (:livelocks result)))
+            "Should have exactly one livelock")
+
+        (let [livelock (first (:livelocks result))]
+          ;; Individual violation does NOT have :type key
+          (is (nil? (:type livelock))
+              "Individual livelock should NOT have :type key")
+
+          (is (vector? (:path livelock))
+              "Livelock should have :path")
+
+          (is (vector? (:cycle livelock))
+              "Livelock should have :cycle")
+
+          (is (= #{:ping :pong} (set (:cycle livelock)))
+              "Cycle should contain ping-pong events"))))))
+
+(deftest new-format-single-safety-violation
+  (testing "Single safety violation returns in new format {:safety-violations [...]}"
+    (let [result (check/check
+                  {:bthreads {:violator
+                              (b/bids [{:request #{{:type :violation
+                                                    :invariant-violated true}}}])}})]
+
+      (is (some? result)
+          "Should detect safety violation")
+
+      (when result
+        ;; New format: no top-level :type key
+        (is (nil? (:type result))
+            "Result should NOT have top-level :type key in new format")
+
+        ;; New format: :safety-violations is a vector
+        (is (vector? (:safety-violations result))
+            "Result should have :safety-violations as a vector")
+
+        (is (= 1 (count (:safety-violations result)))
+            "Should have exactly one safety violation")
+
+        (let [violation (first (:safety-violations result))]
+          ;; Individual violation does NOT have :type key
+          (is (nil? (:type violation))
+              "Individual safety violation should NOT have :type key")
+
+          (is (map? (:event violation))
+              "Safety violation should have :event")
+
+          (is (= :violation (:type (:event violation)))
+              "Event should have type :violation")
+
+          (is (vector? (:path violation))
+              "Safety violation should have :path")
+
+          (is (map? (:state violation))
+              "Safety violation should have :state"))))))
+
+(deftest new-format-single-liveness-violation
+  (testing "Single liveness violation returns in new format {:liveness-violations [...]}"
+    (let [result (check/check
+                  {:bthreads {:terminate-immediately
+                              (b/bids [{:request #{{:type :done :terminal true}}}])}
+                   :liveness
+                   {:payment-required
+                    {:quantifier :universal
+                     :predicate (fn [trace]
+                                  (some #(= :payment (tech.thomascothran.pavlov.event/type %)) trace))}}})]
+
+      (is (some? result)
+          "Should detect liveness violation")
+
+      (when result
+        ;; New format: no top-level :type key
+        (is (nil? (:type result))
+            "Result should NOT have top-level :type key in new format")
+
+        ;; New format: :liveness-violations is a vector
+        (is (vector? (:liveness-violations result))
+            "Result should have :liveness-violations as a vector")
+
+        (is (= 1 (count (:liveness-violations result)))
+            "Should have exactly one liveness violation")
+
+        (let [violation (first (:liveness-violations result))]
+          ;; Individual violation does NOT have :type key
+          (is (nil? (:type violation))
+              "Individual liveness violation should NOT have :type key")
+
+          (is (= :payment-required (:property violation))
+              "Liveness violation should have :property")
+
+          (is (= :universal (:quantifier violation))
+              "Liveness violation should have :quantifier")
+
+          (is (vector? (:trace violation))
+              "Liveness violation should have :trace")
+
+          (is (= [:done] (:trace violation))
+              "Trace should show termination without payment"))))))
+
+(deftest new-format-no-violations
+  (testing "No violations returns nil"
+    (let [result (check/check
+                  {:bthreads {:terminate-successfully
+                              (b/bids [{:request #{{:type :done :terminal true}}}])}})]
+
+      (is (nil? result)
+          "Should return nil when no violations exist"))))
+
+(deftest new-format-truncated
+  (testing "Truncation adds :truncated true to result map"
+    (let [;; Create a bthread that generates many unique states
+          counter-bthread (b/step
+                           (fn [state _event]
+                             (let [n (or state 0)]
+                               [(inc n) {:request #{(keyword (str "event-" n))}}])))
+
+          result (check/check
+                  {:bthreads {:counter counter-bthread}
+                   :max-nodes 5})] ;; Very small limit to force truncation
+
+      (is (some? result)
+          "Should return a result when truncated")
+
+      (when result
+        ;; New format: no top-level :type key
+        (is (nil? (:type result))
+            "Result should NOT have top-level :type key in new format")
+
+        ;; New format: :truncated is a boolean flag
+        (is (true? (:truncated result))
+            "Result should have :truncated true when max-nodes exceeded")
+
+        ;; Old format had :max-nodes and :message - new format just has :truncated flag
+        (is (nil? (:max-nodes result))
+            "New format should NOT have :max-nodes key")
+
+        (is (nil? (:message result))
+            "New format should NOT have :message key")))))
+
+(deftest new-format-multiple-violation-types
+  (testing "Multiple violation types (livelock AND safety) all returned in categorized map"
+    ;; This test creates a scenario where both a livelock AND a safety violation exist
+    ;; We do this by having a nondeterministic choice at the first sync point:
+    ;; - If :start-loop is chosen, we enter an infinite ping-pong loop (livelock)
+    ;; - If :start-violation is chosen, we trigger a safety violation
+    ;; The model checker explores BOTH branches and should find BOTH violations
+    (let [result (check/check
+                  {:bthreads
+                   {:choice
+                    ;; At the first sync point, we can either start the loop OR trigger violation
+                    (b/bids [{:request #{:start-loop :start-violation}}])
+
+                    :looper
+                    ;; If :start-loop is chosen, loop forever on ping-pong
+                    (b/step
+                     (fn [state event]
+                       (case (or state :waiting)
+                         :waiting (if (= :start-loop event)
+                                    [:ping {:request #{:ping}}]
+                                    [:waiting {:wait-on #{:start-loop}}])
+                         :ping [:pong {:request #{:pong}}]
+                         :pong [:ping {:request #{:ping}}])))
+
+                    :violator
+                    ;; If :start-violation is chosen, trigger a safety violation
+                    (b/on :start-violation
+                          (constantly {:request #{{:type :bad :invariant-violated true}}}))}})]
+
+      (is (some? result)
+          "Should detect violations")
+
+      (when result
+        ;; New format: no top-level :type key
+        (is (nil? (:type result))
+            "Result should NOT have top-level :type key in new format")
+
+        ;; Should have BOTH categories
+        (is (vector? (:livelocks result))
+            "Result should have :livelocks vector")
+
+        (is (vector? (:safety-violations result))
+            "Result should have :safety-violations vector")
+
+        (is (= 1 (count (:livelocks result)))
+            "Should have one livelock")
+
+        (is (= 1 (count (:safety-violations result)))
+            "Should have one safety violation")
+
+        ;; Verify livelock
+        (let [livelock (first (:livelocks result))]
+          (is (vector? (:cycle livelock))
+              "Livelock should have :cycle")
+          (is (= #{:ping :pong} (set (:cycle livelock)))
+              "Cycle should contain ping-pong events"))
+
+        ;; Verify safety violation
+        (let [violation (first (:safety-violations result))]
+          (is (= :bad (:type (:event violation)))
+              "Safety violation event should have type :bad"))))))
