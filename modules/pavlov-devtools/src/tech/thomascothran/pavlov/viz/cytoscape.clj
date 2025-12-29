@@ -97,18 +97,6 @@
                vec)
    :edges (->> graph :edges (map edge->cy-data) vec)})
 
-(defn graph->cytoscape
-  "Return Cytoscape-compatible graph data for the supplied bthreads map.
-
-  Example:
-  (graph->cytoscape {:foo bthread})
-  ;; => {:nodes [...]
-  ;;     :edges [...]}"
-  [bthreads]
-  (-> bthreads
-      graph/->graph
-      -graph->cytoscape))
-
 (defn lts->cytoscape
   "Convert an LTS (Labeled Transition System) to Cytoscape format.
 

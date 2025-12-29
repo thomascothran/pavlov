@@ -21,11 +21,6 @@
                       {:template template-resource
                        :fallback template-fallback}))))
 
-(defn -graph
-  "Convert a Pavlov graph structure to Cytoscape-friendly data."
-  [graph-map]
-  (cytoscape/-graph->cytoscape graph-map))
-
 (defn ->body
   "Inject Cytoscape data into the template's body segment."
   ([cy-data]
@@ -40,13 +35,6 @@
    (->page cy-data (load-template)))
   ([cy-data template]
    (->body cy-data template)))
-
-(defn ->html
-  "Return a browser-ready Cytoscape HTML document for `bthreads`."
-  [bthreads]
-  (-> bthreads
-      cytoscape/graph->cytoscape
-      ->page))
 
 (defn lts->html
   "Return a browser-ready Cytoscape HTML document for an LTS."
@@ -68,6 +56,4 @@
                           {:request #{{:type :step-3
                                        :environment true}}}
                           {:request #{{:type :step-4
-                                       :terminal true}}}])})
-
-      (spit "cytoscape-test6.html" (->html (make-bthreads))))) ;; Produces a full HTML page containing serialized Cytoscape data.
+                                       :terminal true}}}])})))

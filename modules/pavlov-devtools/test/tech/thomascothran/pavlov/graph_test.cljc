@@ -58,34 +58,6 @@
 (comment
   (tap> (pnav/root (make-branching-bthreads))))
 
-(deftest graph-from-two-step-bthread
-  (testing "graph structure contains root and sequential nodes"
-    (let [graph (graph/->graph (make-bthreads-two-step))]
-      (is (some? graph))
-      (is (= #{[] [:a] [:a :b]}
-             (-> graph :nodes keys set)))
-      (is (= #{{:from [] :to [:a] :event :a}
-               {:from [:a] :to [:a :b] :event :b}}
-             (->> graph
-                  :edges
-                  (map #(select-keys % [:from :to :event]))
-                  set))))))
-
-(deftest graph-from-branching-bthreads
-  (testing "graph structure captures branching fan-out"
-    (is :todo)
-    #_(let [graph (graph/->graph (make-branching-bthreads))
-            edges (->> graph :edges (map #(select-keys % [:from :to :event])) set)]
-        (is (= #{{:from [] :to [:branch/a] :event :branch/a}
-                 {:from [] :to [:branch/b] :event :branch/b}
-                 {:from [] :to [:branch/c] :event :branch/c}
-                 {:from [:branch/b] :to [:branch/b :branch/b-1] :event :branch/b-1}
-                 {:from [:branch/c] :to [:branch/c :branch/c-1] :event :branch/c-1}
-                 {:from [:branch/c :branch/c-1]
-                  :to [:branch/c :branch/c-1 :branch/c-2]
-                  :event :branch/c-2}}
-               edges)))))
-
 (deftest lts-simple-linear-flow
   (testing "LTS has edges for :a and :b events in sequence"
     (let [lts (graph/->lts (make-bthreads-simple-linear))
