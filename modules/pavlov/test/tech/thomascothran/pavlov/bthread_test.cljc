@@ -196,7 +196,7 @@
                                              first))]
     (is (nil? bid3))))
 
-(deftest test-step-function-error
+(deftest test-step-function-error-output
   (testing "When a bthread step function throws an error
     Should emit a terminal event with an error
     And that event should be terminal"
