@@ -207,7 +207,8 @@
   ``` "
   (:require [clojure.set :as set]
             [tech.thomascothran.pavlov.event :as e]
-            [tech.thomascothran.pavlov.graph :as graph]))
+            [tech.thomascothran.pavlov.graph :as graph])
+  (:import [clojure.lang PersistentQueue]))
 
 ;; Internal implementation details below
 
@@ -234,7 +235,7 @@
                             (update acc from (fnil conj []) {:to to :event event}))
                           {}
                           edges)]
-    (loop [queue (conj clojure.lang.PersistentQueue/EMPTY {:id root :path []})
+    (loop [queue (conj PersistentQueue/EMPTY {:id root :path []})
            visited #{}]
       (if-let [{:keys [id path]} (peek queue)]
         (if (= id target-id)
@@ -415,7 +416,7 @@
                             (update acc from (fnil conj []) {:to to :event event}))
                           {}
                           edges)]
-    (loop [queue (conj clojure.lang.PersistentQueue/EMPTY {:id root :path []})
+    (loop [queue (conj PersistentQueue/EMPTY {:id root :path []})
            visited #{}]
       (if-let [{:keys [id path]} (peek queue)]
         (if (= id target-id)
