@@ -606,7 +606,7 @@
                     (find-deadlocks lts config))
 
         ;; Build categorized result map - only include non-empty categories
-        result (cond-> {}
+        result (cond-> nil
                  (seq livelocks) (assoc :livelocks livelocks)
                  (seq liveness-violations) (assoc :liveness-violations liveness-violations)
                  (seq safety-violations) (assoc :safety-violations safety-violations)
@@ -614,5 +614,4 @@
                  truncated? (assoc :truncated true))]
 
     ;; Return nil if no violations and not truncated
-    (when (or (seq result) truncated?)
-      result)))
+    (when result (vary-meta result assoc :lts lts))))
