@@ -5,7 +5,7 @@
 
 (def lib 'tech.thomascothran/pavlov)
 ; alternatively, use MAJOR.MINOR.COMMITS:
-(def version (format "2.0.%s" (b/git-count-revs nil)))
+(def version (format "2.1.%s" (b/git-count-revs nil)))
 (def class-dir "target/classes")
 
 (defn- pom-template [version]
