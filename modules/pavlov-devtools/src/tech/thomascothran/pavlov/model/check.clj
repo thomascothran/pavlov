@@ -239,6 +239,66 @@
                      (conj visited id)))))
         nil))))
 
+(defn- check-universal-liveness
+  "Check a universal liveness property: all paths must satisfy the predicate.
+  Returns a violation if ANY path fails the predicate."
+  [lts property-key {:keys [predicate eventually]} terminal-node-ids]
+  (or
+   ;; First check terminating paths
+   (some (fn [terminal-node-id]
+           (let [full-event-trace (find-path-with-full-events lts terminal-node-id)
+                 keyword-trace (find-path lts terminal-node-id)]
+             ;; If predicate returns falsy, this is a violation
+             (when-not (predicate full-event-trace)
+               {:type :liveness-violation
+                :property property-key
+                :quantifier :universal
+                :trace keyword-trace})))
+         terminal-node-ids)
+
+   ;; Then check trapped cycles
+   (when-let [can-reach (nodes-reaching-terminal lts)]
+     (let [all-nodes (set (keys (:nodes lts)))
+           trapped (set/difference all-nodes can-reach)]
+       (when (seq trapped)
+         (when-let [{:keys [cycle-path]} (find-cycle-in-nodes lts trapped)]
+           ;; For cycles with :eventually, check if any event in cycle matches
+           ;; The cycle-path contains keywords, so we check directly
+           (when eventually
+             (when-not (some #(contains? eventually %) cycle-path)
+               {:type :liveness-violation
+                :property property-key
+                :quantifier :universal
+                :cycle cycle-path}))))))))
+
+(defn- check-existential-liveness
+  "Check an existential liveness property: at least one path must satisfy the predicate.
+  Returns a violation if NO path satisfies the predicate."
+  [lts property-key {:keys [predicate eventually]} terminal-node-ids]
+  (let [;; Check terminating paths
+        terminating-path-satisfies?
+        (some (fn [terminal-node-id]
+                (let [full-event-trace (find-path-with-full-events lts terminal-node-id)]
+                  (predicate full-event-trace)))
+              terminal-node-ids)
+
+        ;; Check if any cycle satisfies the predicate
+        cycle-satisfies?
+        (when eventually
+          (when-let [can-reach (nodes-reaching-terminal lts)]
+            (let [all-nodes (set (keys (:nodes lts)))
+                  trapped (set/difference all-nodes can-reach)]
+              (when (seq trapped)
+                (when-let [{:keys [cycle-path]} (find-cycle-in-nodes lts trapped)]
+                  ;; For cycles with :eventually, check if any event in cycle matches
+                  (some #(contains? eventually %) cycle-path))))))]
+
+    ;; Return violation if neither terminating paths nor cycles satisfy
+    (when-not (or terminating-path-satisfies? cycle-satisfies?)
+      {:type :liveness-violation
+       :property property-key
+       :quantifier :existential})))
+
 (defn- find-liveness-violations
   "Check liveness properties against the LTS graph.
   For universal quantifier: returns violation if ANY path fails the predicate.
@@ -259,63 +319,15 @@
                     predicate (or predicate
                                   (when eventually
                                     (fn [trace]
-                                      (some #(contains? eventually (e/type %)) trace))))]
+                                      (some #(contains? eventually (e/type %)) trace))))
+                    ;; Create prop with predicate for helpers
+                    prop-with-predicate (assoc prop :predicate predicate)]
                 (case quantifier
                   :universal
-                  ;; For universal: check all terminating paths and trapped cycles
-                  (or
-                   ;; First check terminating paths
-                   (some (fn [terminal-node-id]
-                           (let [full-event-trace (find-path-with-full-events lts terminal-node-id)
-                                 keyword-trace (find-path lts terminal-node-id)]
-                             ;; If predicate returns falsy, this is a violation
-                             (when-not (predicate full-event-trace)
-                               {:type :liveness-violation
-                                :property property-key
-                                :quantifier :universal
-                                :trace keyword-trace})))
-                         terminal-node-ids)
-
-                   ;; Then check trapped cycles
-                   (when-let [can-reach (nodes-reaching-terminal lts)]
-                     (let [all-nodes (set (keys (:nodes lts)))
-                           trapped (set/difference all-nodes can-reach)]
-                       (when (seq trapped)
-                         (when-let [{:keys [cycle-path]} (find-cycle-in-nodes lts trapped)]
-                           ;; For cycles with :eventually, check if any event in cycle matches
-                           ;; The cycle-path contains keywords, so we check directly
-                           (when eventually
-                             (when-not (some #(contains? eventually %) cycle-path)
-                               {:type :liveness-violation
-                                :property property-key
-                                :quantifier :universal
-                                :cycle cycle-path})))))))
+                  (check-universal-liveness lts property-key prop-with-predicate terminal-node-ids)
 
                   :existential
-                  ;; For existential: check if NO path satisfies the predicate
-                  (let [;; Check terminating paths
-                        terminating-path-satisfies?
-                        (some (fn [terminal-node-id]
-                                (let [full-event-trace (find-path-with-full-events lts terminal-node-id)]
-                                  (predicate full-event-trace)))
-                              terminal-node-ids)
-
-                        ;; Check if any cycle satisfies the predicate
-                        cycle-satisfies?
-                        (when eventually
-                          (when-let [can-reach (nodes-reaching-terminal lts)]
-                            (let [all-nodes (set (keys (:nodes lts)))
-                                  trapped (set/difference all-nodes can-reach)]
-                              (when (seq trapped)
-                                (when-let [{:keys [cycle-path]} (find-cycle-in-nodes lts trapped)]
-                                  ;; For cycles with :eventually, check if any event in cycle matches
-                                  (some #(contains? eventually %) cycle-path))))))]
-
-                    ;; Return violation if neither terminating paths nor cycles satisfy
-                    (when-not (or terminating-path-satisfies? cycle-satisfies?)
-                      {:type :liveness-violation
-                       :property property-key
-                       :quantifier :existential})))))
+                  (check-existential-liveness lts property-key prop-with-predicate terminal-node-ids))))
             liveness-props))))
 
 (defn check
