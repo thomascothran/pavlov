@@ -313,15 +313,8 @@
       (loop [can-reach terminal
              frontier terminal
              iterations 0]
-        (cond
-          ;; Safety limit to prevent infinite loops
-          (> iterations 10000)
-          (throw (ex-info "Too many iterations in nodes-reaching-terminal" {}))
-
-          (empty? frontier)
+        (if (empty? frontier)
           can-reach
-
-          :else
           (let [new-nodes (->> frontier
                                (mapcat reverse-adj)
                                (remove can-reach)
