@@ -2,11 +2,11 @@
   "Model checking for behavioral programs.
 
   This namespace provides model checking capabilities for behavioral programs
-  by implementing state-space exploration using the StateNavigator protocol.
+  by implementing state-space exploration and graph analysis.
 
-  The main entry point is the `check` function which explores the state space
-  once and detects all violations during traversal."
-  (:require [tech.thomascothran.pavlov.search :as search]))
+  The main entry point is the `check` function which builds an LTS graph
+  and analyzes it for violations."
+  (:require [tech.thomascothran.pavlov.graph :as graph]))
 
 ;; Internal implementation details below
 
@@ -23,38 +23,79 @@
              main-bthreads
              env-bthreads])))
 
-(defn- check-for-violations
-  "Check if the current state represents a violation.
+(defn- find-path
+  "Find a path from root to target node in the LTS graph.
+  Returns a vector of events, or nil if no path exists."
+  [lts target-id]
+  (let [{:keys [root edges]} lts
+        ;; Build adjacency map: node-id -> [{:to id :event e}]
+        adjacency (reduce (fn [acc {:keys [from to event]}]
+                            (update acc from (fnil conj []) {:to to :event event}))
+                          {}
+                          edges)]
+    (loop [queue (conj clojure.lang.PersistentQueue/EMPTY {:id root :path []})
+           visited #{}]
+      (if-let [{:keys [id path]} (peek queue)]
+        (if (= id target-id)
+          path
+          (if (visited id)
+            (recur (pop queue) visited)
+            (let [neighbors (get adjacency id [])
+                  new-states (map (fn [{:keys [to event]}]
+                                    {:id to
+                                     :path (conj path (if (keyword? event)
+                                                        event
+                                                        (:type event)))})
+                                  neighbors)]
+              (recur (into (pop queue) new-states)
+                     (conj visited id)))))
+        nil))))
+
+(defn- find-safety-violations
+  "Scan LTS edges for safety violations.
   Returns violation map or nil."
-  [wrapped config]
-  (let [{:keys [path] :bprogram/keys [state]} wrapped
-        next-event (:next-event state)
-        ;; Check if the next event has invariant-violated flag
-        event-data (when next-event
-                     (if (keyword? next-event)
-                       {:type next-event}
-                       next-event))
-        invariant-violated? (get event-data :invariant-violated)]
+  [lts]
+  (let [{:keys [edges nodes]} lts]
+    (some (fn [{:keys [to event]}]
+            (when (get event :invariant-violated)
+              (let [path (find-path lts to)
+                    state (get nodes to)]
+                {:type :safety-violation
+                 :event event
+                 :path path
+                 :state state})))
+          edges)))
 
-    (cond
-      ;; Check for safety violation
-      invariant-violated?
-      {:type :safety-violation
-       :event event-data
-       :path path
-       :state state}
+(defn- terminal-nodes
+  "Find all terminal nodes in the LTS.
+  Returns a set of node IDs."
+  [lts]
+  (->> (:edges lts)
+       (filter #(get-in % [:event :terminal]))
+       (map :to)
+       set))
 
-      ;; Check for deadlock
-      (and (not= false (:check-deadlock? config))
-           (nil? next-event)
-           (not (get-in state [:last-event :terminal])))
-      {:type :deadlock
-       :path path
-       :state state}
-
-      ;; No violation
-      :else
-      nil)))
+(defn- find-deadlocks
+  "Find deadlocks in the LTS graph.
+  A deadlock is a leaf node that is not a terminal node.
+  Returns violation map or nil."
+  [lts config]
+  (when (not= false (:check-deadlock? config))
+    (let [{:keys [edges nodes]} lts
+          ;; Find all nodes that have outgoing edges
+          nodes-with-outgoing (into #{} (map :from edges))
+          ;; Find terminal nodes
+          terminal-node-ids (terminal-nodes lts)
+          ;; Find leaf nodes (no outgoing edges)
+          leaf-nodes (remove nodes-with-outgoing (keys nodes))
+          ;; Deadlock = leaf node that is not terminal
+          deadlock-nodes (remove terminal-node-ids leaf-nodes)]
+      (when-let [deadlock-id (first deadlock-nodes)]
+        (let [path (find-path lts deadlock-id)
+              state (get nodes deadlock-id)]
+          {:type :deadlock
+           :path path
+           :state state})))))
 
 (defn check
   "Model check a behavioral program for safety violations.
@@ -69,18 +110,18 @@
     :safety-bthreads - bthreads that detect violations
     :environment-bthreads - bthreads that generate events
     :check-deadlock? - if true, detect deadlocks (default: true)
+    :max-nodes - maximum nodes to explore (optional)
   Returns:
   - nil if no violations found
   - {:type :safety-violation :event event :path [events] :state state}
   - {:type :deadlock :path [events] :state state}"
   [config]
   (let [all-bthreads (assemble-all-bthreads config)
-        navigator (search/make-navigator all-bthreads)]
+        ;; Build LTS graph
+        lts-opts (cond-> {}
+                   (:max-nodes config) (assoc :max-nodes (:max-nodes config)))
+        lts (graph/->lts all-bthreads lts-opts)]
 
-    (search/bfs-reduce
-     navigator
-     (fn [acc wrapped]
-       (if-let [violation (check-for-violations wrapped config)]
-         (reduced violation)
-         acc))
-     nil)))
+    ;; Check for violations in priority order
+    (or (find-safety-violations lts)
+        (find-deadlocks lts config))))
