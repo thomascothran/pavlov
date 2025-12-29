@@ -36,9 +36,9 @@
 
    | Constructor   | Use Case                                    |
    |---------------|---------------------------------------------|
+   | `bids`        | Finite sequence of scripted bids (supports dynamic fns) |
    | `on`          | React to exactly one event type             |
    | `after-all`   | Coordinate multiple prerequisites           |
-   | `bids`        | Finite sequence of scripted bids            |
    | `repeat`      | Repeat a bid n times or forever             |
    | `round-robin` | Cycle through bthreads in order             |
    | `thread`      | Declarative branching on event types (macro)|
@@ -50,6 +50,20 @@
    ```
 
    ## Choosing a Constructor
+
+   **Use `bids`** for scripted sequences - the most common pattern. Items can
+   be literal bid maps or functions that compute bids dynamically from events:
+   ```clojure
+   ;; Static sequence
+   (b/bids [{:request #{:step-1}}
+            {:request #{:step-2}}])
+
+   ;; Dynamic - functions receive the event and return a bid
+   (b/bids [{:wait-on #{:order/placed}}
+            (fn [event]
+              {:request #{{:type :order/confirm
+                           :order-id (:order-id event)}}})])
+   ```
 
    **Use `on`** when you need stateless reactions to a single event type:
    ```clojure
@@ -63,13 +77,6 @@
    ```clojure
    (b/after-all #{:payment/authorized :packing/completed}
                 (fn [events] {:request #{{:type :order/ready}}}))
-   ```
-
-   **Use `bids`** for finite sequences of scripted behavior:
-   ```clojure
-   (b/bids [{:request #{:step-1}}
-            {:request #{:step-2}}
-            {:request #{:step-3}}])
    ```
 
    **Use `repeat`** for repetitive behavior:
@@ -567,13 +574,13 @@
   (macroexpand-1
    '(thread [prev-state event]
 
-      :pavlov/init
-      [{:initialized true}
-       {:wait-on #{:fire-missiles}}]
+            :pavlov/init
+            [{:initialized true}
+             {:wait-on #{:fire-missiles}}]
 
-      #{:fire-missiles}
-      (let [result (missiles-api/fire!)]
-        [prev-state {:request #{{:type :missiles-fired
-                                 :result result}}}])
+            #{:fire-missiles}
+            (let [result (missiles-api/fire!)]
+              [prev-state {:request #{{:type :missiles-fired
+                                       :result result}}}])
 
-      [prev-state {:wait-on #{:fire-missiles}}])))
+            [prev-state {:wait-on #{:fire-missiles}}])))
