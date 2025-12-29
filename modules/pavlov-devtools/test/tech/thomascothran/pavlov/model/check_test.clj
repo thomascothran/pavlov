@@ -245,3 +245,12 @@
                :event-b1ii :event-b1iiA
                :event-b1iii :event-b1iiiA :event-b1iiiB}
              (into #{} @!events))))))
+
+(deftest no-livelock-when-program-terminates
+  (testing "Program that terminates normally should not be flagged as livelock"
+    (let [result (check/check
+                  {:bthreads {:terminate
+                              (b/bids [{:request #{{:type :done :terminal true}}}])}
+                   :check-livelock? true})]
+      (is (nil? result)
+          "Should find no violations when program terminates normally"))))
