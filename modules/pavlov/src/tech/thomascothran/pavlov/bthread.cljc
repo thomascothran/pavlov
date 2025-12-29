@@ -75,11 +75,15 @@
                 (vreset! state next-state)
                 bid)
               (catch #?(:clj Throwable :cljs :default) e
-                {:request #{{:type ::unhandled-step-fn-error
-                             :event event
-                             :error e
-                             :invariant-violated true
-                             :terminal true}}})))))))
+                (let [error-event-type ::unhandled-step-fn-error]
+                  (when (and event
+                             (not= error-event-type
+                                   (event-proto/type event)))
+                    {:request #{{:type error-event-type
+                                 :event event
+                                 :error e
+                                 :invariant-violated true
+                                 :terminal true}}})))))))))
 
 (defn repeat
   ([x] (repeat nil x))

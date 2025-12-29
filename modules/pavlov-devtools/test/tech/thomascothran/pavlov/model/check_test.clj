@@ -103,9 +103,16 @@
     (is result)))
 
 (deftest error-thrown-in-step-fn
-  (let [bthreads {:throw (b/step (fn [state event]
-                                   (throw (ex-info "boom" {:state state
-                                                           :event event}))))}
+  (let [bthreads {:throw
+                  (b/step (fn [state event]
+                            (throw (ex-info "boom" {:state state
+                                                    :event event}))))
+                  :throw-after-init
+                  (b/step (fn [state event]
+                            (if event
+                              (throw (ex-info "boom" {:state state
+                                                      :event event}))
+                              {:request #{{:type :init-done}}})))}
         result (check/check {:bthreads bthreads
                              :check-deadlock? true})]
     (is result)))
@@ -254,3 +261,20 @@
                    :check-livelock? true})]
       (is (nil? result)
           "Should find no violations when program terminates normally"))))
+
+(deftest simplest-livelock-detected
+  (testing "Infinite loop with no escape should be detected as livelock"
+    (let [result (check/check
+                  {:bthreads {:ping-pong
+                              (b/round-robin [{:request #{:ping}}
+                                              {:request #{:pong}}])}
+                   :check-livelock? true})]
+      (is (some? result)
+          "Should detect a livelock")
+      (when result
+        (is (= :livelock (:type result))
+            "Violation type should be :livelock")
+        (is (vector? (:cycle result))
+            "Should include the cycle")
+        (is (seq (:cycle result))
+            "Cycle should not be empty")))))
