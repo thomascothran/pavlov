@@ -1,6 +1,8 @@
 (ns tech.thomascothran.pavlov.search-test
   (:require [clojure.test :refer [deftest testing is]]
-            [tech.thomascothran.pavlov.search :as search]))
+            [tech.thomascothran.pavlov.search :as search]
+            [tech.thomascothran.pavlov.bthread :as b]
+            [tech.thomascothran.pavlov.event :as event]))
 
 (defrecord TreeNavigator [graph]
   search/StateNavigator
