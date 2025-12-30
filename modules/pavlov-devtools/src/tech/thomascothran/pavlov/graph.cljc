@@ -9,7 +9,8 @@
 
   Both functions take a map of named bthreads and return a graph with
   `:nodes` and `:edges` suitable for visualization tooling."
-  (:require [tech.thomascothran.pavlov.search :as search]))
+  (:require [tech.thomascothran.pavlov.search :as search])
+  #?(:clj (:import [clojure.lang PersistentQueue])))
 
 (defn- ->node-value
   "Extract minimal node data from wrapped state.
@@ -60,31 +61,55 @@
   ([bthreads {:keys [max-nodes] :as _opts}]
    (let [nav (search/make-navigator bthreads)
          root-wrapped (search/root nav)
-         root-id (search/identifier nav root-wrapped)]
-     (assoc
-      (search/bfs-reduce
-       nav
-       (fn [{:keys [edges nodes truncated]} wrapped]
-         ;; Check if we've reached the max-nodes limit before processing
-         (if (and max-nodes (>= (count nodes) max-nodes))
-           (reduced {:edges edges :nodes nodes :truncated true})
-           (let [identifier (search/identifier nav wrapped)
-                 ;; Add the current node to the nodes map
-                 nodes (assoc nodes identifier (->node-value wrapped))
-                 ;; Check again after adding current node
-                 stop-after-current? (and max-nodes (>= (count nodes) max-nodes))
-                 successors (if stop-after-current?
-                              [] ;; Don't process successors if we've hit the limit
-                              (search/succ nav wrapped))
-                 [edges nodes] (reduce (fn [[edges nodes] {:keys [state event]}]
-                                         (let [succ-identifier (search/identifier nav state)]
-                                           [(conj edges {:from identifier
-                                                         :to succ-identifier
-                                                         :event event})
-                                            ;; Also add successor nodes
-                                            (assoc nodes succ-identifier (->node-value state))]))
-                                       [edges nodes]
-                                       successors)]
-             {:edges edges :nodes nodes :truncated (or truncated false)})))
-       {:edges [] :nodes {} :truncated false})
-      :root root-id))))
+         root-id (search/identifier nav root-wrapped)
+         empty-queue #?(:clj PersistentQueue/EMPTY
+                        :cljs cljs.core/PersistentQueue.EMPTY)]
+     ;; Custom BFS loop that calls succ exactly once per state.
+     ;; This avoids the bug where calling succ twice returns different
+     ;; states due to mutable bthread state.
+     (loop [queue (conj empty-queue root-wrapped)
+            seen #{}
+            nodes {}
+            edges []
+            truncated false]
+       (if (or (empty? queue) truncated)
+         {:root root-id
+          :nodes nodes
+          :edges edges
+          :truncated truncated}
+         (let [wrapped (peek queue)
+               queue (pop queue)
+               identifier (search/identifier nav wrapped)]
+           (if (contains? seen identifier)
+             ;; Already processed, skip
+             (recur queue seen nodes edges truncated)
+             ;; Process this node
+             (let [;; Check if we've hit the limit
+                   hit-limit? (and max-nodes (>= (count nodes) max-nodes))
+                   ;; Add current node
+                   nodes (assoc nodes identifier (->node-value wrapped))
+                   ;; Mark as seen
+                   seen (conj seen identifier)]
+               (if hit-limit?
+                 ;; Stop processing, mark as truncated
+                 (recur queue seen nodes edges true)
+                 ;; Get successors ONCE and use for both edges and queue
+                 (let [successors (search/succ nav wrapped)
+                       ;; Create edges from successors
+                       new-edges (mapv (fn [{:keys [state event]}]
+                                         {:from identifier
+                                          :to (search/identifier nav state)
+                                          :event event})
+                                       successors)
+                       ;; Also add successor nodes immediately
+                       nodes (reduce (fn [nodes {:keys [state]}]
+                                       (let [succ-id (search/identifier nav state)]
+                                         (assoc nodes succ-id (->node-value state))))
+                                     nodes
+                                     successors)
+                       ;; Add successor states to queue
+                       queue (reduce (fn [q {:keys [state]}]
+                                       (conj q state))
+                                     queue
+                                     successors)]
+                   (recur queue seen nodes (into edges new-edges) truncated)))))))))))

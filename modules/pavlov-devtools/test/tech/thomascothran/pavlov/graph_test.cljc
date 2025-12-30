@@ -1,5 +1,6 @@
 (ns tech.thomascothran.pavlov.graph-test
   (:require [clojure.test :refer [deftest is testing]]
+            [clojure.set]
             [tech.thomascothran.pavlov.graph :as graph]
             [tech.thomascothran.pavlov.nav :as pnav]
             [tech.thomascothran.pavlov.bthread :as b]))
@@ -54,6 +55,44 @@
                        {:request #{:a}}
                        {:request #{:b}})))]
     {:stepper (b/bids steps)}))
+
+(defn make-lts-losing-edges-bug-repro
+  "Minimal reproduction case for the LTS node/edge consistency bug.
+
+  This scenario includes:
+  - A stateful bthread that accumulates state
+  - A blocked terminal event from another bthread
+  - The stateful bthread requests a non-blocked event that should be selectable
+
+  The bug manifests when edge identifiers reference nodes that don't exist
+  in the :nodes map."
+  []
+  {:init
+   (b/bids [{:request #{{:type :start}}}])
+
+   :stateful-worker
+   (let [default-bid {:wait-on #{:work-done}}]
+     (b/thread [state event]
+       :pavlov/init
+       [nil default-bid]
+       :work-done
+       [(inc (or state 0)) {:request #{{:type :work-result}}}]
+       [state default-bid]))
+
+   :do-work
+   (b/on :start (fn [_] {:request #{{:type :work-done}}}))
+
+   :terminal-requester
+   (b/on :start (fn [_] {:request #{{:type :blocked-terminal :terminal true}}}))
+
+   :blocker
+   {:block #{:blocked-terminal}}
+
+   :test-terminal
+   (b/bids [{:wait-on #{:start}}
+            {:wait-on #{:work-done}}
+            {:wait-on #{:work-result}}
+            {:request #{{:type :test-passed :terminal true}}}])})
 
 (comment
   (tap> (pnav/root (make-branching-bthreads))))
@@ -268,3 +307,63 @@
     (let [lts (graph/->lts (make-bthreads-simple-linear))] ;; small graph, no limit
       (is (= false (:truncated lts))
           "Should indicate no truncation when exploration completes normally"))))
+
+(deftest lts-node-edge-consistency
+  (testing "All edge :from identifiers exist in :nodes"
+    (let [lts (graph/->lts (make-lts-losing-edges-bug-repro))
+          nodes (:nodes lts)
+          edges (:edges lts)
+          from-ids (set (map :from edges))
+          missing-from (remove #(contains? nodes %) from-ids)]
+      (is (empty? missing-from)
+          (str "Edge :from identifiers not found in :nodes: " (vec missing-from)))))
+
+  (testing "All edge :to identifiers exist in :nodes"
+    (let [lts (graph/->lts (make-lts-losing-edges-bug-repro))
+          nodes (:nodes lts)
+          edges (:edges lts)
+          to-ids (set (map :to edges))
+          missing-to (remove #(contains? nodes %) to-ids)]
+      (is (empty? missing-to)
+          (str "Edge :to identifiers not found in :nodes: " (vec missing-to)))))
+
+  (testing "The :root identifier exists in :nodes"
+    (let [lts (graph/->lts (make-lts-losing-edges-bug-repro))
+          nodes (:nodes lts)
+          root (:root lts)]
+      (is (contains? nodes root)
+          (str "Root identifier " root " not found in :nodes"))))
+
+  (testing "Node identifiers in edges match node identifiers in :nodes (identity check)"
+    (let [lts (graph/->lts (make-lts-losing-edges-bug-repro))
+          nodes (:nodes lts)
+          edges (:edges lts)
+          edge-ids (into #{} (concat (map :from edges) (map :to edges)))
+          node-ids (set (keys nodes))
+          ;; Find any edge IDs that don't appear in node-ids
+          missing-ids (clojure.set/difference edge-ids node-ids)]
+      (is (empty? missing-ids)
+          (str "Edge identifiers not found in :nodes map keys: " (vec missing-ids)))))
+
+  (testing "Every node with outgoing edges is correctly identified as non-leaf"
+    ;; This test replicates the deadlock detection logic to verify
+    ;; that the LTS graph is consistent for model checking
+    (let [lts (graph/->lts (make-lts-losing-edges-bug-repro))
+          {:keys [edges nodes]} lts
+          ;; Find all nodes that have outgoing edges (as deadlock detection does)
+          nodes-with-outgoing (into #{} (map :from edges))
+          ;; Find terminal nodes
+          terminal-node-ids (->> edges
+                                 (filter #(get-in % [:event :terminal]))
+                                 (map :to)
+                                 set)
+          ;; Find leaf nodes (no outgoing edges according to edge :from values)
+          leaf-nodes (remove nodes-with-outgoing (keys nodes))
+          ;; Deadlock = leaf node that is not terminal
+          deadlock-nodes (remove terminal-node-ids leaf-nodes)]
+      ;; In a correctly functioning program that terminates successfully,
+      ;; there should be no false deadlocks
+      (is (empty? deadlock-nodes)
+          (str "False deadlock detected due to LTS node/edge inconsistency. "
+               "Deadlock nodes: " (count deadlock-nodes) ". "
+               "This indicates edge :from identifiers don't match node keys.")))))
