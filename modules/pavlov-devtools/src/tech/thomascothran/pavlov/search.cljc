@@ -22,8 +22,8 @@
   [bp-state saved-states]
   (let [name->bthread (:name->bthread bp-state)]
     (doseq [[name bthread] name->bthread]
-      (when-let [saved-state (get saved-states name)]
-        (b/set-state bthread saved-state)))
+      (when (contains? saved-states name)
+        (b/set-state bthread (get saved-states name))))
     bp-state))
 
 (defprotocol StateNavigator

@@ -880,3 +880,45 @@
             result (search/dfs-reduce nav conj [])]
         (is (= [:a :b] result)
             "DFS-reduce should handle mixed empty/non-empty successor lists")))))
+
+(defn make-stateful-bthreads
+  "Creates bthreads with a stateful worker that starts with nil state.
+   This configuration triggers the restore-bthread-states bug where
+   nil values are not properly restored.
+   
+   Uses b/step instead of b/thread because b/thread expects map events
+   with a :type key, but event selection can return keyword events."
+  []
+  {:trigger
+   (b/bids [{:request #{:start}}])
+
+   :stateful-worker
+   (b/step (fn [state event]
+             (case (event/type event)
+               nil [nil {:wait-on #{:work}}] ;; init
+               :work [(inc (or state 0)) {:request #{:done}}]
+               ;; default - stay in current state
+               [state {:wait-on #{:work}}])))
+
+   :do-work
+   (b/on :start (fn [_] {:request #{:work}}))})
+
+(deftest succ-is-idempotent
+  (testing "Calling succ multiple times on the same state returns identical results"
+    (let [nav (search/make-navigator (make-stateful-bthreads))
+          root (search/root nav)
+          ;; Get first successor (after :start event)
+          after-start (:state (first (search/succ nav root)))]
+
+      ;; Call succ twice on the same state
+      (let [succ1 (first (search/succ nav after-start))
+            succ2 (first (search/succ nav after-start))]
+
+        (testing "Both calls return the same event"
+          (is (= (:event succ1) (:event succ2))
+              "Events should be identical"))
+
+        (testing "Both calls return the same saved bthread states"
+          (is (= (get-in (:state succ1) [:saved-bthread-states :stateful-worker])
+                 (get-in (:state succ2) [:saved-bthread-states :stateful-worker]))
+              "Saved states for stateful-worker should be identical - bug causes second call to have incremented state"))))))
