@@ -202,6 +202,13 @@
       (is (= (:from a-edge) (:from b-edge))
           "Both :a and :b edges should branch from the same state"))))
 
+(deftest lts-branches-on-unordered-bthreads
+  (testing "LTS should branch on unordered bthreads"
+    (let [bthreads {:a (b/bids [{:request #{:a}}])
+                    :b (b/bids [{:request #{:b}}])}
+          lts (graph/->lts bthreads)]
+      (is (= 4 (count (:edges lts)))))))
+
 (deftest lts-branch-and-converge
   (testing "LTS branches on :a/:b then converges to same state"
     (let [lts (graph/->lts (make-bthreads-branch-and-converge))
