@@ -10,15 +10,56 @@
   Both functions take a map of named bthreads and return a graph with
   `:nodes` and `:edges` suitable for visualization tooling.
 
+  ## Nodes
+
+  In the LTS graph, nodes are bprogram states. The program state includes both:
+
+  - the state of all bthreads in the bprogram
+  - the bids proffered by bthreads
+
+  ## Edges
+
+  In the LTS graph, the edges are the events that transition the bthread state.
+  These are the events which can be selected, given the priority of the
+  bthreads and the priority of requests in a given bid.
+
+  ## Branches
+
   Branches exist in programs where multiple requested events of equal priority
-  are available. Branches can be created like so:
+  are for selection.
+
+  Branches can occur either at the bthread level or the bid level.
+
+  ### Bthread level branching
+
+  To cause branching at the bthread level, bthreads must have equal priority. This
+  is done by passing a map of bthread-name to bthread to `->lts`. To avoid branching
+  at the bthread level, bthreads can be passed as a list of tuples:
+
+  [[:bthread-name bthread] ...]
+
+  ### Bid-level branching
+
+  Branches at the bid level can be created using a set rather than a vector for the
+  requests, like so:
 
   ```clojure
   (b/bids [{:request #{{:type :event-a} {:type :event-b}}}])
   ```
 
   This creates a branch in the execution graph.
-  "
+
+  ### Combination of branches
+
+  Note that branching compounds.
+
+  First, the eligible bids will be seleted - that is,
+  bids the request unblocked events. If the bthreads are in a map, this will be
+  all bids with unblocked events. If the bthreads are provided in a sequence of tuples
+  then it will be at most one bid.
+
+  Second, the eligible requested events from the eligible bid will be selected.
+  These will then be aggregated together into the total branching events. "
   (:require [tech.thomascothran.pavlov.search :as search]))
 
 (defn- ->node-value
