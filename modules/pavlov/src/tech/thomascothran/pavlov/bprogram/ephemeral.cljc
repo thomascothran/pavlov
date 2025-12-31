@@ -10,6 +10,24 @@
      `submit-event!`, `subscribe!`, and `stop!`. Use this for long-running
      or interactive programs.
 
+   ## Event Selection Algorithm
+
+   At each step of the bprogram, the bpgrogram:
+
+   1. Notifies all bthreads that are subscribed to the previous event:
+      those that have either requested or waited-on that event type.
+   2. Those bthreads submit new bids
+   3. Those bids are added into the previous bids from all the other
+      bthreads that are active and were not subscribed to the previous event
+   4. The next event is chosen based on the following selection algorithm:
+      i. The highest priority bid (based on the bthread priority)
+         with an *unblocked* request is selected
+      ii. From that bid, the highest priority *unblocked* requested event
+          is selected
+
+   If no event is selected, `execute!` will terminate the program. `make-program!`,
+   on the other hand, returns a bprogram that continues to wait for external events
+
    ## Bthread Priority
 
    Bthreads can be provided as either:
@@ -35,6 +53,19 @@
      {:kill-after 1000})
    ;; => {:type :done, :terminal true}
    ```
+
+   ## Requested event priority
+
+   Within a bid, the request set can either be an ordered sequence or
+   an unordered set. If the sequence is ordered, the requested, unblocked
+   events are ordered from high to low priority. If the requests are a
+   set then priority is non-deterministic.
+
+   Note that unordered requested events are useful for creating a branching
+   choice when working with the model checker or the visualizing possible
+   paths through the program.
+
+   ## Related
 
    See `tech.thomascothran.pavlov.bthread` for creating bthreads."
   (:refer-clojure :exclude [run!])

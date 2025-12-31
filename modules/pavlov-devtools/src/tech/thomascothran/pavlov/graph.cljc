@@ -8,7 +8,17 @@
     convergence. Better for understanding the actual state space.
 
   Both functions take a map of named bthreads and return a graph with
-  `:nodes` and `:edges` suitable for visualization tooling."
+  `:nodes` and `:edges` suitable for visualization tooling.
+
+  Branches exist in programs where multiple requested events of equal priority
+  are available. Branches can be created like so:
+
+  ```clojure
+  (b/bids [{:request #{{:type :event-a} {:type :event-b}}}])
+  ```
+
+  This creates a branch in the execution graph.
+  "
   (:require [tech.thomascothran.pavlov.search :as search]))
 
 (defn- ->node-value
