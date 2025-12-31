@@ -1,9 +1,8 @@
 {:paths ["src" "resources"]
  :deps {djblue/portal                  {:mvn/version "0.61.0"}
-        dev.onionpancakes/chassis      {:mvn/version "1.0.365"}
-        info.sunng/ring-jetty9-adapter {:mvn/version "0.39.0"}
         metosin/malli                  {:mvn/version "0.19.2"}
-        metosin/jsonista               {:mvn/version "0.3.13"}}
+        metosin/jsonista               {:mvn/version "0.3.13"}
+        io.replikativ/hasch            {:mvn/version "0.3.94"}}
  :aliases
  {:build {:deps {io.github.clojure/tools.build {:mvn/version "0.9.6"}
                  slipset/deps-deploy {:mvn/version "0.2.0"}}

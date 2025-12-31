@@ -2,7 +2,8 @@
   (:refer-clojure :exclude [ancestors])
   (:require [tech.thomascothran.pavlov.event.selection :as selection]
             [tech.thomascothran.pavlov.bthread :as b]
-            [tech.thomascothran.pavlov.bprogram.state :as state])
+            [tech.thomascothran.pavlov.bprogram.state :as state]
+            [hasch.core :as hasch])
   #?(:clj (:import [clojure.lang PersistentQueue])))
 
 ;; helper functions
@@ -147,4 +148,4 @@
               bthread->bid (get-in wrapped
                                    [:bprogram/state :bthread->bid])
               last-event-terminal (get-in wrapped [:bprogram/state :last-event :terminal])]
-          [last-event-terminal saved-states bthread->bid])))))
+          (hasch/uuid [last-event-terminal saved-states bthread->bid]))))))
