@@ -231,7 +231,8 @@
         main-bthreads (get config :bthreads)
         env-bthreads (get config :environment-bthreads)]
     ;; Order matters: safety -> main -> env -> deadlock
-    (reduce into []
+    (reduce into (if (sequential? main-bthreads)
+                   [] {})
             [safety-bthreads
              main-bthreads
              env-bthreads])))
