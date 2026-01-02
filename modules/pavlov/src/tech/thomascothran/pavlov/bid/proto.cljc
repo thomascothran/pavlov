@@ -8,4 +8,6 @@
 (defprotocol Bid
   (request [this])
   (wait-on [this])
-  (block [this]))
+  (block [this])
+  (invariant-violated [this])
+  (terminal [this]))

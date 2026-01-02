@@ -7,7 +7,9 @@
           (request [this] (get this :request #{}))
           (wait-on [this] (-> (get this :wait-on #{})
                               (set/difference (get this :request #{}))))
-          (block [this] (get this :block #{})))
+          (block [this] (get this :block #{}))
+          (invariant-violated [this] (get this :invariant-violated))
+          (terminal [this] (get this :terminal)))
 
    :cljs (extend-protocol proto/Bid
 
@@ -16,22 +18,30 @@
            (wait-on [this] (-> (get this :wait-on #{})
                                (set/difference (get this :request #{}))))
            (block [this] (get this :block #{}))
+           (invariant-violated [this] (get this :invariant-violated))
+           (terminal [this] (get this :terminal))
 
            cljs.core.PersistentHashMap
            (request [this] (get this :request #{}))
            (wait-on [this] (-> (get this :wait-on #{})
                                (set/difference (get this :request #{}))))
-           (block [this] (get this :block #{})))
+           (block [this] (get this :block #{}))
+           (invariant-violated [this] (get this :invariant-violated))
+           (terminal [this] (get this :terminal)))
 
    :squint (extend-protocol proto/Bid
              js/Object
              (request [this] (get this :request #{}))
              (wait-on [this] (-> (get this :wait-on #{})
                                  (set/difference (get this :request #{}))))
-             (block [this] (get this :block #{}))))
+             (block [this] (get this :block #{}))
+             (invariant-violated [this] (get this :invariant-violated))
+             (terminal [this] (get this :terminal))))
 
 (extend-protocol proto/Bid
   nil
   (request [_])
   (wait-on [_])
-  (block [_]))
+  (block [_])
+  (invariant-violated [_])
+  (terminal [_]))
