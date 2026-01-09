@@ -1,0 +1,62 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "clojure-mcp": {
+      "type": "local",
+      "command": [
+        "clojure",
+        "-Sdeps",
+        "{:deps {com.bhauman/clojure-mcp {:git/url \"https://github.com/bhauman/clojure-mcp.git\" :git/tag \"v0.1.10-alpha\" :git/sha \"8bd96c3\"} org.slf4j/slf4j-nop {:mvn/version \"2.0.16\"}}}",
+        "-X",
+        "clojure-mcp.main/start-mcp-server",
+        ":port",
+        "9898"
+      ],
+      "enabled": true
+    },
+    "playwright": {
+      "type": "local",
+      "command": [
+        "podman",
+        "run",
+        "-i",
+        "--rm",
+        "--init",
+        "--pull=always",
+        "mcr.microsoft.com/playwright/mcp"
+      ]
+    }
+  },
+  "agent": {
+    "tester": {
+      "description": "write, execute, and debug tests in a TDD cycle",
+      "model": "anthropic/claude-opus-4-5-20251101",
+      "prompt": "{file:./prompts/tester.md}"
+    },
+    "implementer": {
+      "description": "implement features within a TDD cycle, invoke when in the red phase of a TDD cycle",
+      "model": "anthropic/claude-opus-4-5-20251101",
+      "prompt": "{file:./prompts/implementer.md}"
+    },
+    "code-explorer": {
+      "description": "find code and behavior in the code base with code search and repl exploration",
+      "model": "anthropic/claude-sonnet-4-5-20250929",
+      "prompt": "{file:./prompts/code-explorer.md}"
+    },
+    "tdd-orchestrator": {
+      "description": "orchestrate subagents in a tdd process; gather and understand requirements; organize progress around a plan",
+      "model": "anthropic/claude-opus-4-5-20251101",
+      "prompt": "{file:./prompts/tdd-orchestrator.md}"
+    },
+    "bthread-explorer": {
+      "description": "explores the behavior of non-side effecting bthreads. Capable of experimenting with bthreads to find paths, to answer questions about execution paths, to debug bthreads, even to construct new bthreads",
+      "model": "anthropic/claude-opus-4-5-20251101",
+      "prompt": "{file:./prompts/bthread-explorer.md}"
+    },
+    "qa": {
+      "description": "uses a browser via playwright to QA html pages, particularly useful to check visualizations",
+      "model": "anthropic/claude-sonnet-4-5-20250929",
+      "prompt": "{file:./prompts/qa.md}"
+    }
+  }
+}
