@@ -94,7 +94,7 @@
              (let [bthread (get-in state [:name->bthread bthread-name])
                    _ (when-not bthread (println "No bthread found for" bthread-name))
                    bid (b/notify! bthread event)
-                   bthreads (get bid :bthreads)]
+                   bthreads (bid/bthreads bid)]
                (-> acc
                    (cond-> (seq bthreads)
                      (-> (update :bthreads merge bthreads)
