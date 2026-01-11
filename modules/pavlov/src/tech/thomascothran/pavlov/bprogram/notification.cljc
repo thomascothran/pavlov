@@ -93,8 +93,13 @@
    (reduce (fn [acc bthread-name]
              (let [bthread (get-in state [:name->bthread bthread-name])
                    _ (when-not bthread (println "No bthread found for" bthread-name))
-                   bid (b/notify! bthread event)]
+                   bid (b/notify! bthread event)
+                   bthreads (get bid :bthreads)]
                (-> acc
+                   (cond-> (seq bthreads)
+                     (-> (update :bthreads merge bthreads)
+                         (assoc-in [:parent->child-bthread bthread-name]
+                                   (into #{} (keys bthreads)))))
                    (assoc-in [:bthread->bid bthread-name] bid)
                    (index-bid-events bthread-name bid :requests)
                    (index-bid-events bthread-name bid :waits)

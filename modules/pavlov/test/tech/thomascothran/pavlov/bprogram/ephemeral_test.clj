@@ -243,3 +243,17 @@
         result @(bpe/execute! {:test-bthread bthread})]
     (is (= {:type :b, :terminal true}
            result))))
+
+(deftest test-adding-bthreads
+  (testing "Given that a one bthread returns a request for *more* bthreads
+    When the bprogram runs
+    Then the new bthreads are created"
+    (let [new-bthread-request {:type :new-bthread-request
+                               :terminal true}
+          new-bthreads {:new-bthread (b/bids [{:request #{new-bthread-request}}])}
+          original-bthreads {:original-bthread (b/bids [{:request #{:a}}
+                                                        {:request #{:b}
+                                                         :bthreads new-bthreads}])}
+          result @(bpe/execute! original-bthreads)]
+      (is (= new-bthread-request
+             result)))))
