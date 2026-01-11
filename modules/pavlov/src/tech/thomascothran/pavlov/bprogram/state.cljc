@@ -54,7 +54,18 @@
   (notification/notify-bthreads! {:name->bthread name->bthread}))
 
 (defn- splice-bthread-priorities
-  [bthread-priorities parent->child-bthreads])
+  "Given an existing list of bthread priorities,
+  add the child bthreads in directly after their
+  parents."
+  [bthread-priorities parent->child-bthreads]
+  (reduce (fn [acc curr-bthread-name]
+            (if-let [child-bthread-names
+                     (get parent->child-bthreads
+                          curr-bthread-name)]
+              (into acc (into [curr-bthread-name] child-bthread-names))
+              (conj acc curr-bthread-name)))
+          []
+          bthread-priorities))
 
 (defn next-state
   [{:keys [state event]}
@@ -64,7 +75,6 @@
     new-blocks :blocks
     new-bthreads :bthreads
     :keys [parent->child-bthreads]}]
-
   (let [triggered-bthreads
         (into #{}
               (mapcat #(get % (event/type event)))
@@ -74,7 +84,8 @@
         rm-triggered-bthreads
         #(remove-triggered-bthreads triggered-bthreads %)
 
-        new-bthread-bids (initialize-new-bthreads! new-bthreads)
+        new-bthread-bids (when new-bthreads
+                           (initialize-new-bthreads! new-bthreads))
         new-bthread-waits (get new-bthread-bids :waits)
         new-bthread-requests (get new-bthread-bids :requests)
         new-bthread-blocks (get new-bthread-bids :blocks)
@@ -98,17 +109,18 @@
                    (cond-> (seq new-bthread-blocks)
                      (merge-event->bthreads new-bthread-blocks)))
 
-        _ (clojure.pprint/pprint {:event event
-                                  :waits waits
-                                  :requests requests
-                                  :blocks blocks
-                                  :new-bthreads new-bthreads
-                                  :new-bthread-requests new-bthread-requests})
-
         next-bthread->bid
         (-> (get state :bthread->bid)
             (#(apply dissoc % triggered-bthreads))
-            (into new-bthread->bid))
+            (into new-bthread->bid)
+            (cond-> new-bthreads
+              (merge (get new-bthread-bids :bthread->bid))))
+
+        next-bthread-priorities
+        (if new-bthreads
+          (splice-bthread-priorities (get state :bthreads-by-priority)
+                                     parent->child-bthreads)
+          (get state :bthreads-by-priority))
 
         next-state
         (assoc state
@@ -116,13 +128,13 @@
                :waits waits
                :requests requests
                :blocks blocks
-               :bthreads-by-priority (-> (get state :bthreads-by-priority)
-                                         (into (map first new-bthreads)))
+               :bthreads-by-priority next-bthread-priorities
                :bthread->bid next-bthread->bid
                :name->bthread (merge (get state :name->bthread)
                                      (into {} new-bthreads)))
 
         next-event (next-event next-state)]
+
     (assoc next-state :next-event next-event)))
 
 (defn step

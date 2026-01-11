@@ -98,7 +98,7 @@
                (-> acc
                    (cond-> (seq bthreads)
                      (-> (update :bthreads merge bthreads)
-                         (assoc-in [:parent->child-bthread bthread-name]
+                         (assoc-in [:parent->child-bthreads bthread-name]
                                    (into #{} (keys bthreads)))))
                    (assoc-in [:bthread->bid bthread-name] bid)
                    (index-bid-events bthread-name bid :requests)
