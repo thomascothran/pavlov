@@ -30,8 +30,18 @@
                        :bthreads-by-priority bthreads-by-priority}
 
         notification-results (notification/notify-bthreads! initial-state)
-
-        state (merge initial-state notification-results)
+        pending-bthreads (get notification-results :bthreads)
+        pending-parent->child-bthreads (get notification-results
+                                            :parent->child-bthreads)
+        state (merge initial-state
+                     (dissoc notification-results
+                             :bthreads
+                             :parent->child-bthreads))
+        state (cond-> state
+                (seq pending-bthreads)
+                (assoc :pending-bthreads pending-bthreads
+                       :pending-parent->child-bthreads
+                       pending-parent->child-bthreads))
         next-event' (next-event state)]
     (assoc state :next-event next-event')))
 
@@ -141,9 +151,26 @@
   "Return the next state based on the event"
   [state event]
   (let [last-event (get state :last-event)
+        pending-bthreads (get state :pending-bthreads)
+        pending-parent->child-bthreads (get state :pending-parent->child-bthreads)
         notification-results
-        (notification/notify-bthreads! state event)]
-    (next-state {:state state
-                 :last-event last-event
-                 :event event}
-                notification-results)))
+        (notification/notify-bthreads! state event)
+        notification-results
+        (cond-> notification-results
+          (seq pending-bthreads)
+          (update :bthreads merge pending-bthreads)
+
+          (seq pending-parent->child-bthreads)
+          (update :parent->child-bthreads
+                  (fn [parent->child]
+                    (merge-with into
+                                (or parent->child {})
+                                pending-parent->child-bthreads))))
+        next-state
+        (next-state {:state state
+                     :last-event last-event
+                     :event event}
+                    notification-results)]
+    (cond-> next-state
+      (seq pending-bthreads)
+      (dissoc :pending-bthreads :pending-parent->child-bthreads))))

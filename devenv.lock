@@ -1,5 +1,21 @@
 {
   "nodes": {
+    "clojure-mcp-light": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1766419491,
+        "owner": "bhauman",
+        "repo": "clojure-mcp-light",
+        "rev": "401e2746d1dea1d29cd9e69c35f22e844e104c2d",
+        "type": "github"
+      },
+      "original": {
+        "owner": "bhauman",
+        "repo": "clojure-mcp-light",
+        "rev": "401e2746d1dea1d29cd9e69c35f22e844e104c2d",
+        "type": "github"
+      }
+    },
     "devenv": {
       "locked": {
         "dir": "src/modules",
@@ -89,6 +105,7 @@
     },
     "root": {
       "inputs": {
+        "clojure-mcp-light": "clojure-mcp-light",
         "devenv": "devenv",
         "git-hooks": "git-hooks",
         "nixpkgs": "nixpkgs",

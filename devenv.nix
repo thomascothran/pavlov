@@ -1,5 +1,10 @@
 { pkgs, lib, config, inputs, ... }:
 
+let
+  clml = inputs.clojure-mcp-light;
+
+in
+
 {
   cachix.enable = false;
 
@@ -46,9 +51,12 @@
     clj -X:test :watch? true
   '';
 
-  enterShell = ''
-    hello
-    git --version
+  scripts.clj-paren-repair.exec = ''
+    exec bb --config ${clml}/bb.edn -m clojure-mcp-light.paren-repair "$@"
+  '';
+
+  scripts.clj-nrepl-eval.exec = ''
+    exec bb --config ${clml}/bb.edn -m clojure-mcp-light.nrepl-eval "$@"
   '';
 
   # https://devenv.sh/tasks/
