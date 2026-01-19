@@ -13,7 +13,56 @@
      bthreads-by-priority
      bthreads->bid)))
 
+(defn- merge-event->bthreads
+  [previous new]
+  (merge-with #(into (or %1 #{}) %2)
+              previous new))
+
+(defn- splice-bthread-priorities
+  "Given an existing list of bthread priorities,
+  add the child bthreads in directly after their
+  parents."
+  [bthread-priorities parent->child-bthreads]
+  (reduce (fn [acc curr-bthread-name]
+            (if-let [child-bthread-names
+                     (get parent->child-bthreads
+                          curr-bthread-name)]
+              (into acc (into [curr-bthread-name] child-bthread-names))
+              (conj acc curr-bthread-name)))
+          []
+          bthread-priorities))
+
 ;; Here, we can put the bthreads in order of priority
+(defn- merge-notification-results
+  [state {:keys [bthread->bid waits requests blocks]}]
+  (-> state
+      (update :bthread->bid merge bthread->bid)
+      (update :waits merge-event->bthreads waits)
+      (update :requests merge-event->bthreads requests)
+      (update :blocks merge-event->bthreads blocks)))
+
+(defn- initialize-spawned-bthreads
+  [state spawned-bthreads parent->child-bthreads]
+  (loop [state state
+         spawned-bthreads spawned-bthreads
+         parent->child-bthreads parent->child-bthreads]
+    (if (seq spawned-bthreads)
+      (let [notification-results (notification/notify-bthreads!
+                                  {:name->bthread spawned-bthreads})
+            next-spawned-bthreads (get notification-results :bthreads)
+            next-parent->child-bthreads (get notification-results
+                                             :parent->child-bthreads)
+            notification-results (dissoc notification-results
+                                         :bthreads
+                                         :parent->child-bthreads)
+            state (-> state
+                      (update :name->bthread merge spawned-bthreads)
+                      (update :bthreads-by-priority splice-bthread-priorities
+                              parent->child-bthreads)
+                      (merge-notification-results notification-results))]
+        (recur state next-spawned-bthreads next-parent->child-bthreads))
+      state)))
+
 (defn init
   "Initiate the state"
   [named-bthreads]
@@ -37,18 +86,13 @@
                      (dissoc notification-results
                              :bthreads
                              :parent->child-bthreads))
-        state (cond-> state
-                (seq pending-bthreads)
-                (assoc :pending-bthreads pending-bthreads
-                       :pending-parent->child-bthreads
-                       pending-parent->child-bthreads))
+        state (if (seq pending-bthreads)
+                (initialize-spawned-bthreads state
+                                             pending-bthreads
+                                             pending-parent->child-bthreads)
+                state)
         next-event' (next-event state)]
     (assoc state :next-event next-event')))
-
-(defn- merge-event->bthreads
-  [previous new]
-  (merge-with #(into (or %1 #{}) %2)
-              previous new))
 
 (defn- remove-triggered-bthreads
   [triggered-bthreads event->threads]
@@ -62,20 +106,6 @@
 (defn- initialize-new-bthreads!
   [name->bthread]
   (notification/notify-bthreads! {:name->bthread name->bthread}))
-
-(defn- splice-bthread-priorities
-  "Given an existing list of bthread priorities,
-  add the child bthreads in directly after their
-  parents."
-  [bthread-priorities parent->child-bthreads]
-  (reduce (fn [acc curr-bthread-name]
-            (if-let [child-bthread-names
-                     (get parent->child-bthreads
-                          curr-bthread-name)]
-              (into acc (into [curr-bthread-name] child-bthread-names))
-              (conj acc curr-bthread-name)))
-          []
-          bthread-priorities))
 
 (defn next-state
   [{:keys [state event]}

@@ -261,9 +261,11 @@
 
 (deftest test-spawn-only-on-initial-bid
   (testing "Given a bthread that spawns children on init with no request, wait, or block
-    Then the first event should come from existing bthreads"
+    When the first event occurs
+    Then spawned children should be notified of it"
     (let [spawned-event {:type :spawned :terminal true}
-          spawned-bthreads {:spawned (b/bids [{:request #{spawned-event}}])}
+          spawned-bthreads {:spawned (b/bids [{:wait-on #{:start}}
+                                              {:request #{spawned-event}}])}
           parent (b/bids [{:bthreads spawned-bthreads}])
           starter (b/bids [{:request #{:start}}])
           !events (atom [])
@@ -333,8 +335,8 @@
       (is (= :after (last events))))))
 
 (deftest test-spawned-bthread-waits-for-event
-  (testing "Given a spawned bthread that waits on an event
-    Then it should only run after the event occurs again"
+  (testing "Given a spawned bthread created during init
+    Then it should run on the first matching event"
     (let [spawned-event {:type :spawned :terminal true}
           spawned-bthreads {:spawned (b/bids [{:wait-on #{:go}}
                                               {:request #{spawned-event}}])}
@@ -348,5 +350,5 @@
                                                       (swap! !events conj event))}})]
       (is (= spawned-event
              result))
-      (is (= [:go :go :spawned]
+      (is (= [:go :spawned]
              (map event/type @!events))))))
