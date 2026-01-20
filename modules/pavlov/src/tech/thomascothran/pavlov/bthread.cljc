@@ -23,11 +23,21 @@
    - `:request` - events this bthread would like to trigger
    - `:wait-on` - event types that should wake this bthread
    - `:block`   - event types to prevent while this bid is active
+   - `:bthreads` - child bthreads to spawn, keyed by name
 
    ```clojure
    {:request #{{:type :account-created}}  ; request this event
     :wait-on #{:user-action}              ; wake me on user actions
     :block   #{:dangerous-operation}}     ; prevent this while active
+   ```
+
+   Spawn child bthreads by returning `:bthreads` on a bid:
+
+   ```clojure
+   {:request #{:start}
+    :bthreads {:child (b/bids [{:wait-on #{:start}}
+                               {:request #{{:type :done
+                                            :terminal true}}}])}}
    ```
 
    ## Available Bthread Constructors

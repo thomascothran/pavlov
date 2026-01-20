@@ -25,6 +25,16 @@
       ii. From that bid, the highest priority *unblocked* requested event
           is selected
 
+   ## Bthread Lifecycle
+
+   - On startup, all provided bthreads are initialized by notifying them with `nil`.
+   - If a bid returns `:bthreads`, those bthreads are initialized with `nil` before
+     the next event is selected. When this happens during startup, spawned bthreads
+     can observe the first event.
+   - If a bid returns `:bthreads` in response to an event, spawned bthreads are
+     initialized after that event is processed and only receive subsequent events
+     they request or wait on.
+
    If no event is selected, `execute!` will terminate the program. `make-program!`,
    on the other hand, returns a bprogram that continues to wait for external events
 

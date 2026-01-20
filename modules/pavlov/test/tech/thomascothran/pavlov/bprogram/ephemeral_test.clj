@@ -352,3 +352,59 @@
              result))
       (is (= [:go :spawned]
              (map event/type @!events))))))
+
+(deftest test-nested-spawned-bthreads-on-init
+  (testing "Given nested spawn-only bthreads created during init
+    Then the deepest child should receive the first event"
+    (let [grandchild-event {:type :grandchild :terminal true}
+          grandchild-bthreads {:grandchild (b/bids [{:wait-on #{:start}}
+                                                    {:request #{grandchild-event}}])}
+          child (b/bids [{:bthreads grandchild-bthreads}])
+          parent (b/bids [{:bthreads {:child child}}])
+          starter (b/bids [{:request #{:start}}])
+          !events (atom [])
+          result @(bpe/execute! [[:parent parent]
+                                 [:starter starter]]
+                                {:subscribers {:log (fn [event _]
+                                                      (swap! !events conj event))}})]
+      (is (= grandchild-event
+             result))
+      (is (= [:start :grandchild]
+             (map event/type @!events))))))
+
+(deftest test-spawned-bthread-notified-when-parent-requests-event
+  (testing "Given a parent that requests an event while spawning a child
+    Then the child should be notified of that event"
+    (let [child-event {:type :child :terminal true}
+          child-bthreads {:child (b/bids [{:wait-on #{:start}}
+                                          {:request #{child-event}}])}
+          parent (b/bids [{:request #{:start}
+                           :bthreads child-bthreads}])
+          !events (atom [])
+          result @(bpe/execute! [[:parent parent]]
+                                {:subscribers {:log (fn [event _]
+                                                      (swap! !events conj event))}})]
+      (is (= child-event
+             result))
+      (is (= [:start :child]
+             (map event/type @!events))))))
+
+(deftest test-spawned-bthread-does-not-see-triggering-event
+  (testing "Given a bthread that spawns a child after receiving an event
+    Then the child should wait for the next occurrence"
+    (let [child-event {:type :child :terminal true}
+          child-bthreads {:child (b/bids [{:wait-on #{:start}}
+                                          {:request #{child-event}}])}
+          parent (b/bids [{:wait-on #{:start}}
+                          {:bthreads child-bthreads}])
+          trigger (b/bids [{:request #{:start}}
+                           {:request #{:start}}])
+          !events (atom [])
+          result @(bpe/execute! [[:parent parent]
+                                 [:trigger trigger]]
+                                {:subscribers {:log (fn [event _]
+                                                      (swap! !events conj event))}})]
+      (is (= child-event
+             result))
+      (is (= [:start :start :child]
+             (map event/type @!events))))))
