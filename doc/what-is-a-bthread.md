@@ -25,6 +25,17 @@ Each time the bthread runs it returns a *bid*, a map that can contain any combin
 - `:request` — a collection of events the bthread would like the program to select next
 - `:wait-on` — event types that should wake this bthread up the next time they occur
 - `:block` — event types that should be prevented from running while this bid is active
+- `:bthreads` — child bthreads to spawn, keyed by name
+
+Spawned bthreads are initialized with `nil`. If they are spawned during startup they can observe the first event; if they are spawned in response to an event they will only observe subsequent events.
+
+```clojure
+(def parent
+  (b/bids [{:request #{:start}
+            :bthreads {:child (b/bids [{:wait-on #{:start}}
+                                       {:request #{{:type :done
+                                                    :terminal true}}}])}}]))
+```
 
 The behavioral program collects the bids from every active bthread, filters out any events that are currently blocked, and then selects the highest-priority unblocked event. Bthreads have priority amongst themselves when they are in an ordered collection:
 

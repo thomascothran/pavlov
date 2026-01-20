@@ -107,6 +107,18 @@ Bthreads are stateful. They can run in parallel and be parked when they are wait
 
 The bid a bthread produces can request events, wait on events, or block events in other bthreads. Bthreads do not directly know about each other.
 
+Bids may also spawn child bthreads via `:bthreads`. Spawned bthreads are keyed by name and initialized with `nil`. If spawned during init, they can observe the first event; if spawned in response to an event, they only observe subsequent events.
+
+```clojure
+(require '[tech.thomascothran.pavlov.bthread :as b])
+
+(def parent
+  (b/bids [{:request #{:start}
+            :bthreads {:child (b/bids [{:wait-on #{:start}}
+                                       {:request #{{:type :done
+                                                    :terminal true}}}])}}]))
+```
+
 ### `on`
 
 `on` takes an event type and a function of an event to a bid.

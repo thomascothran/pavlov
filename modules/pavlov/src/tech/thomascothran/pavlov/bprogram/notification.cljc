@@ -62,6 +62,13 @@
               event-types)
       state)))
 
+(defn- spawn-only-bid?
+  [bid]
+  (and (seq (bid/bthreads bid))
+       (empty? (bid/request bid))
+       (empty? (bid/wait-on bid))
+       (empty? (bid/block bid))))
+
 (defn notify-bthreads!
   "Notifies relevant bthreads of an event and collects their updated bids.
 
@@ -93,11 +100,19 @@
    (reduce (fn [acc bthread-name]
              (let [bthread (get-in state [:name->bthread bthread-name])
                    _ (when-not bthread (println "No bthread found for" bthread-name))
-                   bid (b/notify! bthread event)]
-               (-> acc
-                   (assoc-in [:bthread->bid bthread-name] bid)
-                   (index-bid-events bthread-name bid :requests)
-                   (index-bid-events bthread-name bid :waits)
-                   (index-bid-events bthread-name bid :blocks))))
+                   bid (b/notify! bthread event)
+                   bthreads (bid/bthreads bid)
+                   spawn-only? (spawn-only-bid? bid)]
+               (cond-> acc
+                 (seq bthreads)
+                 (-> (update :bthreads merge bthreads)
+                     (assoc-in [:parent->child-bthreads bthread-name]
+                               (into #{} (keys bthreads))))
+
+                 (not spawn-only?)
+                 (-> (assoc-in [:bthread->bid bthread-name] bid)
+                     (index-bid-events bthread-name bid :requests)
+                     (index-bid-events bthread-name bid :waits)
+                     (index-bid-events bthread-name bid :blocks)))))
            {:bthread->bid {}}
            bthread-names)))

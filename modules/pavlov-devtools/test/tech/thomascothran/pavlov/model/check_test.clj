@@ -53,6 +53,19 @@
           (is (map? (first (:deadlocks result)))
               "First deadlock should be a map"))))))
 
+(deftest spawn-only-bthread-checked-by-model-checker
+  (testing "Model checker should handle spawn-only bthreads"
+    (let [spawned-event {:type :spawned :terminal true}
+          spawned-bthreads {:spawned (b/bids [{:wait-on #{:start}}
+                                              {:request #{spawned-event}}])}
+          parent (b/bids [{:bthreads spawned-bthreads}])
+          starter (b/bids [{:request #{:start}}])
+          result (check/check {:bthreads [[:parent parent]
+                                          [:starter starter]]
+                               :check-deadlock? true})]
+      (is (nil? result)
+          "Should terminate without deadlock"))))
+
 (deftest simple-deadlock
   (let [result (check/check
                 {:bthreads

@@ -2,6 +2,9 @@
 inputs:
   nixpkgs:
     url: github:cachix/devenv-nixpkgs/rolling
+  clojure-mcp-light:
+    url: github:bhauman/clojure-mcp-light?rev=401e2746d1dea1d29cd9e69c35f22e844e104c2d
+    flake: false
 
 # If you're using non-OSS software, you can set allowUnfree to true.
 # allowUnfree: true
