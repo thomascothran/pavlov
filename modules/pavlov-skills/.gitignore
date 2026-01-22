@@ -2,3 +2,4 @@
 .lsp/.cache
 target/
 dist/
+.cpcache
