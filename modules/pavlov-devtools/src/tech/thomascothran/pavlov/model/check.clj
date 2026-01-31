@@ -215,7 +215,37 @@
   ;;    if limit reached without finding violations
   ;; Or: {:deadlocks [...], :truncated true}
   ;;    if violations found before truncation
-  ``` "
+  ```
+
+  ## Best practices
+
+  Model checks are dissimilar to traditional unit tests in the sense that you will have *one*
+  model check running in a test that tests *all* the scenarios for that group of bthreads.
+
+  ### The Workflow
+
+  The following structure can be used for tests:
+
+  1. Decide what bthreads you want to test
+  2. Specify initiating events in a single request, establishing top-level branches
+     in the execution graph and kicking things off
+  3. Specify positive scenarios and validate they occur with existential liveness checks
+  4. Specify safety properties as their own bthreads
+  5. Specify universal liveness properties
+
+  ### One branching request for all initiating events
+
+  This *requires* having *one* bthread with *one* bid that requests the initiating events
+  in a set - causing this to be the initial branch point.
+
+  ### Positive Scenarios
+
+  Specify all the desired positive scenarios with a bthread for each scenario. These will
+  use `b/bid` with `:wait-on` events. `b/bid` can be used either with maps or functions.
+
+  The final bid will `:request` an event unique to the scenario which will then be used
+  with liveness checks to guarantee the scenario reached completion.
+  "
   (:require [clojure.set :as set]
             [tech.thomascothran.pavlov.event :as e]
             [tech.thomascothran.pavlov.graph :as graph])

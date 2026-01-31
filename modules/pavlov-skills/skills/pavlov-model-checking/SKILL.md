@@ -46,6 +46,14 @@ A livelock means the model cycles forever without reaching a terminal event. Liv
 4. Interpret the result using `references/interpret-results.md` (resource `skills/pavlov-model-checking/references/interpret-results.md`).
 5. Iterate on model and properties before implementation details.
 
+## Default scenario branching
+
+- Use a single `check/check` call per bthread group to cover all scenarios.
+- Create one initiating bthread whose first bid requests a *set* of starting events to form the top-level branch.
+- Model each positive scenario as its own bthread and assert its completion event with an existential liveness property.
+
+For the detailed workflow, read the Best practices section in the `tech.thomascothran.pavlov.model.check` docstring.
+
 ## Where to look
 
 - Docstrings: `clojure.repl/doc` on `tech.thomascothran.pavlov.model.check/check`.
