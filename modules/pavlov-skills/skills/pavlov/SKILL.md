@@ -49,4 +49,6 @@ Pavlov is a Clojure and ClojureScript behavioral programming library inspired by
 (slurp (io/resource "tech/thomascothran/pavlov/bprogram/ephemeral_test.clj"))
 ```
 
+These files can be large, so search the strings for the functions you're looking for.
+
 For more examples, use `references/access-test-examples.md` (resource path `./references/access-test-examples.md`) to list test sources on the classpath.
