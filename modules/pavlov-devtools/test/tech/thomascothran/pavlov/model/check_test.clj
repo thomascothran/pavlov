@@ -234,7 +234,7 @@
           (is (= [:event-a] (:path violation))
               "Path should show only :event-a was explored"))))))
 
-(deftest directly-check-branching
+(deftest directly-check-branching-on-top-level-bid
   (testing "Model checker should explore all branches when multiple events could be selected"
     (let [;; Create a scenario where different paths lead to different outcomes
           ;; If model checker explores all branches, it should find the violation
@@ -287,6 +287,30 @@
                :event-b1ii :event-b1iiA
                :event-b1iii :event-b1iiiA :event-b1iiiB}
              (into #{} @!events))))))
+
+(deftest directly-test-branching-on-equal-priority-branches
+  (testing "Model checker should follow all branches when they branch on bthreads with equal priority"
+    (let [bthreads {:request-a
+                    (b/bids [{:request #{{:type :a}}}])
+
+                    :request-b
+                    (b/bids [{:request #{:b}}])
+
+                    :wait-on-a
+                    (b/bids [{:wait-on #{:a}}
+                             {:request #{{:type :a-confirmed
+                                          :terminal true}}}])
+                    :wait-on-b
+                    (b/bids [{:wait-on #{:b}}
+                             {:request #{{:type :b-confirmed
+                                          :terminal true}}}])}
+          liveness {:a-confirmed {:quantifier :existential
+                                  :eventually #{:a-confirmed}}
+                    :b-confirmed {:quantifier :existential
+                                  :eventually #{:b-confirmed}}}
+          result (check/check {:bthreads bthreads
+                               :liveness liveness})]
+      (is (nil? result)))))
 
 (deftest no-livelock-when-program-terminates
   (testing "Program that terminates normally should not be flagged as livelock"
