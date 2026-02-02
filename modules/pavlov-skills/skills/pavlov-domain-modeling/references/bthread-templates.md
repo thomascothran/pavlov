@@ -6,6 +6,17 @@
 (ns your.domain.rules
   (:require [tech.thomascothran.pavlov.bthread :as b]))
 
+(defn make-bthreads []
+  {::rule-a (b/bids [{:wait-on #{:event-a}}
+                     {:request #{{:type :event-b}}}])})
+```
+
+### rules.clj
+
+```clojure
+(ns your.domain.safety
+  (:require [tech.thomascothran.pavlov.bthread :as b]))
+
 (defn- make-no-green-foos
   []
   (b/on :foo-found
@@ -15,13 +26,9 @@
                            :invariant-violated true}}}
               {}))))
 
-(defn make-safety-bthreads
+(defn make-bthreads
   []
   {::no-green-foos (make-no-green-foos)})
-
-(defn make-bthreads []
-  {::rule-a (b/bids [{:wait-on #{:event-a}}
-                     {:request #{{:type :event-b}}}])})
 ```
 
 ### environment.clj
@@ -74,11 +81,9 @@
   (:require [tech.thomascothran.pavlov.bthread :as b]
             [tech.thomascothran.pavlov.model.check :as check]
             [your.domain.rules :as rules]
+            [your.domain.safety:as safety]
             [your.domain.environment :as environment]
             [your.domain.scenarios :as scenarios]))
-
-(defn make-init-bthread [start-events]
-  (b/bids [{:request start-events}]))
 
 (defn make-liveness
   []
@@ -93,10 +98,9 @@
 (defn make-config [start-events]
   ;; Keep :bthreads as a map for equal-priority branching.
   (let [bthreads (merge (rules/make-bthreads)
-                        (environment/make-bthreads)
                         (scenarios/make-bthreads))]
     {:bthreads bthreads
-     :safety-bthreads (rules/make-safety-bthreads)
+     :safety-bthreads (safety/make-bthreads)
      :environment-bthreads (environment/make-bthreads)
      :liveness (make-liveness)}))
 
@@ -121,9 +125,7 @@
 (defn all-bthreads [start-events]
   (merge (rules/make-bthreads)
          (environment/make-bthreads)
-         (scenarios/make-bthreads)
-         (when (seq start-events)
-           {:init (check/make-init-bthread start-events)})))
+         (scenarios/make-bthreads)))
 
 (defn nav-root [start-events]
   (pnav/root (all-bthreads start-events)))

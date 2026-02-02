@@ -26,7 +26,7 @@ Summarize this in the docstring of the rules namespace
 - Are there alternative starts that should branch at the top?
 - Should the starts be modeled as environment inputs or domain-driven outcomes?
 
-Initiating events can be requested in `environment.clj` when they are external inputs. If you need a single top-level start branch, use `make-init-bthread` in `check.clj`. Keep `:bthreads` as a map so branching remains equal-priority.
+Initiating events can be requested in `environment.clj` when they are external inputs. If you need a single top-level start branch, use `make-init-bthread` and name this bthread `::init-events`.
 
 ### Positive scenarios
 

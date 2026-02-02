@@ -19,9 +19,11 @@ Use this skill to guide a domain expert through a structured modeling session an
 
 The deliverables are source code, by default:
 
-- `rules.clj`: domain rules bthreads; define `make-bthreads` returning a map of bthread name -> bthread and `make-safety-bthreads` for safety properties.
+- `rules.clj`: domain rules bthreads; define `make-bthreads` returning a map of bthread name -> bthread.
+  + Universal liveness properties will be defined here as well.
 - `environment.clj`: simulated environment inputs; define `make-bthreads` returning a map;
   + RULE: keep all *initiating events* (typically bthreads that make a `:request` in their first bid instead of a `:wait-on`) in *one* bthread that returns *one* bid where the requests are a set. Call this bthread `::init-events` (namespaced).
+- `safety.clj`: safety bthreads
 - `scenarios.clj`: positive scenarios; define `make-bthreads` returning a map; each scenario ends with a unique completion event. Define existential liveness properties for *each* completion event
 - `check.clj`: model-check setup; assemble `:bthreads`, `:safety-bthreads`, and `:liveness` (keep `:bthreads` as a map when start events come from environment bthreads).
   + `:liveness` will need to include all the liveness definitions from the rules and scenarios

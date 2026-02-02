@@ -7,7 +7,7 @@ The core challenge we will be addressing is that business processes are rife wit
 - Write business rules as isolated, composable units
 - Create branching scenarios automatically
 - Visualize those branching scenarios with a point-and-click UI
-  + You can use this for visualizing your application as you are developing it, for demoing to a domain expert, or for letting an LLM explore the behavior of the your application (via `nav`)
+  + You can use this for visualizing your application as you are developing it, for demoing to a domain expert, or for letting an LLM explore the behavior of your application (via `nav`)
 - Run a model checker to verify your program.
 
 You may even be convinced that model-checker-driven development is superior to REPL-driven development!
@@ -60,8 +60,9 @@ Let's create our domain rules bthreads.
 
 (defn make-bthreads
   []
-  {::request-cip-verification (make-request-initial-deposit-bthread)
-   ...etc etc})
+  {::request-cip-verification (make-request-cip-verification-bthread)
+  ;; ...etc etc
+  })
 ```
 
 When an application is submitted, then we request CIP verification and OFAC screening. We need to decline the application if either returns a negative result:
@@ -142,11 +143,11 @@ Crucially, this lets us introduce branches:
   {::init-events (make-init-bthreads)
 
    ::handle-request-cip-verification
-   (b/bids [{:wait-on #{:request-cip-verification}
+   (b/bids [{:wait-on #{:request-cip-verification}}
             ;; important - the request establishes a branch
             {:request #{{:type :cip-failed}
                         {:type :cip-verified}}])
-   ::handle-request-ofact-screening
+   ::handle-request-ofac-screening
    (b/bids ... etc etc)})
 ```
 
