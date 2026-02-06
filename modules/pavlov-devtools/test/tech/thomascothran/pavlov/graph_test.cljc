@@ -374,3 +374,28 @@
           (str "False deadlock detected due to LTS node/edge inconsistency. "
                "Deadlock nodes: " (count deadlock-nodes) ". "
                "This indicates edge :from identifiers don't match node keys.")))))
+
+(deftest test-graph-with-different-bthread-constructors-doesnt-throw
+  (testing "if the state of a bthread is unserializable, it throws"
+    (let [plain-map {:block #{:z}}
+          bids (b/bids [{:request #{:a}}
+                        (fn [_] {:request
+                                 #{{:type :b}}})])
+          round-robin
+          (b/round-robin
+           [(b/on :a (fn [_] {:request #{:f}}))
+            (b/on :b (fn [_] #{:g}))])
+
+          after-all (b/after-all #{:a :b :f}
+                                 (fn [_] {:request #{:z}}))
+          step (b/step (fn [state evt]
+                         (if evt
+                           [:started {:block #{:x}
+                                      :request #{:q}}]
+                           [state {:block #{:y}}])))
+          lts (graph/->lts {:plain-map plain-map
+                            :bids bids
+                            :step step
+                            :round-robin round-robin
+                            :after-all after-all})]
+      (is  lts))))

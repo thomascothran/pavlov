@@ -224,55 +224,6 @@
   [bthread serialized]
   (proto/set-state bthread serialized))
 
-(defn bids
-  "Create a bthread from a finite sequence of bids.
-
-  Walks through `xs` in order, returning one bid per notification until
-  the sequence is exhausted, then returns nil (terminating the bthread).
-
-  Items in `xs` may be:
-  - Bid maps (e.g., `{:request #{:event-a}}`)
-  - Bthreads (including nested `bids` calls)
-  - Functions `(fn [event] -> bid)` for dynamic computation
-
-  The sequence is fully realized in memory.
-
-  Example with literal bids:
-  ```clojure
-  (defn make-workflow
-    []
-    (b/bids [{:request #{:step-1}}
-             {:request #{:step-2}}
-             {:request #{:step-3}}]))
-  (let [workflow (make-workflow)]
-    (b/notify! workflow nil)           ;=> {:request #{:step-1}}
-    (b/notify! workflow {:type :step-1})) ;=> {:request #{:step-2}}
-  ```
-
-  Example with dynamic function:
-
-  ```clojure
-  (defn make-dynamic-bids
-    []
-    (b/bids [{:wait-on #{:order/placed}}
-             (fn [event]
-               {:request #{{:type :confirm
-                            :order-id (:order-id event)}}})]))
-  ```"
-  [xs]
-  (let [xs' (volatile! xs)]
-    (reify proto/BThread
-      (state [_] @xs')
-      (set-state [_ serialized] (vreset! xs' serialized))
-      (label [_] @xs')
-      (notify! [_ event]
-        (when-let [x (first @xs')]
-          (let [bid' (if (fn? x)
-                       (x event)
-                       (notify! x event))]
-            (vreset! xs' (rest @xs'))
-            bid'))))))
-
 (defn- default-label
   [bthread]
   (proto/state bthread))
@@ -336,6 +287,58 @@
                                  :error e
                                  :invariant-violated true
                                  :terminal true}}})))))))))
+
+(defn bids
+  "Create a bthread from a finite sequence of bids.
+
+  Walks through `xs` in order, returning one bid per notification until
+  the sequence is exhausted, then returns nil (terminating the bthread).
+
+  Items in `xs` may be:
+  - Bid maps (e.g., `{:request #{:event-a}}`)
+  - Bthreads (including nested `bids` calls)
+  - Functions `(fn [event] -> bid)` for dynamic computation
+
+  The sequence is fully realized in memory.
+
+  Example with literal bids:
+  ```clojure
+  (defn make-workflow
+    []
+    (b/bids [{:request #{:step-1}}
+             {:request #{:step-2}}
+             {:request #{:step-3}}]))
+  (let [workflow (make-workflow)]
+    (b/notify! workflow nil)           ;=> {:request #{:step-1}}
+    (b/notify! workflow {:type :step-1})) ;=> {:request #{:step-2}}
+  ```
+
+  Example with dynamic function:
+
+  ```clojure
+  (defn make-dynamic-bids
+    []
+    (b/bids [{:wait-on #{:order/placed}}
+             (fn [event]
+               {:request #{{:type :confirm
+                            :order-id (:order-id event)}}})]))
+  ```"
+  [xs]
+  (let [xs' (volatile! xs)
+        idx (volatile! 0)]
+    (reify proto/BThread
+      (state [_] @idx)
+      (set-state [_ i]
+        (vreset! idx i))
+      (label [_] @idx)
+      (notify! [_ event]
+        (when-let [x (first @xs')]
+          (let [bid' (if (fn? x)
+                       (x event)
+                       (notify! x event))]
+            (vreset! xs' (rest @xs'))
+            (vreset! idx (if event (inc @idx) 1))
+            bid'))))))
 
 (defn repeat
   "Create a bthread that returns the same bid repeatedly.
