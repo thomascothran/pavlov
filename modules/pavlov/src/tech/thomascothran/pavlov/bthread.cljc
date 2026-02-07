@@ -324,21 +324,14 @@
                             :order-id (:order-id event)}}})]))
   ```"
   [xs]
-  (let [xs' (volatile! xs)
-        idx (volatile! 0)]
-    (reify proto/BThread
-      (state [_] @idx)
-      (set-state [_ i]
-        (vreset! idx i))
-      (label [_] @idx)
-      (notify! [_ event]
-        (when-let [x (first @xs')]
-          (let [bid' (if (fn? x)
-                       (x event)
-                       (notify! x event))]
-            (vreset! xs' (rest @xs'))
-            (vreset! idx (if event (inc @idx) 1))
-            bid'))))))
+  (let [xs' (into [] xs)]
+    (step (fn [idx event]
+            (let [idx' (or idx 0)
+                  x (get xs' idx')
+                  bid (if (fn? x)
+                        (x event)
+                        x)]
+              [(inc idx') bid])))))
 
 (defn repeat
   "Create a bthread that returns the same bid repeatedly.

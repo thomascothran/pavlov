@@ -124,8 +124,10 @@
 
         no-double-placement (tb/make-no-double-placement-bthreads)
 
-        other-bthreads [[:computer-o-picks (tb/make-computer-picks-bthreads :o)]
-                        [:o-top-left-corner (b/bids [{:type [0 0 :o]}])]]
+        other-bthreads
+        [[:computer-o-picks (tb/make-computer-picks-bthreads :o)]
+         [:o-top-left-corner
+          (b/bids [{:request #{{:type [0 0 :o]}}}])]]
 
         bthreads (reduce into []
                          [winning-bthreads
@@ -316,7 +318,7 @@
                                       :child-b child-b}}])
           after (b/bids [{:wait-on #{:start}}
                          {:request #{{:type :after
-                                     :terminal true}}}])
+                                      :terminal true}}}])
           !events (atom [])
           result @(bpe/execute! [[:parent parent]
                                  [:after after]]
