@@ -164,7 +164,8 @@
    - `tech.thomascothran.pavlov.model.check` for model checking bthreads and bprograms"
 
   (:refer-clojure :exclude [repeat])
-  (:require [tech.thomascothran.pavlov.bthread.proto :as proto]
+  (:require [clojure.datafy :refer [datafy]]
+            [tech.thomascothran.pavlov.bthread.proto :as proto]
             [tech.thomascothran.pavlov.event.proto :as event-proto]
             [tech.thomascothran.pavlov.defaults])
   #?(:cljs (:require-macros [tech.thomascothran.pavlov.bthread])))
@@ -284,7 +285,7 @@
                                    (event-proto/type event)))
                     {:request #{{:type error-event-type
                                  :event event
-                                 :error e
+                                 :error (datafy e)
                                  :invariant-violated true
                                  :terminal true}}})))))))))
 
