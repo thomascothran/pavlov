@@ -76,6 +76,8 @@ Out of scope for checking, at least initially:
 
 The design should support server-first, server-driven web applications, but browser behavior must not become second-class. Some applications will need browser-side bthreads for responsiveness while requests are in flight or while local interactions are being coordinated. The architecture therefore has to support optional distribution of behavior without forcing a heavy-client default.
 
+The most important thing is to design an open system that can be used in multiple ways.
+
 Authority is also not trivial. Browser and server cannot both independently own the same synchronization point. The design must leave room for authority to be determined by the behavioral rules of the application rather than assuming a universal "server always wins" or "browser always wins" policy.
 
 ## Problem Statement
@@ -88,13 +90,7 @@ How do we extend Pavlov with a web application architecture such that:
 4. the default architecture stays server-driven and thin-client-friendly, and
 5. optional browser-side behavior can be introduced without abandoning end-to-end model-driven design?
 
-## Next Up
-
-### Phase B: Brainstorm Possible Solutions
-
-This section surveys the option landscape without yet choosing a solution.
-
-#### Common design goal across all options
+## Design constraints
 
 Across the options below, the most important idea is to keep the checked boundary semantic.
 UI bthreads should be able to declare things like:
@@ -107,146 +103,268 @@ UI bthreads should be able to declare things like:
 
 The actual DOM writes, HTML rendering, network IO, storage IO, and frontend library integration should be handled by adapters or IO bthreads below that semantic boundary.
 
-#### Option 1: Session-authoritative semantic command bus
+## Example Usage
 
-In this option, one server-side session bprogram is authoritative by default.
-Browser events are translated into shared semantic events and submitted to the session bprogram.
-The bprogram emits semantic UI and effect commands, and adapters realize them through Datastar, hiccup-based rendering, Replicant, or some other rendering strategy.
+Suppose we model the interaction in terms of semantic user intents, domain commands and events, durable UI projections, and transient UI effects.
 
-Characteristics:
+The important point is that these are not DOM mutations or renderer-specific lifecycle callbacks. They are semantic events and outputs that could be realized by different adapters.
 
-- very compatible with the current model checker
-- default thin-browser architecture
-- SSR-friendly
-- restartable server session model is conceptually straightforward
-- easiest place to model reconnect, retries, duplicate delivery, and ordering as environment behavior
 
-Risks:
+```clojure
+;; The user arrives at the create-task screen.
+{:type :ui.intent/view-opened
+ :view/id :create-task}
 
-- can become too imperative if the command vocabulary drifts into DOM details
-- may need an additional mechanism for very responsive local UI behavior while requests are in flight
+;; The UI is projected into a durable semantic state.
+{:type :ui.projection/form-state
+ :form/id :create-task
+ :title "Create Task"
+ :status :editing
+ :fields {:task-name {:label "Name"
+                      :kind :text
+                      :value ""
+                      :required true}
+          :task-type {:label "Type"
+                      :kind :select
+                      :value nil
+                      :required true
+                      :options [{:label "Inside" :value "inside"}
+                                {:label "Outside" :value "outside"}]}}
+ :actions {:submit {:label "Create task"
+                    :enabled true}}}
 
-#### Option 2: Session-authoritative semantic projection model
+;; The user submits a value.
+{:type :ui.intent/form-submitted
+ :form/id :create-task
+ :values {:task-type "inside"
+          :task-name "take out"}}
 
-In this option, the checked output is not primarily a command stream, but a semantic UI projection or view model.
-The server-side bprogram computes UI state such as warnings, pending requests, enabled actions, and visible component states.
-Renderers then turn that projection into HTML, Datastar signals, Replicant state, or another view representation.
+;; The UI may immediately move into a durable "submitting" state.
+{:type :ui.projection/form-state
+ :form/id :create-task
+ :title "Create Task"
+ :status :submitting
+ :fields {:task-name {:value "take out"}
+          :task-type {:value "inside"}}
+ :actions {:submit {:enabled false}}}
 
-Characteristics:
+;; A semantic command is issued.
+{:type :task.command/create
+ :request/id #uuid "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+ :task/name "take out"
+ :task/type "inside"}
 
-- strongest separation between behavioral rules and renderer choice
-- naturally server-driven and SSR-friendly
-- clean mental model for durable UI state
+;; The domain rejects the command.
+{:type :task.event/create-rejected
+ :request/id #uuid "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+ :reason :duplicate-name
+ :field-errors {:task-name "A task by that name already exists"}}
 
-Risks:
+;; The UI is projected back into an editable state with semantic errors.
+{:type :ui.projection/form-state
+ :form/id :create-task
+ :title "Create Task"
+ :status :editing
+ :fields {:task-name {:value "take out"
+                      :error "A task by that name already exists"}
+          :task-type {:value "inside"}}
+ :actions {:submit {:enabled true}}}
 
-- ephemeral UI behavior such as focus, one-shot notifications, scroll actions, animations, and cancellation affordances may not fit naturally
-- may still need a side channel for effect-like UI outcomes
+;; The user corrects the name and submits again.
+{:type :ui.intent/form-submitted
+ :form/id :create-task
+ :values {:task-type "inside"
+          :task-name "take out trash"}}
 
-#### Option 3: Federated bprogram with optional browser partition
+{:type :task.command/create
+ :request/id #uuid "ffffffff-1111-2222-3333-444444444444"
+ :task/name "take out trash"
+ :task/type "inside"}
 
-In this option, browser and server both may run bthreads in production, while still participating in one shared semantic model during checking.
-The system would need an explicit session protocol for ordering, reconnect, dedupe, replay, and authority.
+{:type :task.event/created
+ :request/id #uuid "ffffffff-1111-2222-3333-444444444444"
+ :task/id 1234
+ :task/name "take out trash"
+ :task/type "inside"}
 
-Characteristics:
+;; Durable UI state can change.
+{:type :ui.projection/view-state
+ :view/id :create-task
+ :status :complete}
 
-- best fit for optional browser-side bthreads and richer in-flight interactivity
-- keeps open the possibility of moving behavior between browser and server without rewriting the behavior itself
-- aligns with the desire not to force all logic into the frontend while still allowing frontend behavior where useful
+;; Transient UI effects can also be emitted.
+{:type :ui.effect/navigate
+ :to {:view/id :task-detail
+      :task/id 1234}}
 
-Risks:
+;; The next screen can be projected semantically as well.
+{:type :ui.projection/detail-view
+ :view/id :task-detail
+ :entity/id 1234
+ :fields {:task-name "take out trash"
+          :task-type "inside"}}
 
-- highest complexity by far
-- authority, replay, reconnect, multi-tab, and duplicate delivery all become first-class design problems
-- easiest option to get wrong if transport concerns leak into behavioral rules
+```
 
-#### Option 4: Datastar-backed semantic adapter
+There are several things intentionally left open here:
 
-In this option, Pavlov owns the semantic model, while Datastar is used as a realization layer.
-Pavlov bthreads emit semantic commands or semantic UI state, and a Datastar adapter lowers that into HTML patches, signal patches, and request/response mechanics.
+- whether one bprogram runs in production or multiple cooperating bprograms run
+- whether authority for a given concern lives on the server, in the browser, or is shared through an explicit protocol
+- whether the server is long-lived or reconstructed per request
+- how these semantic projections and effects are realized in HTML, Datastar, DOM operations, or another UI adapter
 
-Characteristics:
+The important thing is that the semantic contract is stable even if the realization strategy changes.
 
-- very aligned with the preference for server-driven SPA or hypermedia-style applications
-- practical near-term path to something useful
-- good fit for thin-browser and SSR-friendly defaults
+### Promising Hints of What We Could Do
 
-Risks:
+But there are a few promising hints here about what this could let us do:
 
-- if Datastar concepts leak upward, the checked boundary can collapse into selectors, patches, signal names, and string-based expressions
-- client-side scripting and signal expressions appear to be the most likely source of accidental complexity
+- We can separate semantic UI behavior from UI realization.
+  + A Datastar adapter could lower `:ui.projection/*` and `:ui.effect/*` into HTML patches, signal updates, SSE messages, or request/response flows.
+  + A frontend behavioral runtime could lower the same semantic outputs into DOM operations, local component state, or other frontend effects.
+- We can separate durable UI state from transient UI effects.
+  + Durable state includes things like field values, validation messages, loading, ready, or error states, enabled actions, visible rows, or current filters.
+  + Transient effects include things like navigation, focus, scroll-into-view, toast messages, opening a menu, or starting an animation.
+  + This distinction matters for replay, reconnect, dedupe, and SSR.
+- We can keep domain behavior and UI behavior related without collapsing them into one layer.
+  + Domain commands and events can remain semantic and renderer-independent.
+  + UI behavior can react to those same semantic events without needing to know how persistence, transport, or rendering is implemented.
+- We can keep open the option of thin clients by default while still allowing browser-side bthreads where they help.
+  + A thin-client architecture might keep most authority on the server and use browser code mainly as an adapter.
+  + A richer client architecture might let browser bthreads own highly local interaction concerns while still participating in the same shared semantic event language.
+- We can model the whole interaction in one checked model even if the production realization is split across browser and server.
+  + Browser behavior, server behavior, and environment behavior could all be assembled together during model checking.
+  + Production-specific IO bthreads could be swapped out for non-side-effecting model-checking equivalents.
+- We can make authority explicit instead of accidental.
+  + Some concerns may be server-authoritative, such as durable committed data.
+  + Some concerns may be browser-authoritative, such as temporary focus or in-progress cursor movement.
+  + Some concerns may require an explicit session protocol, such as retries, duplicate suppression, reconnect, and multi-tab coordination.
+- We can make the same semantic model realizable in more than one frontend style.
+  + That creates options for Datastar-style server-driven applications.
+  + It also creates options for frontend bthreads with DOM IO bthreads.
+  + Ideally, changing between those approaches should mostly require adapter changes rather than rewrites to the semantic model.
 
-This suggests that Datastar is likely better as an adapter target than as the core semantic model.
+## Example: Datatable Or Spreadsheet-Style Editing
 
-#### Option 5: Renderer-first adapter family (hiccup, Replicant, etc.)
+A more demanding example is a table where users can sort, filter, edit cells inline, and encounter conflicts from concurrent updates.
 
-In this option, the stable boundary is a semantic UI protocol, and different renderers consume it.
-One adapter might render hiccup server-side, another might target Replicant or a CLJS renderer for richer client behavior, and another might target Datastar.
+The same separation still helps:
 
-Characteristics:
+```clojure
+;; User opens an inventory table.
+{:type :ui.intent/view-opened
+ :view/id :inventory-grid}
 
-- directly supports the goal of writing UI bthreads once and realizing them in different application styles
-- creates a path for both server-heavy and richer frontend applications
-- encourages explicit separation between semantic components and concrete renderers
+{:type :ui.projection/grid-state
+ :view/id :inventory-grid
+ :status :ready
+ :columns [{:column/id :sku :label "SKU"}
+           {:column/id :name :label "Name"}
+           {:column/id :quantity :label "Quantity"}]
+ :rows [{:row/id 101
+         :cells {:sku "A-1" :name "Brush" :quantity 12}}
+        {:row/id 102
+         :cells {:sku "A-2" :name "Soap" :quantity 3}}]
+ :sort {:column/id :name :direction :asc}
+ :filters {}
+ :selection nil}
 
-Risks:
+;; User begins editing one cell.
+{:type :ui.intent/cell-edit-started
+ :view/id :inventory-grid
+ :row/id 102
+ :column/id :quantity}
 
-- the protocol may become too abstract or too weak if it tries to satisfy every renderer equally
-- adapter authorship may be substantial if the semantic model is too large
+;; A browser-side adapter or bthread may handle local editor behavior,
+;; but the semantic model can still observe the edit session if useful.
+{:type :ui.projection/edit-state
+ :view/id :inventory-grid
+ :row/id 102
+ :column/id :quantity
+ :status :editing
+ :value 3}
 
-#### Option 6: Pavlov-native UI runtime
+;; User commits a new value.
+{:type :ui.intent/cell-edit-committed
+ :view/id :inventory-grid
+ :row/id 102
+ :column/id :quantity
+ :value 4}
 
-In this option, Pavlov grows its own first-class UI runtime and semantic protocol for components, UI state, and effects.
-Datastar, hiccup, Replicant, and any future web stack would become adapters beneath a Pavlov-owned UI layer.
+{:type :inventory.command/update-quantity
+ :request/id #uuid "11111111-2222-3333-4444-555555555555"
+ :item/id 102
+ :quantity 4}
 
-Characteristics:
+;; While the request is in flight, the grid can move into a pending state.
+{:type :ui.projection/grid-state
+ :view/id :inventory-grid
+ :pending #{[:row 102 :column :quantity]}}
 
-- best long-term control over pluggability
-- best chance of keeping the checked boundary fully Pavlov-native
-- cleanest story if browser-side bthreads later become a major feature
+;; The update succeeds.
+{:type :inventory.event/quantity-updated
+ :request/id #uuid "11111111-2222-3333-4444-555555555555"
+ :item/id 102
+ :quantity 4}
 
-Risks:
+{:type :ui.projection/grid-state
+ :view/id :inventory-grid
+ :rows [{:row/id 101
+         :cells {:sku "A-1" :name "Brush" :quantity 12}}
+        {:row/id 102
+         :cells {:sku "A-2" :name "Soap" :quantity 4}}]
+ :pending #{}}
 
-- largest implementation surface
-- highest risk of building too much infrastructure before validating the simpler paths
+;; Now imagine a conflict example.
+{:type :ui.intent/cell-edit-committed
+ :view/id :inventory-grid
+ :row/id 101
+ :column/id :quantity
+ :value 9}
 
-#### Cross-cutting architectural ideas
+{:type :inventory.command/update-quantity
+ :request/id #uuid "66666666-7777-8888-9999-000000000000"
+ :item/id 101
+ :quantity 9}
 
-Some ideas cut across several of the options above and may end up being combined:
+{:type :inventory.event/update-rejected
+ :request/id #uuid "66666666-7777-8888-9999-000000000000"
+ :item/id 101
+ :reason :conflict
+ :actual-value 15}
 
-- a shared event schema across CLJ and CLJS
-- semantic UI commands for transient outcomes
-- semantic UI projections for durable screen state
-- stable logical component identities that adapters map onto DOM ids, selectors, or renderer-local handles
-- a session protocol that models ordering, retries, reconnect, duplicate suppression, and tab or user scope explicitly
-- IO adapters or IO bthreads that perform actual DOM, network, or storage operations below the checked boundary
+{:type :ui.projection/grid-state
+ :view/id :inventory-grid
+ :rows [{:row/id 101
+         :cells {:sku "A-1" :name "Brush" :quantity 15}}
+        {:row/id 102
+         :cells {:sku "A-2" :name "Soap" :quantity 4}}]
+ :conflicts #{[:row 101 :column :quantity]}}
 
-#### Important tension to preserve during Phase C
+{:type :ui.effect/show-message
+ :level :warning
+ :message "Quantity changed on the server before your edit was applied."}
+```
 
-There appears to be a meaningful distinction between:
+This example hints at a useful split:
 
-- durable UI state, which may be best represented as a semantic projection, and
-- transient UI effects, which may be best represented as semantic commands
+- durable shared state:
+  + rows, columns, values, filters, sort order, validation markers, conflict markers
+- transient local interaction:
+  + cursor motion, text selection, open editor state, drag-fill preview, scroll position, IME composition
 
-This suggests that the eventual solution may be hybrid rather than purely command-oriented or purely projection-oriented.
+The more spreadsheet-like the interaction becomes, the more likely it is that some transient interaction logic should be allowed to live in browser-side bthreads, while committed domain updates and shared projections remain semantically coordinated across the whole system.
 
-#### Working hypotheses coming out of brainstorming
+## Big Questions
 
-At this stage, a promising shape is:
+### Do we model network requests?
+We already separate commands from events: commands taking the imperative (`:create-task`) and events taking the past tense (`:task-created`). But do we want to keep track of network requests in flight? Modeling temporary frontend state? Etc.
 
-- Pavlov owns the semantic contract
-- adapters realize that contract through Datastar, hiccup, Replicant, or a future Pavlov-native runtime
-- the default production architecture remains server-first and thin-client-friendly
-- optional browser bthreads remain possible, but do not have to be the starting point
+### Rendering the page
+Should we have bthreads take hiccup or html and render them?
 
-So far, this still leaves open:
+### Server reboots
+We cannot assume that a server process will stay alive. It could be the case that the server is rebooted at any time. How do we handle state at that point? How does the server process reboot to be in the right state? Should it be modeled in the model checker?
 
-- the rendering strategy
-- the transport protocol
-- the component abstraction
-- the browser/server authority model
-- whether the best solution is command-oriented, projection-oriented, hybrid, or partitioned
-
-### Phase C: Narrow Down the Solutions to a few candidates
-
-### Phase D: Select a Solution and Design It
+### Persistent Server Process
+It could also be the case that we don't want to keep a process open on the server, and so it has to be able to boot up the bthreads it needs on the backend for every request from the client?
