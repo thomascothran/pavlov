@@ -1,6 +1,6 @@
 {
   "dependencies": {
-    "squint-cljs": "^0.8.124"
+    "squint-cljs": "^0.10.186"
   },
   "devDependencies": {
     "vitest": "^2.1.6"
