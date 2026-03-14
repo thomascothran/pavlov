@@ -260,7 +260,6 @@
         safety-bthreads (get config :safety-bthreads)
         main-bthreads (get config :bthreads)
         env-bthreads (get config :environment-bthreads)]
-    ;; Order matters: safety -> main -> env -> deadlock
     (reduce into []
             [safety-bthreads
              main-bthreads
