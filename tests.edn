@@ -1,5 +1,5 @@
 #kaocha/v1
  {:tests [{:id :unit
-           :source-paths ["modules/pavlov/src" "modules/pavlov-devtools/src"]
-           :test-paths ["modules/pavlov/test" "modules/pavlov-devtools/test"]
+           :source-paths ["modules/pavlov/src" "modules/pavlov-devtools/src" "modules/pavlov-web/src"]
+           :test-paths ["modules/pavlov/test" "modules/pavlov-devtools/test" "modules/pavlov-web/test"]
            :ns-patterns [".*"]}]}
