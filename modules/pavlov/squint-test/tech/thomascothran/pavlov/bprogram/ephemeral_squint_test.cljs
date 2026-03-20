@@ -1,9 +1,7 @@
 (ns tech.thomascothran.pavlov.bprogram.ephemeral-squint-test
   (:require ["vitest" :refer [expect test]]
-            [tech.thomascothran.pavlov.bthread :as bthread]
-            [tech.thomascothran.pavlov.defaults]
-            [tech.thomascothran.pavlov.bprogram.proto :as bp]
-            [tech.thomascothran.pavlov.bprogram.ephemeral :as bpe]))
+            [tech.thomascothran.pavlov.bthread.defaults]
+            [tech.thomascothran.pavlov.defaults]))
 
 (test "dummy expect works"
       (fn []

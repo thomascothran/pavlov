@@ -3,6 +3,7 @@
 
 (extend-protocol event/Event
   #?(:clj clojure.lang.Keyword
+     :squint String
      :cljs Keyword)
   (type [event] event)
   (terminal? [event]
@@ -13,6 +14,11 @@
           (type [event] (:type event))
           (terminal? [event] (:terminal event)))
 
+   :squint (extend-protocol event/Event
+             js/Object
+             (type [event] (get event :type))
+             (terminal? [event] (get event :terminal)))
+
    :cljs (extend-protocol event/Event
 
            cljs.core.PersistentArrayMap
@@ -21,13 +27,9 @@
 
            cljs.core.PersistentHashMap
            (type [event] (:type event))
-           (terminal? [event] (:terminal event)))
-
-   :squint (extend-protocol js/Object
-             (type [event] (get event :type))
-             (terminal? [event] (get event :terminal))))
+           (terminal? [event] (:terminal event))))
 
 (extend-protocol event/Event
-  #?(:clj Object :cljs default)
+  #?(:clj Object :squint nil :cljs default)
   (type [o] o)
   (terminal? [_] false))

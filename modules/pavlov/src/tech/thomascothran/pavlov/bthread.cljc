@@ -581,13 +581,13 @@
   (macroexpand-1
    '(thread [prev-state event]
 
-            :pavlov/init
-            [{:initialized true}
-             {:wait-on #{:fire-missiles}}]
+      :pavlov/init
+      [{:initialized true}
+       {:wait-on #{:fire-missiles}}]
 
-            #{:fire-missiles}
-            (let [result (missiles-api/fire!)]
-              [prev-state {:request #{{:type :missiles-fired
-                                       :result result}}}])
+      #{:fire-missiles}
+      (let [result (missiles-api/fire!)]
+        [prev-state {:request #{{:type :missiles-fired
+                                 :result result}}}])
 
-            [prev-state {:wait-on #{:fire-missiles}}])))
+      [prev-state {:wait-on #{:fire-missiles}}])))
