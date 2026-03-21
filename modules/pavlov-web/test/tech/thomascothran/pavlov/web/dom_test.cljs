@@ -35,6 +35,52 @@
                         :args ["data-state" "ready"]})
     (is (= "ready" (.getAttribute input "data-state")))))
 
+(deftest make-dom-event-redirect-bthread-requests-retargeted-semantic-event-for-configured-dom-events
+  (let [dom-event-types #{:dom/click :dom/input}
+        bthread (dom/make-dom-event-redirect-bthread dom-event-types)
+        incoming-event {:type :dom/click
+                        :pavlov-event-type ":task/save"
+                        :dom/event-name "click"
+                        :dom/target {:id "save"
+                                     :tag "button"
+                                     :type "button"}
+                        :dom/matched {:id "action"
+                                      :tag "section"}
+                        :pavlov-entity-id "task-42"}
+        init-bid (b/notify! bthread nil)
+        bid (b/notify! bthread incoming-event)]
+    (is (= {:wait-on dom-event-types}
+           init-bid))
+    (is (= {:wait-on dom-event-types
+            :request #{{:type :task/save
+                        :pavlov-event-type ":task/save"
+                        :dom/event-name "click"
+                        :dom/target {:id "save"
+                                     :tag "button"
+                                     :type "button"}
+                        :dom/matched {:id "action"
+                                      :tag "section"}
+                        :pavlov-entity-id "task-42"}}}
+           bid))))
+
+(deftest make-dom-event-redirect-bthread-emits-nothing-when-pavlov-event-type-is-absent
+  (let [dom-event-types #{:dom/click :dom/input}
+        bthread (dom/make-dom-event-redirect-bthread dom-event-types)
+        incoming-event {:type :dom/input
+                        :dom/event-name "input"
+                        :dom/input {:name "task"
+                                    :value "Buy milk"
+                                    :target {:id "task"
+                                             :tag "input"
+                                             :type "text"}}
+                        :pavlov-input-scope "primary"}
+        init-bid (b/notify! bthread nil)
+        bid (b/notify! bthread incoming-event)]
+    (is (= {:wait-on dom-event-types}
+           init-bid))
+    (is (= {:wait-on dom-event-types}
+           bid))))
+
 (deftest attach-dom-events-delegates-configured-click-through-resolve-translator-and-submit
   (let [dom (JSDOM. "<div id=\"root\"><button id=\"save\">Save</button></div>")
         document (-> dom (.-window) (.-document))
@@ -107,9 +153,12 @@
            @!calls))
     (is (= [] @!submitted-events))))
 
-(deftest attach-dom-events-default-click-resolution-finds-nearest-attribute-and-submits-translated-event
+(deftest attach-dom-events-default-click-resolution-finds-nearest-attribute-and-copied-pavlov-attrs
   (let [dom (JSDOM. (str "<div id=\"root\">"
-                         "  <section id=\"action\" data-pavlov-on-click=\":task/save\">"
+                         "  <section id=\"action\""
+                         "           data-pavlov-on-click=\":task/save\""
+                         "           pavlov-event-type=\":task/save\""
+                         "           pavlov-entity-id=\"task-42\">"
                          "    <button id=\"save\"><span id=\"label\">Save</span></button>"
                          "  </section>"
                          "</div>"))
@@ -119,11 +168,13 @@
         native-event (.createEvent document "Event")
         !submitted-events (atom [])
         translator (fn [_ context]
-                     {:type :task/save-clicked
+                     {:type :dom/click
                       :dom/event-name (:dom/event-name context)
                       :matched-el-id (.getAttribute (:matched-el context) "id")
                       :attr-name (:attr-name context)
-                      :attr-value (:attr-value context)})
+                      :attr-value (:attr-value context)
+                      :pavlov-event-type (:pavlov-event-type context)
+                      :pavlov-entity-id (:pavlov-entity-id context)})
         submit! (fn [event]
                   (swap! !submitted-events conj event))]
     (set! js/global.document document)
@@ -133,24 +184,34 @@
                              :translators {"click" translator}
                              :submit! submit!})
     (.dispatchEvent label native-event)
-    (is (= [{:type :task/save-clicked
+    (is (= [{:type :dom/click
              :dom/event-name "click"
              :matched-el-id "action"
              :attr-name "data-pavlov-on-click"
-             :attr-value ":task/save"}]
+             :attr-value ":task/save"
+             :pavlov-event-type ":task/save"
+             :pavlov-entity-id "task-42"}]
            @!submitted-events))))
 
 (deftest attach-dom-events-uses-default-change-reset-and-keydown-listeners-and-translators
   (let [dom (JSDOM. (str "<div id=\"root\">"
-                         "  <form id=\"task-form\" data-pavlov-on-reset=\":task-form/reset\">"
+                         "  <form id=\"task-form\""
+                         "        data-pavlov-on-reset=\":task-form/reset\""
+                         "        pavlov-event-type=\":task-form/reset\""
+                         "        pavlov-form-id=\"task-form\">"
                          "    <input id=\"task\""
                          "           name=\"task\""
                          "           type=\"text\""
                          "           value=\"Buy milk\""
-                         "           data-pavlov-on-change=\":task-form/input-changed\">"
+                         "           data-pavlov-on-change=\":task-form/input-changed\""
+                         "           pavlov-event-type=\":task-form/input-changed\""
+                         "           pavlov-input-scope=\"primary\">"
                          "    <button name=\"intent\" value=\"clear\" type=\"reset\">Reset</button>"
                          "  </form>"
-                         "  <section id=\"shortcut-scope\" data-pavlov-on-keydown=\":task-form/shortcut\">"
+                         "  <section id=\"shortcut-scope\""
+                         "           data-pavlov-on-keydown=\":task-form/shortcut\""
+                         "           pavlov-event-type=\":task-form/shortcut\""
+                         "           pavlov-shortcut-scope=\"task-form\">"
                          "    <input id=\"shortcut-target\" name=\"shortcut\" type=\"text\">"
                          "  </section>"
                          "</div>"))
@@ -184,18 +245,24 @@
     (.dispatchEvent task-input change-event)
     (.dispatchEvent form reset-event)
     (.dispatchEvent shortcut-target keydown-event)
-    (is (= [{:type :task-form/input-changed
+    (is (= [{:type :dom/change
              :dom/event-name "change"
+             :pavlov-event-type ":task-form/input-changed"
+             :pavlov-input-scope "primary"
              :dom/input {:name "task"
                          :value "Buy milk"
                          :target {:id "task"
                                   :tag "input"
                                   :type "text"}}}
-            {:type :task-form/reset
+            {:type :dom/reset
              :dom/event-name "reset"
+             :pavlov-event-type ":task-form/reset"
+             :pavlov-form-id "task-form"
              :dom/form {:values {"task" "Buy milk"}}}
-            {:type :task-form/shortcut
+            {:type :dom/keydown
              :dom/event-name "keydown"
+             :pavlov-event-type ":task-form/shortcut"
+             :pavlov-shortcut-scope "task-form"
              :dom/target {:id "shortcut-target"
                           :tag "input"
                           :type "text"}
@@ -217,12 +284,15 @@
         input (.querySelector document "#task")
         native-event (.createEvent document "Event")
         context {:dom/event-name "input"
-                 :attr-value ":task-form/input-changed"}
+                 :pavlov-event-type ":task-form/input-changed"
+                 :pavlov-input-scope "primary"}
         input-translator (get dom/built-in-default-translators "input")]
     (.initEvent native-event "input" true true)
     (.dispatchEvent input native-event)
-    (is (= {:type :task-form/input-changed
+    (is (= {:type :dom/input
             :dom/event-name "input"
+            :pavlov-event-type ":task-form/input-changed"
+            :pavlov-input-scope "primary"
             :dom/input {:name "task"
                         :value "Buy milk"
                         :target {:id "task"
@@ -237,12 +307,15 @@
         input (.querySelector document "#done")
         native-event (.createEvent document "Event")
         context {:dom/event-name "input"
-                 :attr-value ":task-form/input-changed"}
+                 :pavlov-event-type ":task-form/input-changed"
+                 :pavlov-input-scope "primary"}
         input-translator (get dom/built-in-default-translators "input")]
     (.initEvent native-event "input" true true)
     (.dispatchEvent input native-event)
-    (is (= {:type :task-form/input-changed
+    (is (= {:type :dom/input
             :dom/event-name "input"
+            :pavlov-event-type ":task-form/input-changed"
+            :pavlov-input-scope "primary"
             :dom/input {:name "done"
                         :value "yes"
                         :checked? true
@@ -262,12 +335,15 @@
         form (.querySelector document "#task-form")
         native-event (.createEvent document "Event")
         context {:dom/event-name "submit"
-                 :attr-value ":task-form/submitted"}
+                 :pavlov-event-type ":task-form/submitted"
+                 :pavlov-form-id "task-form"}
         submit-translator (get dom/built-in-default-translators "submit")]
     (.initEvent native-event "submit" true true)
     (.dispatchEvent form native-event)
-    (is (= {:type :task-form/submitted
+    (is (= {:type :dom/submit
             :dom/event-name "submit"
+            :pavlov-event-type ":task-form/submitted"
+            :pavlov-form-id "task-form"
             :dom/form {:values {"task" "Buy milk"
                                 "priority" "high"}}}
            (submit-translator native-event context)))))
@@ -284,7 +360,8 @@
         submitter (.querySelector document "#save")
         native-event (.createEvent document "Event")
         context {:dom/event-name "submit"
-                 :attr-value ":task-form/submitted"}
+                 :pavlov-event-type ":task-form/submitted"
+                 :pavlov-form-id "task-form"}
         submit-translator (get dom/built-in-default-translators "submit")]
     (.initEvent native-event "submit" true true)
     (js/Object.defineProperty native-event
@@ -292,8 +369,10 @@
                               #js {:value submitter
                                    :configurable true})
     (.dispatchEvent form native-event)
-    (is (= {:type :task-form/submitted
+    (is (= {:type :dom/submit
             :dom/event-name "submit"
+            :pavlov-event-type ":task-form/submitted"
+            :pavlov-form-id "task-form"
             :dom/form {:values {"task" "Buy milk"
                                 "priority" "high"}
                        :submitter {:id "save"
@@ -311,13 +390,16 @@
         action (.querySelector document "#action")
         native-event (.createEvent document "Event")
         context {:dom/event-name "click"
-                 :attr-value ":task/save"
+                 :pavlov-event-type ":task/save"
+                 :pavlov-entity-id "task-42"
                  :matched-el action}
         translator (get dom/built-in-default-translators "click")]
     (.initEvent native-event "click" true true)
     (.dispatchEvent button native-event)
-    (is (= {:type :task/save
+    (is (= {:type :dom/click
             :dom/event-name "click"
+            :pavlov-event-type ":task/save"
+            :pavlov-entity-id "task-42"
             :dom/target {:id "save"
                          :tag "button"
                          :type "button"}
@@ -342,7 +424,8 @@
         focusin-translator (get translators "focusin")
         focusout-translator (get translators "focusout")
         context {:dom/event-name "focusout"
-                 :attr-value ":task/blurred"
+                 :pavlov-event-type ":task/blurred"
+                 :pavlov-focus-scope "task-panel"
                  :matched-el action}]
     (.initEvent native-event "focusout" true true)
     (js/Object.defineProperty native-event
@@ -352,8 +435,10 @@
     (.dispatchEvent input native-event)
     (is (fn? focusin-translator))
     (is (fn? focusout-translator))
-    (is (= {:type :task/blurred
+    (is (= {:type :dom/focusout
             :dom/event-name "focusout"
+            :pavlov-event-type ":task/blurred"
+            :pavlov-focus-scope "task-panel"
             :dom/target {:id "task"
                          :tag "input"
                          :type "text"}
@@ -371,14 +456,17 @@
         input (.querySelector document "#task")
         native-event (.createEvent document "Event")
         context {:dom/event-name "change"
-                 :attr-value ":task-form/input-changed"}
+                 :pavlov-event-type ":task-form/input-changed"
+                 :pavlov-input-scope "primary"}
         translator (get dom/built-in-default-translators "change")]
     (.initEvent native-event "change" true true)
     (.dispatchEvent input native-event)
     (is (fn? translator))
     (when (fn? translator)
-      (is (= {:type :task-form/input-changed
+      (is (= {:type :dom/change
               :dom/event-name "change"
+              :pavlov-event-type ":task-form/input-changed"
+              :pavlov-input-scope "primary"
               :dom/input {:name "task"
                           :value "Buy milk"
                           :target {:id "task"
@@ -397,14 +485,17 @@
         form (.querySelector document "#task-form")
         native-event (.createEvent document "Event")
         context {:dom/event-name "reset"
-                 :attr-value ":task-form/reset"}
+                 :pavlov-event-type ":task-form/reset"
+                 :pavlov-form-id "task-form"}
         translator (get dom/built-in-default-translators "reset")]
     (.initEvent native-event "reset" true true)
     (.dispatchEvent form native-event)
     (is (fn? translator))
     (when (fn? translator)
-      (is (= {:type :task-form/reset
+      (is (= {:type :dom/reset
               :dom/event-name "reset"
+              :pavlov-event-type ":task-form/reset"
+              :pavlov-form-id "task-form"
               :dom/form {:values {"task" "Buy milk"
                                   "priority" "high"}}}
              (translator native-event context))))))
@@ -428,14 +519,17 @@
                                :shiftKey true
                                :repeat true})
         context {:dom/event-name "keydown"
-                 :attr-value ":task-form/shortcut"
+                 :pavlov-event-type ":task-form/shortcut"
+                 :pavlov-shortcut-scope "task-form"
                  :matched-el scope}
         translator (get dom/built-in-default-translators "keydown")]
     (.dispatchEvent input native-event)
     (is (fn? translator))
     (when (fn? translator)
-      (is (= {:type :task-form/shortcut
+      (is (= {:type :dom/keydown
               :dom/event-name "keydown"
+              :pavlov-event-type ":task-form/shortcut"
+              :pavlov-shortcut-scope "task-form"
               :dom/target {:id "task"
                            :tag "input"
                            :type "text"}

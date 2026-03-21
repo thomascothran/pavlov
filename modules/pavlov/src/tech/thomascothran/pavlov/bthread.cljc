@@ -380,18 +380,12 @@
 
   Example:
   ```clojure
-  (def on-invoice
+  (defn make-on-invoice
+    []
     (b/on :invoice/received
           (fn [event]
             {:request #{{:type :invoice/processed
                          :id (:invoice/id event)}}})))
-
-  (b/notify! on-invoice nil)
-  ;=> {:wait-on #{:invoice/received}}
-
-  (b/notify! on-invoice {:type :invoice/received :invoice/id 42})
-  ;=> {:request #{{:type :invoice/processed :id 42}}
-  ;    :wait-on #{:invoice/received}}
   ```"
   [event-type f]
   (step (fn [_prev-state event]
@@ -399,9 +393,41 @@
                        (= event-type (event-proto/type event)))
             [:initialized {:wait-on #{event-type}}] ;; initialize
             (let [bid (f event)
-                  wait-on (->> (get event :wait-on #{})
-                               (into #{event-type}))]
-              [:initialized (assoc bid :wait-on wait-on)])))))
+                  new-waits (get bid :wait-on #{})
+                  new-requests (get bid :request #{})
+                  new-blocks (get bid :block #{})
+                  new-bid {:request new-requests
+                           :block new-blocks
+                           :wait-on (conj new-waits
+                                          event-type)}]
+              [:initialized new-bid])))))
+
+(defn on-any
+  "bthread that reacts to any of the members of the `event-types` set
+
+  Example:
+  ```clojure
+  (defn make-request-c-on-a-or-b
+    []
+    (b/on #{:a :b}
+          (fn [event]
+             {:request #{:c}})))
+  ```
+  "
+  [event-types f]
+  (step (fn [prev-state event]
+          (if (or (nil? event)
+                  (not (get event-types
+                            (event-proto/type event))))
+            [:initialized {:wait-on event-types}]
+            (let [bid (f event)
+                  new-waits (get bid :wait-on #{})
+                  new-requests (get bid :request #{})
+                  new-blocks (get bid :block #{})
+                  new-bid {:request new-requests
+                           :block new-blocks
+                           :wait-on (into event-types new-waits)}]
+              [prev-state new-bid])))))
 
 (defn after-all
   "Create a bthread that waits for all specified events before proceeding.
