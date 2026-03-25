@@ -3,4 +3,10 @@
           {:target    :node-test
            :output-to "out/node-tests.js"
            :ns-regexp "-test$"
-           :autorun   true}}}
+           :autorun   true}
+          :web-browser-only
+          {:target     :browser
+            :asset-path "/js"
+            :output-dir "examples/web/resources/public/js"
+            :modules    {:main {:init-fn pavlov-web-example.browser-only.client/init!}}
+            :devtools   {:watch-dir "examples/web/resources/public"}}}}

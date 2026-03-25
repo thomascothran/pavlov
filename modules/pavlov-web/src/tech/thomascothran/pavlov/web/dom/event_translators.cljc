@@ -9,17 +9,41 @@
 
 (defn- raw-dom-type
   [context]
-  (keyword "dom" (:dom/event-name context)))
+  (keyword "dom" (get context :dom/event-name)))
+
+(defn- attr-prefix
+  [context]
+  (let [attr-name (get context :attr-name)
+        event-name (get context :dom/event-name)
+        suffix (when event-name
+                 (str "-on-" event-name))]
+    (or (when (and attr-name suffix (.endsWith attr-name suffix))
+          (subs attr-name 0 (- (count attr-name) (count suffix))))
+        "pavlov")))
 
 (defn- raw-dom-context
   [context]
-  (reduce-kv (fn [acc k v]
-               (if (or (= k :dom/event-name)
-                       (.startsWith (name k) "pavlov-"))
-                 (assoc acc k v)
-                 acc))
-             {}
-             context))
+  (let [attr-prefix' (attr-prefix context)
+        on-prefix (when attr-prefix'
+                    (str attr-prefix' "-on-"))]
+    (reduce-kv (fn [acc k v]
+                 (if (or (= k :dom/event-name)
+                         (= k :dom/children)
+                         (and attr-prefix'
+                              (.startsWith (name k) (str attr-prefix' "-"))))
+                   (assoc acc
+                          k
+                          (if (and (keyword? k)
+                                   on-prefix
+                                   (.startsWith (name k) on-prefix)
+                                   (string? v)
+                                   (.startsWith v ":")
+                                   (< 1 (count v)))
+                            (keyword (subs v 1))
+                            v))
+                   acc))
+               {}
+               context)))
 
 (defn- serialize-form-values
   [form excluded-control-type]
@@ -140,3 +164,111 @@
      :clj
      (throw (ex-info "default-keydown-translator is only available in cljs"
                      {:translator `default-keydown-translator}))))
+
+(defn- data-transfer-types
+  [data-transfer]
+  #?(:cljs
+     (when-let [types (some-> data-transfer .-types array-seq seq)]
+       (vec types))
+     :clj
+     (throw (ex-info "data-transfer-types is only available in cljs"
+                     {:translator `data-transfer-types}))))
+
+(defn- data-transfer-items
+  [data-transfer]
+  #?(:cljs
+     (when-let [items (some-> data-transfer .-items array-seq seq)]
+       (mapv (fn [item]
+               {:kind (.-kind item)
+                :type (.-type item)})
+             items))
+     :clj
+     (throw (ex-info "data-transfer-items is only available in cljs"
+                     {:translator `data-transfer-items}))))
+
+(defn- drag-payload
+  [native-event]
+  (let [data-transfer (.-dataTransfer native-event)
+        types (data-transfer-types data-transfer)
+        items (data-transfer-items data-transfer)]
+    (cond-> {:client-x (.-clientX native-event)
+             :client-y (.-clientY native-event)
+             :alt? (.-altKey native-event)
+             :ctrl? (.-ctrlKey native-event)
+             :meta? (.-metaKey native-event)
+             :shift? (.-shiftKey native-event)}
+      data-transfer
+      (assoc :drop-effect (.-dropEffect data-transfer)
+             :effect-allowed (.-effectAllowed data-transfer))
+
+      types
+      (assoc :types types)
+
+      items
+      (assoc :items items))))
+
+(defn- default-draglike-translator
+  [native-event context]
+  (let [target (.-target native-event)
+        matched-el (:matched-el context)]
+    (assoc (raw-dom-context context)
+           :type (raw-dom-type context)
+           :dom/target (element-identity target)
+           :dom/matched (select-keys (element-identity matched-el) [:id :tag])
+           :dom/drag (drag-payload native-event))))
+
+(defn default-drag-translator
+  [native-event context]
+  #?(:cljs
+     (default-draglike-translator native-event context)
+     :clj
+     (throw (ex-info "default-drag-translator is only available in cljs"
+                     {:translator `default-drag-translator}))))
+
+(defn default-dragenter-translator
+  [native-event context]
+  #?(:cljs
+     (default-draglike-translator native-event context)
+     :clj
+     (throw (ex-info "default-dragenter-translator is only available in cljs"
+                     {:translator `default-dragenter-translator}))))
+
+(defn default-dragstart-translator
+  [native-event context]
+  #?(:cljs
+     (default-draglike-translator native-event context)
+     :clj
+     (throw (ex-info "default-dragstart-translator is only available in cljs"
+                     {:translator `default-dragstart-translator}))))
+
+(defn default-dragover-translator
+  [native-event context]
+  #?(:cljs
+     (default-draglike-translator native-event context)
+     :clj
+     (throw (ex-info "default-dragover-translator is only available in cljs"
+                     {:translator `default-dragover-translator}))))
+
+(defn default-dragend-translator
+  [native-event context]
+  #?(:cljs
+     (default-draglike-translator native-event context)
+     :clj
+     (throw (ex-info "default-dragend-translator is only available in cljs"
+                     {:translator `default-dragend-translator}))))
+
+(defn default-dragleave-translator
+  [native-event context]
+  #?(:cljs
+     (default-draglike-translator native-event context)
+     :clj
+     (throw (ex-info "default-dragleave-translator is only available in cljs"
+                     {:translator `default-dragleave-translator}))))
+
+(defn default-drop-translator
+  [native-event context]
+  #?(:cljs
+     (default-draglike-translator native-event context)
+     :clj
+     (throw (ex-info "default-drop-translator is only available in cljs"
+                     {:translator `default-drop-translator}))))
