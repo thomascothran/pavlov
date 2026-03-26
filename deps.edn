@@ -1,7 +1,8 @@
 {:deps {tech.thomascothran/pavlov {:local/root "./modules/pavlov"}
         tech.thomascothran/pavlov-devtools {:local/root "./modules/pavlov-devtools"}
         tech.thomascothran/pavlov-skills {:local/root "./modules/pavlov-skills"}
-        tech.thomascothran/pavlov-web {:local/root "./modules/pavlov-web"}}
+        tech.thomascothran/pavlov-web {:local/root "./modules/pavlov-web"}
+        tech.thomascothran/pavlov-web-examples {:local/root "./examples/web"}}
  :aliases
  {:test {:extra-paths ["modules/pavlov/test" "modules/pavlov-devtools/test" "modules/pavlov-web/test"]
          :extra-deps {org.clojure/test.check {:mvn/version "1.1.1"}

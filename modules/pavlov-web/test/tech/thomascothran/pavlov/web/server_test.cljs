@@ -18,8 +18,10 @@
             :block #{:pavlov.web.server/send-event}}
            (b/notify! bthread nil)))))
 
-(deftest make-server-bridge-bthread-encodes-and-sends-semantic-event-after-connected
+(deftest make-server-bridge-bthread-encodes-and-sends-semantic-event-after-connected-using-current-websocket
   (let [!calls (atom [])
+        !websocket (atom nil)
+        websocket-handle {:websocket/id "current"}
         semantic-event {:type :task.command/create
                         :request/id #uuid "11111111-1111-1111-1111-111111111111"
                         :task/name "Take out trash"}
@@ -27,19 +29,21 @@
         bthread (server/make-server-bridge-bthread
                  (fn [_] nil)
                  {:connect! (fn [& _] nil)
-                  :send! (fn [payload]
-                           (swap! !calls conj [:send! payload]))
+                  :!websocket !websocket
+                  :send! (fn [websocket payload]
+                           (swap! !calls conj [:send! websocket payload]))
                   :close! (fn [& _] nil)
                   :encode (fn [event]
                             (swap! !calls conj [:encode event])
                             encoded-payload)
-                  :decode identity})]
+                   :decode identity})]
     (b/notify! bthread nil)
+    (reset! !websocket websocket-handle)
     (b/notify! bthread {:type :pavlov.web.server/connected})
     (b/notify! bthread {:type :pavlov.web.server/send-event
                         :event semantic-event})
     (is (= [[:encode semantic-event]
-            [:send! encoded-payload]]
+            [:send! websocket-handle encoded-payload]]
            @!calls))))
 
 (deftest make-server-bridge-bthread-blocks-send-events-again-after-disconnected
@@ -56,7 +60,7 @@
             :block #{:pavlov.web.server/send-event}}
            (b/notify! bthread {:type :pavlov.web.server/disconnected})))))
 
-(deftest make-server-bridge-bthread-connects-on-initialization-with-transport-callbacks
+(deftest make-server-bridge-bthread-does-not-call-connect-on-initialization
   (let [!connect-calls (atom [])
         bthread (server/make-server-bridge-bthread
                  (fn [_] nil)
@@ -67,32 +71,67 @@
                   :close! (fn [& _] nil)
                   :encode identity
                   :decode identity})]
-    (b/notify! bthread nil)
-    (is (= 1 (count @!connect-calls)))
-     (is (= #{:on-connected :on-disconnected :on-message}
-            (set (keys (first @!connect-calls)))))
-     (is (fn? (:on-connected (first @!connect-calls))))
-     (is (fn? (:on-disconnected (first @!connect-calls))))
-     (is (fn? (:on-message (first @!connect-calls))))))
+    (is (= {:wait-on #{:pavlov.web.server/connected}
+            :block #{:pavlov.web.server/send-event}}
+           (b/notify! bthread nil)))
+    (is (= []
+           @!connect-calls))))
 
-(deftest make-server-bridge-bthread-submits-connected-and-disconnected-events-from-transport-callbacks
-  (let [!submitted-events (atom [])
-        !callbacks (atom nil)
-        bthread (server/make-server-bridge-bthread
-                 (fn [event]
-                   (swap! !submitted-events conj event))
-                 {:connect! (fn [callbacks]
-                              (reset! !callbacks callbacks)
-                              :fake-connection)
-                  :send! (fn [& _] nil)
+(deftest make-server-bridge-callbacks-returns-host-usable-browser-bridge-callbacks
+  (let [raw-payload "raw transport payload"
+        decoded-event {:type :task.event/created
+                       :request/id #uuid "11111111-1111-1111-1111-111111111111"
+                       :task/id 123}
+        !decode-calls (atom [])
+        !submitted-events (atom [])
+        callbacks (server/make-server-bridge-callbacks
+                   (fn [event]
+                     (swap! !submitted-events conj event))
+                   (fn [payload]
+                     (swap! !decode-calls conj payload)
+                     decoded-event))]
+    ((:on-connected callbacks))
+    ((:on-message callbacks) raw-payload)
+    ((:on-disconnected callbacks))
+    (is (= [raw-payload]
+           @!decode-calls))
+    (is (= #{:on-connected :on-disconnected :on-message}
+           (set (keys callbacks))))
+    (is (= [{:type :pavlov.web.server/connected}
+            {:type :pavlov.web.server/event-received
+             :event decoded-event}
+            {:type :pavlov.web.server/disconnected}]
+           @!submitted-events))))
+
+(deftest make-server-bridge-bthread-initializes-disconnected-when-connect-omitted
+  (let [bthread (server/make-server-bridge-bthread
+                 (fn [_] nil)
+                 {:send! (fn [& _] nil)
                   :close! (fn [& _] nil)
                   :encode identity
                   :decode identity})]
+    (is (= {:wait-on #{:pavlov.web.server/connected}
+            :block #{:pavlov.web.server/send-event}}
+           (b/notify! bthread nil)))))
+
+(deftest make-server-bridge-bthread-submits-connected-and-disconnected-events-from-transport-callbacks
+  (let [!submitted-events (atom [])
+        callbacks (server/make-server-bridge-callbacks
+                   (fn [event]
+                     (swap! !submitted-events conj event))
+                   identity)
+        bthread (server/make-server-bridge-bthread
+                  (fn [event]
+                    (swap! !submitted-events conj event))
+                  {:send! (fn [& _] nil)
+                   :close! (fn [& _] nil)
+                   :encode identity
+                   :decode identity})]
     (b/notify! bthread nil)
-    ((:on-connected @!callbacks))
-    ((:on-disconnected @!callbacks))
+    ((:on-connected callbacks))
+    ((:on-disconnected callbacks))
     (is (= [{:type :pavlov.web.server/connected}
-            {:type :pavlov.web.server/disconnected}]
+             {:type :pavlov.web.server/disconnected}]
            @!submitted-events))))
 
 (deftest make-server-bridge-bthread-decodes-inbound-message-and-submits-event-received
@@ -102,21 +141,23 @@
                        :task/id 123}
         !decode-calls (atom [])
         !submitted-events (atom [])
-        !callbacks (atom nil)
+        callbacks (server/make-server-bridge-callbacks
+                   (fn [event]
+                     (swap! !submitted-events conj event))
+                   (fn [payload]
+                     (swap! !decode-calls conj payload)
+                     decoded-event))
         bthread (server/make-server-bridge-bthread
-                 (fn [event]
-                   (swap! !submitted-events conj event))
-                 {:connect! (fn [callbacks]
-                              (reset! !callbacks callbacks)
-                              :fake-connection)
-                  :send! (fn [& _] nil)
-                  :close! (fn [& _] nil)
-                  :encode identity
-                  :decode (fn [payload]
-                            (swap! !decode-calls conj payload)
-                            decoded-event)})]
+                  (fn [event]
+                    (swap! !submitted-events conj event))
+                  {:send! (fn [& _] nil)
+                   :close! (fn [& _] nil)
+                   :encode identity
+                   :decode (fn [payload]
+                             (swap! !decode-calls conj payload)
+                             decoded-event)})]
     (b/notify! bthread nil)
-    ((:on-message @!callbacks) raw-payload)
+    ((:on-message callbacks) raw-payload)
     (is (= [raw-payload]
            @!decode-calls))
     (is (= [{:type :pavlov.web.server/event-received
@@ -199,31 +240,32 @@
                        :task/id 123}
         !submitted-events (atom [])
         !sent-payloads (atom [])
-        !callbacks (atom nil)
         !bridge (atom nil)
         submit-event! (fn [event]
                         (swap! !submitted-events conj event)
                         (b/notify! @!bridge event))
+        callbacks (server/make-server-bridge-callbacks
+                   submit-event!
+                   (fn [payload]
+                     (is (= inbound-raw-payload payload))
+                     decoded-event))
         bthread (server/make-server-bridge-bthread
-                 submit-event!
-                 {:connect! (fn [callbacks]
-                              (reset! !callbacks callbacks)
-                              :fake-connection)
-                  :send! (fn [payload]
-                           (swap! !sent-payloads conj payload))
-                  :close! (fn [& _] nil)
-                  :encode (fn [event]
-                            {:wire/event event})
-                  :decode (fn [payload]
-                            (is (= inbound-raw-payload payload))
-                            decoded-event)})]
+                  submit-event!
+                  {:send! (fn [payload]
+                            (swap! !sent-payloads conj payload))
+                   :close! (fn [& _] nil)
+                   :encode (fn [event]
+                             {:wire/event event})
+                   :decode (fn [payload]
+                             (is (= inbound-raw-payload payload))
+                             decoded-event)})]
     (reset! !bridge bthread)
     (b/notify! bthread nil)
-    ((:on-connected @!callbacks))
+    ((:on-connected callbacks))
     (b/notify! bthread {:type :pavlov.web.server/send-event
                         :event semantic-event})
-    ((:on-message @!callbacks) inbound-raw-payload)
-    ((:on-disconnected @!callbacks))
+    ((:on-message callbacks) inbound-raw-payload)
+    ((:on-disconnected callbacks))
     (is (= [encoded-payload]
            @!sent-payloads))
     (is (= [{:type :pavlov.web.server/connected}
