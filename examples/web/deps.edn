@@ -1,0 +1,6 @@
+{:paths ["src" "resources"]
+ :deps {info.sunng/ring-jetty9-adapter {:mvn/version "0.39.2"}
+         metosin/reitit {:mvn/version "0.10.1"}
+         metosin/muuntaja {:mvn/version "0.6.11"}
+         dev.onionpancakes/chassis {:mvn/version "1.0.365"}}
+ :aliases {:test {:extra-paths ["test"]}}}

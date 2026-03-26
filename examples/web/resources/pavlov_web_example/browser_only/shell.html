@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700;900&amp;family=Manrope:wght@200;300;400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+  <script>
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "tertiary-dim": "#2be800",
+            "surface": "#0e0e0e",
+            "primary-container": "#00eefc",
+            "surface-bright": "#2c2c2c",
+            "background": "#0e0e0e",
+            "inverse-surface": "#fcf9f8",
+            "surface-tint": "#8ff5ff",
+            "surface-variant": "#262626",
+            "on-secondary": "#47001d",
+            "on-error-container": "#ffa8a3",
+            "secondary": "#ff6b98",
+            "on-primary-fixed-variant": "#005e64",
+            "surface-dim": "#0e0e0e",
+            "error": "#ff716c",
+            "on-surface": "#ffffff",
+            "primary-fixed-dim": "#00deec",
+            "on-tertiary": "#0d6100",
+            "surface-container-lowest": "#000000",
+            "surface-container-high": "#201f1f",
+            "error-dim": "#d7383b",
+            "on-secondary-fixed": "#6d0030",
+            "on-surface-variant": "#adaaaa",
+            "secondary-container": "#bb0058",
+            "surface-container-low": "#131313",
+            "primary-dim": "#00deec",
+            "tertiary-fixed": "#2ff801",
+            "inverse-primary": "#006a71",
+            "outline-variant": "#484847",
+            "surface-container-highest": "#262626",
+            "on-background": "#ffffff",
+            "secondary-dim": "#e4006c",
+            "inverse-on-surface": "#565555",
+            "tertiary-container": "#2ff801",
+            "on-secondary-container": "#fff5f6",
+            "on-primary-fixed": "#003f43",
+            "outline": "#767575",
+            "on-primary-container": "#005359",
+            "secondary-fixed": "#ffc1ce",
+            "primary": "#8ff5ff",
+            "on-tertiary-container": "#0b5800",
+            "primary-fixed": "#00eefc",
+            "secondary-fixed-dim": "#ffadc0",
+            "on-secondary-fixed-variant": "#a1004b",
+            "tertiary": "#8eff71",
+            "on-primary": "#005d63",
+            "error-container": "#9f0519",
+            "on-error": "#490006",
+            "tertiary-fixed-dim": "#2be800",
+            "on-tertiary-fixed-variant": "#0d6200",
+            "surface-container": "#1a1919",
+            "on-tertiary-fixed": "#064200"
+          },
+          fontFamily: {
+            "headline": ["Space Grotesk"],
+            "body": ["Manrope"],
+            "label": ["Space Grotesk"]
+          },
+          borderRadius: {"DEFAULT": "0px", "lg": "0px", "xl": "0px", "full": "9999px"}
+        }
+      }
+    };
+  </script>
+  <style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    }
+
+    body {
+      background-image: radial-gradient(circle at 2px 2px, rgba(143, 245, 255, 0.05) 1px, transparent 0);
+      background-size: 40px 40px;
+    }
+
+    .scanline {
+      width: 100%;
+      height: 2px;
+      background: rgba(143, 245, 255, 0.1);
+      position: absolute;
+      z-index: 10;
+    }
+
+    .glitch-text {
+      text-shadow: 2px 0 #ff6b98, -2px 0 #8eff71;
+    }
+
+    .grid-bg {
+      background-image: linear-gradient(rgba(143, 245, 255, 0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(143, 245, 255, 0.03) 1px, transparent 1px);
+      background-size: 20px 20px;
+    }
+
+    .sort-toggle .sort-label,
+    .sort-toggle .sort-indicator-up,
+    .sort-toggle .sort-indicator-down {
+      transition: color 150ms ease, opacity 150ms ease;
+    }
+
+    .sort-toggle[data-sort-direction="none"] .sort-label {
+      color: #adaaaa;
+    }
+
+    .sort-toggle[data-sort-direction="none"] .sort-indicator-up,
+    .sort-toggle[data-sort-direction="none"] .sort-indicator-down {
+      color: #767575;
+      opacity: 0.55;
+    }
+
+    .sort-toggle[data-sort-direction="asc"] .sort-label,
+    .sort-toggle[data-sort-direction="desc"] .sort-label {
+      color: #8ff5ff;
+    }
+
+    .sort-toggle[data-sort-direction="asc"] .sort-indicator-up,
+    .sort-toggle[data-sort-direction="desc"] .sort-indicator-down {
+      color: #8ff5ff;
+      opacity: 1;
+    }
+
+    .sort-toggle[data-sort-direction="asc"] .sort-indicator-down,
+    .sort-toggle[data-sort-direction="desc"] .sort-indicator-up {
+      color: #767575;
+      opacity: 0.35;
+    }
+  </style>
+</head>
+<body class="bg-surface text-on-surface font-body selection:bg-primary selection:text-on-primary">
+  <nav class="fixed top-0 left-0 z-50 flex w-full items-center justify-between border-b border-[#484847]/15 bg-[#0e0e0e]/80 px-6 py-4 shadow-[0_0_40px_rgba(143,245,255,0.08)] backdrop-blur-md">
+    <div class="font-headline text-2xl font-black tracking-tighter text-[#8ff5ff]">PAVLOV</div>
+    <div class="hidden items-center gap-8 md:flex">
+      <a class="border-b-2 border-[#8ff5ff] pb-1 font-headline text-sm uppercase tracking-[0.05em] text-[#8ff5ff]" href="#">CORE</a>
+      <a class="font-headline text-sm uppercase tracking-[0.05em] text-[#adaaaa] transition-colors hover:text-[#8ff5ff]" href="#">NEURAL</a>
+      <a class="font-headline text-sm uppercase tracking-[0.05em] text-[#adaaaa] transition-colors hover:text-[#8ff5ff]" href="#">DOCUMENTATION</a>
+      <a class="font-headline text-sm uppercase tracking-[0.05em] text-[#adaaaa] transition-colors hover:text-[#8ff5ff]" href="#">RELEASES</a>
+    </div>
+    <button class="bg-primary px-6 py-2 font-headline text-sm font-bold tracking-widest text-on-primary transition-all hover:bg-primary-container active:scale-95">
+      INITIALIZE
+    </button>
+  </nav>
+
+  <aside class="fixed left-0 top-0 z-40 hidden h-screen w-20 flex-col items-center gap-8 bg-[#131313] py-20 lg:flex">
+    <div class="mb-8 flex flex-col items-center gap-1">
+      <div class="flex h-10 w-10 items-center justify-center border-l-2 border-secondary bg-surface-container-highest">
+        <span class="material-symbols-outlined text-xl text-secondary">pets</span>
+      </div>
+      <span class="font-label text-[0.5rem] tracking-tighter text-[#adaaaa]">K9_UNIT</span>
+    </div>
+    <div class="flex flex-col gap-6">
+      <button class="border-l-2 border-[#8ff5ff] bg-[#262626] p-3 text-[#8ff5ff] transition-all hover:translate-x-1">
+        <span class="material-symbols-outlined">terminal</span>
+      </button>
+      <button class="p-3 text-[#adaaaa] opacity-60 transition-all hover:translate-x-1 hover:bg-[#1a1a1a] hover:opacity-100">
+        <span class="material-symbols-outlined">settings_input_antenna</span>
+      </button>
+      <button class="p-3 text-[#adaaaa] opacity-60 transition-all hover:translate-x-1 hover:bg-[#1a1a1a] hover:opacity-100">
+        <span class="material-symbols-outlined">lan</span>
+      </button>
+      <button class="p-3 text-[#adaaaa] opacity-60 transition-all hover:translate-x-1 hover:bg-[#1a1a1a] hover:opacity-100">
+        <span class="material-symbols-outlined">memory</span>
+      </button>
+    </div>
+    <div class="mt-auto flex flex-col items-center gap-2">
+      <div class="h-1 w-1 bg-tertiary"></div>
+      <div class="h-1 w-1 bg-tertiary"></div>
+      <div class="h-1 w-1 bg-tertiary opacity-30"></div>
+    </div>
+  </aside>
+
+  <main class="pt-20 lg:pl-20" id="browser-only-root">
+    <section class="relative flex min-h-[921px] flex-col items-center justify-center overflow-hidden px-6 py-20">
+      <div class="pointer-events-none absolute right-10 top-20 h-64 w-64 rounded-full border border-primary/10 opacity-20"></div>
+      <div class="pointer-events-none absolute bottom-40 left-10 h-96 w-96 rounded-full border border-secondary/5 opacity-20"></div>
+      <div class="relative z-10 grid w-full max-w-6xl items-center gap-12 md:grid-cols-2">
+        <div class="space-y-8">
+          <div class="inline-flex items-center gap-2 border-l-2 border-tertiary bg-surface-container-highest px-3 py-1">
+            <span class="h-2 w-2 bg-tertiary"></span>
+            <span class="font-label text-[0.6875rem] uppercase tracking-widest text-tertiary">System Status: Optimal</span>
+          </div>
+          <h1 class="font-headline text-6xl font-black leading-tight tracking-tighter text-on-surface md:text-8xl">
+            PAVLOV <span class="italic text-primary">IS HERE</span> <br/>
+            FOR THE <span class="glitch-text text-secondary">WEB</span>
+          </h1>
+          <p class="max-w-md text-lg leading-relaxed text-on-surface-variant">
+            Pavlov brings the behavioral programming paradigm to web applications. Powering dynamic server- or client-driven rich applications.
+          </p>
+          <form class="flex flex-col gap-4" id="simple-web-page-form" pavlov-on-reset=":browser-only/reset">
+            <label class="font-label text-xs uppercase tracking-[0.2em] text-primary/60" for="simple-web-page-input">Initialize Response</label>
+            <div class="relative group">
+              <span class="absolute left-4 top-1/2 -translate-y-1/2 font-label text-tertiary">&gt;_</span>
+              <input class="w-full border-0 border-b-2 border-primary/30 bg-surface-container-highest py-4 pl-12 pr-32 text-xl text-on-surface placeholder:text-outline transition-all focus:border-primary focus:ring-0"
+                     id="simple-web-page-input"
+                     name="simple-web-page-input"
+                     pavlov-on-input=":browser-only/input"
+                     placeholder="so I feel ..."
+                     type="text"/>
+              <button class="absolute right-3 top-1/2 -translate-y-1/2 border border-secondary/40 px-3 py-1 font-label text-[0.65rem] uppercase tracking-[0.2em] text-secondary transition-colors hover:bg-secondary/10"
+                      type="reset">
+                Reset
+              </button>
+              <div class="absolute bottom-0 left-0 h-0.5 w-0 bg-primary transition-all duration-500 group-focus-within:w-full shadow-[0_0_10px_#8ff5ff]"></div>
+            </div>
+          </form>
+        </div>
+
+        <div class="relative flex items-center justify-center">
+          <div class="relative aspect-square w-full max-w-md border border-outline-variant/15 bg-surface-container-low p-1">
+            <div class="absolute -left-2 -top-2 h-6 w-6 border-l-2 border-t-2 border-secondary"></div>
+            <div class="absolute -bottom-2 -right-2 h-6 w-6 border-b-2 border-r-2 border-primary"></div>
+            <div class="group relative h-full w-full overflow-hidden bg-surface">
+              <img class="h-full w-full object-cover opacity-60 grayscale transition-all duration-700 group-hover:grayscale-0" data-alt="Futuristic cybernetic robotic dog with neon blue lights" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD5udweu_Vv09deoR_bXFcXtWlDeKQ5709P_df0_1Tp4JB1egSGUZusmYyta_6ZLsZKAqIy4Yx5Xk0tGZmIWzUYSiSPXk-v00BfXfK1KE2OU2P5sOxzgkRiMyqmV5rjJhORJ0veitbRPWRHipNLN1bRbk7ea0H2nIMJBYmNMFs4kVCIOMdRsOPixAR563JnXU5vvwHTASTacLrDVjx7c-mgar821RhePy1yiy-KzTVlACz7MwDJukgi5_kHFCEI6JK2xH0IfFDKaxk"/>
+              <div class="pointer-events-none absolute inset-0 flex flex-col justify-between p-6">
+                <div class="flex items-start justify-between">
+                  <div class="space-y-1 font-label text-[10px] text-primary">
+                    <p>REF: K9-SYNTH-01</p>
+                    <p>SCAN: 100%</p>
+                  </div>
+                  <div class="text-right font-label text-[10px] text-secondary">
+                    <p>NEURAL_LINK: ACTIVE</p>
+                    <p>LATENCY: 2ms</p>
+                  </div>
+                </div>
+                <div class="h-1/3 w-full border-t border-primary/20 bg-gradient-to-b from-primary/5 to-transparent"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="border-y border-outline-variant/10 bg-surface-container-low px-6 py-32">
+      <div class="mx-auto flex max-w-6xl flex-col items-center gap-12 text-center">
+        <div class="h-1 w-20 bg-secondary shadow-[0_0_15px_#ff6b98]"></div>
+        <h2 class="font-label text-xs uppercase tracking-[0.5em] text-on-surface-variant">Neural Amplification Output</h2>
+        <div class="relative flex min-h-[300px] w-full items-center justify-center">
+          <div class="absolute inset-0 bg-[linear-gradient(rgba(143,245,255,0.05)_1px,transparent_1px),linear-gradient(90deg,rgba(143,245,255,0.05)_1px,transparent_1px)] bg-[size:20px_20px] [mask-image:radial-gradient(ellipse_at_center,black,transparent_80%)]"></div>
+          <div class="relative">
+            <p class="glitch-text select-none font-headline text-7xl font-black uppercase leading-none tracking-tighter text-primary opacity-90 md:text-[10rem]" data-browser-only-status>
+              idle
+            </p>
+            <p class="absolute left-1 top-1 translate-x-1 select-none font-headline text-7xl font-black uppercase leading-none tracking-tighter text-secondary/30 md:text-[10rem]" data-browser-only-status>
+              idle
+            </p>
+          </div>
+        </div>
+        <div class="mt-12 grid w-full gap-8 md:grid-cols-3">
+          <div class="border-t-2 border-primary bg-surface-container-highest p-8">
+            <span class="material-symbols-outlined mb-4 text-primary">bolt</span>
+            <h3 class="mb-2 font-headline text-xl font-bold">ZERO-DEPS</h3>
+            <p class="text-sm text-on-surface-variant">in pavlov core and pavlov web</p>
+          </div>
+          <div class="border-t-2 border-secondary bg-surface-container-highest p-8">
+            <span class="material-symbols-outlined mb-4 text-secondary">security</span>
+            <h3 class="mb-2 font-headline text-xl font-bold">CORRECT</h3>
+            <p class="text-sm text-on-surface-variant">Built in model checking - for free</p>
+          </div>
+          <div class="border-t-2 border-tertiary bg-surface-container-highest p-8">
+            <span class="material-symbols-outlined mb-4 text-tertiary">psychology</span>
+            <h3 class="mb-2 font-headline text-xl font-bold">ULTRA-SIMPLE</h3>
+            <p class="text-sm text-on-surface-variant">Synchronous event driven programming</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="mx-auto max-w-6xl px-6 py-24">
+      <div class="grid-bg relative overflow-hidden border border-outline-variant/20 bg-surface-container-low p-6 md:p-8">
+        <div class="relative z-10 mb-8 flex flex-col items-start justify-between gap-6 md:flex-row md:items-center">
+          <div class="space-y-1">
+            <h3 class="font-headline text-2xl font-black tracking-tight text-on-surface">NEURAL_TELEMETRY_LOG</h3>
+            <p class="font-label text-xs uppercase tracking-widest text-primary/60">Active Node Monitoring Sequence</p>
+          </div>
+          <div class="flex w-full flex-wrap items-center gap-4 md:w-auto">
+            <div class="relative flex-1 md:w-64">
+              <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-sm text-outline">search</span>
+              <input class="w-full border border-outline-variant/30 bg-surface py-2 pl-10 pr-4 font-label text-xs text-on-surface outline-none transition-all focus:border-primary focus:ring-1 focus:ring-primary/20"
+                     id="telemetry-grid-search"
+                     pavlov-capture-selector="#telemetry-grid-body > [data-grid-row]"
+                     pavlov-on-input=":grid/search-input"
+                     placeholder="FILTER_STREAM..."
+                     type="text"/>
+            </div>
+            <div class="flex items-center gap-2">
+              <button class="flex items-center gap-2 border border-outline-variant/30 bg-surface-container-highest px-4 py-2 font-label text-[10px] tracking-widest text-on-surface-variant transition-all hover:border-primary/50 hover:text-primary">
+                <span class="material-symbols-outlined text-sm">download</span>
+                EXPORT
+              </button>
+              <button class="border border-outline-variant/30 bg-surface-container-highest p-2 text-on-surface-variant transition-all hover:border-secondary/50 hover:text-secondary">
+                <span class="material-symbols-outlined text-sm">settings</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="relative z-10 overflow-x-auto">
+          <table class="w-full border-collapse" id="telemetry-grid">
+            <thead>
+              <tr class="border-b border-outline-variant/30 bg-surface-container-high/50">
+                <th class="p-4 text-left">
+                  <button class="sort-toggle group flex items-center gap-2 text-left"
+                          data-sort-direction="asc"
+                          id="sort-node-id"
+                          pavlov-grid-body-selector="#telemetry-grid-body"
+                          pavlov-grid-id="telemetry"
+                          pavlov-on-click=":grid/sort-clicked"
+                          pavlov-sort-default-direction="asc"
+                          pavlov-sort-key="node-id"
+                          pavlov-sort-type="string"
+                          pavlov-capture-selector="#telemetry-grid-body > [data-grid-row], #telemetry-grid-body > [data-grid-row] > [pavlov-node-id-sort-value]"
+                          type="button">
+                    <span class="sort-label font-label text-[10px] uppercase tracking-[0.2em]">Node ID</span>
+                    <div class="flex flex-col -space-y-1">
+                      <span class="sort-indicator-up material-symbols-outlined text-[10px] leading-none">arrow_drop_up</span>
+                      <span class="sort-indicator-down material-symbols-outlined text-[10px] leading-none">arrow_drop_down</span>
+                    </div>
+                  </button>
+                </th>
+                <th class="p-4 text-left">
+                  <button class="sort-toggle group flex items-center gap-2 text-left"
+                          data-sort-direction="none"
+                          id="sort-latency"
+                          pavlov-grid-body-selector="#telemetry-grid-body"
+                          pavlov-grid-id="telemetry"
+                          pavlov-on-click=":grid/sort-clicked"
+                          pavlov-sort-default-direction="asc"
+                          pavlov-sort-key="latency"
+                          pavlov-sort-type="number"
+                          pavlov-capture-selector="#telemetry-grid-body > [data-grid-row], #telemetry-grid-body > [data-grid-row] > [pavlov-latency-sort-value]"
+                          type="button">
+                    <span class="sort-label font-label text-[10px] uppercase tracking-[0.2em]">Latency</span>
+                    <div class="flex flex-col -space-y-1">
+                      <span class="sort-indicator-up material-symbols-outlined text-[10px] leading-none">arrow_drop_up</span>
+                      <span class="sort-indicator-down material-symbols-outlined text-[10px] leading-none">arrow_drop_down</span>
+                    </div>
+                  </button>
+                </th>
+                <th class="p-4 text-left">
+                  <button class="sort-toggle group flex items-center gap-2 text-left"
+                          data-sort-direction="none"
+                          id="sort-protocol"
+                          pavlov-grid-body-selector="#telemetry-grid-body"
+                          pavlov-grid-id="telemetry"
+                          pavlov-on-click=":grid/sort-clicked"
+                          pavlov-sort-default-direction="asc"
+                          pavlov-sort-key="protocol"
+                          pavlov-sort-type="string"
+                          pavlov-capture-selector="#telemetry-grid-body > [data-grid-row], #telemetry-grid-body > [data-grid-row] > [pavlov-protocol-sort-value]"
+                          type="button">
+                    <span class="sort-label font-label text-[10px] uppercase tracking-[0.2em]">Protocol</span>
+                    <div class="flex flex-col -space-y-1">
+                      <span class="sort-indicator-up material-symbols-outlined text-[10px] leading-none">arrow_drop_up</span>
+                      <span class="sort-indicator-down material-symbols-outlined text-[10px] leading-none">arrow_drop_down</span>
+                    </div>
+                  </button>
+                </th>
+                <th class="p-4 text-left">
+                  <button class="sort-toggle group flex items-center gap-2 text-left"
+                          data-sort-direction="none"
+                          id="sort-status-rank"
+                          pavlov-grid-body-selector="#telemetry-grid-body"
+                          pavlov-grid-id="telemetry"
+                          pavlov-on-click=":grid/sort-clicked"
+                          pavlov-sort-default-direction="asc"
+                          pavlov-sort-key="status-rank"
+                          pavlov-sort-type="number"
+                          pavlov-capture-selector="#telemetry-grid-body > [data-grid-row], #telemetry-grid-body > [data-grid-row] > [pavlov-status-rank-sort-value]"
+                          type="button">
+                    <span class="sort-label font-label text-[10px] uppercase tracking-[0.2em]">Status</span>
+                    <div class="flex flex-col -space-y-1">
+                      <span class="sort-indicator-up material-symbols-outlined text-[10px] leading-none">arrow_drop_up</span>
+                      <span class="sort-indicator-down material-symbols-outlined text-[10px] leading-none">arrow_drop_down</span>
+                    </div>
+                  </button>
+                </th>
+                <th class="p-4 text-right">
+                  <button class="sort-toggle group ml-auto flex items-center justify-end gap-2 text-right"
+                          data-sort-direction="none"
+                          id="sort-security-rank"
+                          pavlov-grid-body-selector="#telemetry-grid-body"
+                          pavlov-grid-id="telemetry"
+                          pavlov-on-click=":grid/sort-clicked"
+                          pavlov-sort-default-direction="desc"
+                          pavlov-sort-key="security-rank"
+                          pavlov-sort-type="number"
+                          pavlov-capture-selector="#telemetry-grid-body > [data-grid-row], #telemetry-grid-body > [data-grid-row] > [pavlov-security-rank-sort-value]"
+                          type="button">
+                    <span class="sort-label font-label text-[10px] uppercase tracking-[0.2em]">Security</span>
+                    <div class="flex flex-col -space-y-1">
+                      <span class="sort-indicator-up material-symbols-outlined text-[10px] leading-none">arrow_drop_up</span>
+                      <span class="sort-indicator-down material-symbols-outlined text-[10px] leading-none">arrow_drop_down</span>
+                    </div>
+                  </button>
+                </th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-outline-variant/10" data-grid-body data-grid-id="telemetry" id="telemetry-grid-body">
+              <tr class="group transition-colors hover:bg-primary/5"
+                  data-grid-id="telemetry"
+                  data-grid-row
+                  pavlov-search-value="SYNTH-NODE-001 active encrypted pavlov/udp stable"
+                  id="telemetry-row-001">
+                <td class="border-l-2 border-transparent p-4 font-label text-xs text-on-surface group-hover:border-primary"
+                    pavlov-node-id-sort-value="SYNTH-NODE-001">SYNTH-NODE-001</td>
+                <td class="p-4 font-label text-xs text-tertiary"
+                    pavlov-latency-sort-value="0.82">0.82 ms</td>
+                <td class="p-4 font-label text-xs text-on-surface-variant"
+                    pavlov-protocol-sort-value="PAVLOV/UDP">PAVLOV/UDP</td>
+                <td class="p-4"
+                    pavlov-status-rank-sort-value="1">
+                  <span class="inline-flex items-center gap-1.5 border border-tertiary/30 bg-tertiary/10 px-2 py-0.5 font-label text-[9px] uppercase text-tertiary">Active</span>
+                </td>
+                <td class="p-4 text-right font-label text-xs text-secondary"
+                    pavlov-security-rank-sort-value="5">L5_ENCRYPTED</td>
+              </tr>
+              <tr class="group transition-colors hover:bg-primary/5"
+                  data-grid-id="telemetry"
+                  data-grid-row
+                  pavlov-search-value="SYNTH-NODE-002 active encrypted pavlov/grpc stable"
+                  id="telemetry-row-002">
+                <td class="border-l-2 border-transparent p-4 font-label text-xs text-on-surface group-hover:border-primary"
+                    pavlov-node-id-sort-value="SYNTH-NODE-002">SYNTH-NODE-002</td>
+                <td class="p-4 font-label text-xs text-tertiary"
+                    pavlov-latency-sort-value="1.14">1.14 ms</td>
+                <td class="p-4 font-label text-xs text-on-surface-variant"
+                    pavlov-protocol-sort-value="PAVLOV/GRPC">PAVLOV/GRPC</td>
+                <td class="p-4"
+                    pavlov-status-rank-sort-value="1">
+                  <span class="inline-flex items-center gap-1.5 border border-tertiary/30 bg-tertiary/10 px-2 py-0.5 font-label text-[9px] uppercase text-tertiary">Active</span>
+                </td>
+                <td class="p-4 text-right font-label text-xs text-secondary"
+                    pavlov-security-rank-sort-value="5">L5_ENCRYPTED</td>
+              </tr>
+              <tr class="group bg-surface-container-high/20 transition-colors hover:bg-primary/5"
+                  data-grid-id="telemetry"
+                  data-grid-row
+                  pavlov-search-value="SYNTH-NODE-042 syncing degraded pavlov/tcp l4_partial"
+                  id="telemetry-row-042">
+                <td class="border-l-2 border-primary p-4 font-label text-xs text-on-surface"
+                    pavlov-node-id-sort-value="SYNTH-NODE-042">SYNTH-NODE-042</td>
+                <td class="p-4 font-label text-xs text-secondary"
+                    pavlov-latency-sort-value="12.5">12.5 ms</td>
+                <td class="p-4 font-label text-xs text-on-surface-variant"
+                    pavlov-protocol-sort-value="PAVLOV/TCP">PAVLOV/TCP</td>
+                <td class="p-4"
+                    pavlov-status-rank-sort-value="2">
+                  <span class="inline-flex items-center gap-1.5 border border-secondary/30 bg-secondary/10 px-2 py-0.5 font-label text-[9px] uppercase text-secondary">Syncing</span>
+                </td>
+                <td class="p-4 text-right font-label text-xs text-secondary"
+                    pavlov-security-rank-sort-value="4">L4_PARTIAL</td>
+              </tr>
+              <tr class="group transition-colors hover:bg-primary/5"
+                  data-grid-id="telemetry"
+                  data-grid-row
+                  pavlov-search-value="SYNTH-NODE-099 active encrypted pavlov/udp stable"
+                  id="telemetry-row-099">
+                <td class="border-l-2 border-transparent p-4 font-label text-xs text-on-surface group-hover:border-primary"
+                    pavlov-node-id-sort-value="SYNTH-NODE-099">SYNTH-NODE-099</td>
+                <td class="p-4 font-label text-xs text-tertiary"
+                    pavlov-latency-sort-value="0.45">0.45 ms</td>
+                <td class="p-4 font-label text-xs text-on-surface-variant"
+                    pavlov-protocol-sort-value="PAVLOV/UDP">PAVLOV/UDP</td>
+                <td class="p-4"
+                    pavlov-status-rank-sort-value="1">
+                  <span class="inline-flex items-center gap-1.5 border border-tertiary/30 bg-tertiary/10 px-2 py-0.5 font-label text-[9px] uppercase text-tertiary">Active</span>
+                </td>
+                <td class="p-4 text-right font-label text-xs text-secondary"
+                    pavlov-security-rank-sort-value="5">L5_ENCRYPTED</td>
+              </tr>
+              <tr class="group transition-colors hover:bg-primary/5"
+                  data-grid-id="telemetry"
+                  data-grid-row
+                  pavlov-search-value="SYNTH-NODE-105 active encrypted pavlov/ws websocket"
+                  id="telemetry-row-105">
+                <td class="border-l-2 border-transparent p-4 font-label text-xs text-on-surface group-hover:border-primary"
+                    pavlov-node-id-sort-value="SYNTH-NODE-105">SYNTH-NODE-105</td>
+                <td class="p-4 font-label text-xs text-tertiary"
+                    pavlov-latency-sort-value="0.98">0.98 ms</td>
+                <td class="p-4 font-label text-xs text-on-surface-variant"
+                    pavlov-protocol-sort-value="PAVLOV/WS">PAVLOV/WS</td>
+                <td class="p-4"
+                    pavlov-status-rank-sort-value="1">
+                  <span class="inline-flex items-center gap-1.5 border border-tertiary/30 bg-tertiary/10 px-2 py-0.5 font-label text-[9px] uppercase text-tertiary">Active</span>
+                </td>
+                <td class="p-4 text-right font-label text-xs text-secondary"
+                    pavlov-security-rank-sort-value="5">L5_ENCRYPTED</td>
+              </tr>
+              <tr class="group transition-colors hover:bg-primary/5"
+                  data-grid-id="telemetry"
+                  data-grid-row
+                  pavlov-search-value="SYNTH-NODE-211 offline timeout none null"
+                  id="telemetry-row-211">
+                <td class="border-l-2 border-transparent p-4 font-label text-xs text-on-surface group-hover:border-primary"
+                    pavlov-node-id-sort-value="SYNTH-NODE-211">SYNTH-NODE-211</td>
+                <td class="p-4 font-label text-xs italic text-on-surface-variant opacity-50"
+                    pavlov-latency-sort-value="9999">-- timeout --</td>
+                <td class="p-4 font-label text-xs text-on-surface-variant"
+                    pavlov-protocol-sort-value="NONE">NONE</td>
+                <td class="p-4"
+                    pavlov-status-rank-sort-value="3">
+                  <span class="inline-flex items-center gap-1.5 border border-error/30 bg-error/10 px-2 py-0.5 font-label text-[9px] uppercase text-error">Offline</span>
+                </td>
+                <td class="p-4 text-right font-label text-xs text-error"
+                    pavlov-security-rank-sort-value="0">NULL</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="relative z-10 mt-8 flex flex-col gap-6 border-t border-outline-variant/30 pt-6 md:flex-row md:items-center md:justify-between">
+          <div class="flex flex-wrap gap-8">
+            <div class="flex flex-col">
+              <span class="font-label text-[8px] uppercase tracking-[0.2em] text-on-surface-variant">Total_Throughput</span>
+              <span class="font-headline text-lg font-bold text-primary">84.2 GB/S</span>
+            </div>
+            <div class="flex flex-col">
+              <span class="font-label text-[8px] uppercase tracking-[0.2em] text-on-surface-variant">Error_Rate</span>
+              <span class="font-headline text-lg font-bold text-secondary">0.002%</span>
+            </div>
+          </div>
+          <div class="flex items-center gap-4 self-start md:self-auto">
+            <span class="font-label text-[10px] text-on-surface-variant">PAGE 1 OF 12</span>
+            <div class="flex gap-1">
+              <button class="flex h-8 w-8 items-center justify-center border border-outline-variant/30 bg-surface-container-highest text-on-surface-variant transition-all hover:text-primary">
+                <span class="material-symbols-outlined text-sm">chevron_left</span>
+              </button>
+              <button class="flex h-8 w-8 items-center justify-center border border-outline-variant/30 bg-surface-container-highest text-on-surface-variant transition-all hover:text-primary">
+                <span class="material-symbols-outlined text-sm">chevron_right</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="absolute right-0 top-0 h-12 w-12 bg-gradient-to-bl from-primary/10 to-transparent"></div>
+        <div class="absolute bottom-0 left-0 h-1 w-24 bg-primary/40"></div>
+      </div>
+    </section>
+  </main>
+
+  <div class="scanline top-1/4 animate-pulse opacity-20 pointer-events-none"></div>
+  <div class="scanline bottom-1/4 animate-pulse opacity-10 pointer-events-none"></div>
+  <script src="/js/main.js?v=snazzy-demo-1"></script>
+</body>
+</html>
