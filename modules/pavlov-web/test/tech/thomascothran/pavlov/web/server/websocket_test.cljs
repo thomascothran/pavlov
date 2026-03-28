@@ -4,40 +4,48 @@
             [tech.thomascothran.pavlov.web.server :as server]
             [tech.thomascothran.pavlov.web.server.websocket :as websocket]))
 
-(deftest make-browser-websocket-transport-connect-creates-websocket-and-wires-bridge-callbacks
+(deftest make-browser-websocket-transport-connect-omits-protocols-argument-when-not-configured
   (let [url "wss://example.test/ws"
-        protocols #js ["pavlov.edn" "pavlov.v1"]
-        fake-socket (js-obj)
-        !factory-calls (atom [])
-        !connected-calls (atom 0)
-        !message-payloads (atom [])
-        !disconnected-calls (atom 0)
-        transport (websocket/make-browser-websocket-transport
-                   {:url url
-                    :protocols protocols
-                    :websocket-factory (fn [configured-url configured-protocols]
-                                         (swap! !factory-calls conj [configured-url configured-protocols])
-                                         fake-socket)})
-        connection ((:connect! transport)
-                    {:on-connected (fn []
-                                     (swap! !connected-calls inc))
-                     :on-message (fn [payload]
-                                   (swap! !message-payloads conj payload))
-                     :on-disconnected (fn []
-                                        (swap! !disconnected-calls inc))})]
+         fake-socket (js-obj)
+         !factory-calls (atom [])
+         transport (websocket/make-browser-websocket-transport
+                    {:url url
+                     :websocket-factory (fn [& args]
+                                          (swap! !factory-calls conj args)
+                                          fake-socket)})]
+    ((:connect! transport))
+    (is (= [[url]]
+           @!factory-calls))))
+
+(deftest make-browser-websocket-transport-connect-creates-websocket-and-internally-wires-bridge-events
+  (let [url "wss://example.test/ws"
+         protocols #js ["pavlov.edn" "pavlov.v1"]
+         fake-socket (js-obj)
+         !factory-calls (atom [])
+         !submitted-events (atom [])
+         transport (websocket/make-browser-websocket-transport
+                    {:url url
+                     :protocols protocols
+                     :submit-event! (fn [event]
+                                      (swap! !submitted-events conj event))
+                     :websocket-factory (fn [configured-url configured-protocols]
+                                          (swap! !factory-calls conj [configured-url configured-protocols])
+                                          fake-socket)})
+         connection ((:connect! transport))]
     (is (= [[url protocols]]
-           @!factory-calls))
+            @!factory-calls))
     (is (identical? fake-socket connection))
     (when-let [onopen (.-onopen fake-socket)]
       (onopen))
     (when-let [onmessage (.-onmessage fake-socket)]
       (onmessage #js {:data "raw inbound payload"}))
     (when-let [onclose (.-onclose fake-socket)]
-      (onclose))
-    (is (= 1 @!connected-calls))
-     (is (= ["raw inbound payload"]
-            @!message-payloads))
-     (is (= 1 @!disconnected-calls))))
+       (onclose))
+    (is (= [{:type :pavlov.web.server/connected}
+            {:type :pavlov.web.server/event-received
+             :event "raw inbound payload"}
+            {:type :pavlov.web.server/disconnected}]
+           @!submitted-events))))
 
 (deftest make-browser-websocket-transport-send!-uses-created-websocket-after-connect
   (let [fake-socket (js-obj)
@@ -45,14 +53,12 @@
         _ (aset fake-socket "send"
                 (fn [payload]
                   (swap! !sent-payloads conj payload)))
-        transport (websocket/make-browser-websocket-transport
-                   {:url "wss://example.test/ws"
-                    :websocket-factory (fn [_url _protocols]
-                                         fake-socket)})]
-    ((:connect! transport)
-     {:on-connected (fn [])
-      :on-message (fn [_payload])
-      :on-disconnected (fn [])})
+         transport (websocket/make-browser-websocket-transport
+                    {:url "wss://example.test/ws"
+                     :submit-event! (fn [_event] nil)
+                     :websocket-factory (fn [_url _protocols]
+                                          fake-socket)})]
+    ((:connect! transport))
     (when-let [onopen (.-onopen fake-socket)]
      (onopen))
      ((:send! transport) "outbound payload")
@@ -133,8 +139,13 @@
         _ (aset second-socket "send"
                 (fn [payload]
                   (swap! !sent-payloads conj [:second payload])))
+        submit-event! (fn [event]
+                        (swap! !submitted-events conj event)
+                        (when-let [bridge @!bridge]
+                          (b/notify! bridge event)))
         transport (websocket/make-browser-websocket-transport
                    {:url url
+                    :submit-event! submit-event!
                     :websocket-factory (fn [configured-url configured-protocols]
                                          (swap! !factory-calls conj [configured-url configured-protocols])
                                          (if (= 1 (count @!factory-calls))
@@ -145,12 +156,7 @@
                     :decode (fn [payload]
                               (is (= inbound-raw-payload payload))
                               decoded-event)})
-        submit-event! (fn [event]
-                        (swap! !submitted-events conj event)
-                        (when-let [bridge @!bridge]
-                          (b/notify! bridge event)))
-        callbacks (server/make-server-bridge-callbacks submit-event! (:decode transport))
-        _ ((:connect! transport) callbacks)
+        _ ((:connect! transport))
         bridge (server/make-server-bridge-bthread submit-event! transport)]
     (reset! !bridge bridge)
     (is (= [[url nil]]

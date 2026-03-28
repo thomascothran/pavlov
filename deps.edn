@@ -14,5 +14,6 @@
                      info.sunng/ring-jetty9-adapter {:mvn/version "0.39.0"}
                      cider/piggieback {:mvn/version "0.4.2"}
                      org.clojure/clojure {:mvn/version "1.12.1"}
-                     thheller/shadow-cljs {:mvn/version "3.3.6"}}
+                     thheller/shadow-cljs {:mvn/version "3.3.6"}
+                     etaoin/etaoin {:mvn/version "1.1.43"}}
         :extra-paths ["dev"]}}}

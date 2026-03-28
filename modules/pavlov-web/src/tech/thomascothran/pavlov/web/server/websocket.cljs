@@ -1,7 +1,20 @@
 (ns tech.thomascothran.pavlov.web.server.websocket)
 
-(defn- default-websocket-factory [url protocols]
-  (js/WebSocket. url protocols))
+(defn- submit-connected! [submit-event!]
+  (submit-event! {:type :pavlov.web.server/connected}))
+
+(defn- submit-disconnected! [submit-event!]
+  (submit-event! {:type :pavlov.web.server/disconnected}))
+
+(defn- submit-received! [submit-event! decode raw-payload]
+  (submit-event! {:type :pavlov.web.server/event-received
+                  :event (decode raw-payload)}))
+
+(defn- default-websocket-factory
+  ([url]
+   (js/WebSocket. url))
+  ([url protocols]
+   (js/WebSocket. url protocols)))
 
 (defn make-browser-websocket-transport
   "Builds the browser-specific transport map consumed by the generic server
@@ -35,26 +48,37 @@
       :protocols #js [\"pavlov\"]
       :encode js/JSON.stringify
       :decode js/JSON.parse})`"
-  [{:keys [url protocols websocket websocket-factory encode decode]
-     :or {encode identity
-          decode identity
-          websocket-factory default-websocket-factory}}]
-  (let [!socket (atom websocket)]
-    {:connect! (fn [{:keys [on-connected on-message on-disconnected]}]
-                 (let [socket (websocket-factory url protocols)]
-                   (reset! !socket socket)
-                   (set! (.-onopen socket)
-                         (fn [& _]
-                           (on-connected)))
-                   (set! (.-onmessage socket)
-                         (fn [event]
-                           (on-message (.-data event))))
-                   (set! (.-onclose socket)
-                         (fn [& _]
-                           (on-disconnected)))
-                   socket))
-     :send! (fn [payload]
-              (.send @!socket payload))
-    :close! (fn [] nil)
-    :encode encode
-     :decode decode}))
+  [{:keys [url protocols websocket !websocket submit-event! websocket-factory encode decode]
+      :or {encode identity
+           decode identity
+           submit-event! (fn [_] nil)
+           websocket-factory default-websocket-factory}}]
+  (let [!socket (or !websocket (atom websocket))]
+    {:connect! (fn []
+                  (let [socket (if (some? protocols)
+                                 (websocket-factory url protocols)
+                                 (try
+                                   (websocket-factory url)
+                                   (catch :default _
+                                     (websocket-factory url protocols))))]
+                    (set! (.-onopen socket)
+                          (fn [& _]
+                            (reset! !socket socket)
+                            (submit-connected! submit-event!)))
+                    (set! (.-onmessage socket)
+                          (fn [event]
+                            (submit-received! submit-event! decode (.-data event))))
+                    (set! (.-onclose socket)
+                          (fn [& _]
+                            (reset! !socket nil)
+                            (submit-disconnected! submit-event!)))
+                    socket))
+      :send! (fn
+               ([payload]
+                (.send @!socket payload))
+               ([socket payload]
+                (.send socket payload)))
+      :close! (fn [] nil)
+     :encode encode
+      :!websocket !socket
+      :decode decode}))

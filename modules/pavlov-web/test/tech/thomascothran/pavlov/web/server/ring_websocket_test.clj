@@ -4,14 +4,20 @@
             [tech.thomascothran.pavlov.web.server :as server]
             [tech.thomascothran.pavlov.web.server.ring-websocket :as ring-websocket]))
 
+(deftest shared-server-bridge-api-does-not-expose-callback-helper-plumbing
+  (is (not (contains? (ns-publics 'tech.thomascothran.pavlov.web.server)
+                      'make-server-bridge-callbacks))))
+
 (deftest make-ring-websocket-adapter-returns-explicit-ring-listener-and-bridge-seams
   (let [send! (fn [_ws _payload])
         adapter (ring-websocket/make-ring-websocket-adapter
                  {:send! send!
-                   :encode (fn [event]
-                             {:wire/event event})
-                   :decode (fn [payload]
-                             {:decoded payload})})]
+                  :encode (fn [event]
+                            {:wire/event event})
+                  :send-websocket! (constantly :ok)
+                  :submit-event! (constantly :ok)
+                  :decode (fn [payload]
+                            {:decoded payload})})]
     (testing "the adapter exposes an explicit Ring listener seam"
       (is (map? (:listener adapter)))
       (is (fn? (get-in adapter [:listener :on-open])))
@@ -23,6 +29,39 @@
       (is (contains? (:bridge-opts adapter) :send!))
       (is (identical? send!
                       (get-in adapter [:bridge-opts :send!]))))))
+
+(deftest make-ring-websocket-adapter-internally-manages-listeners-around-shared-websocket-cell
+  (let [fake-websocket-handle {:websocket/id "fake-ws"}
+        raw-payload {:wire/event {:type :task.event/created
+                                  :task/id 123}}
+        decoded-event {:type :task.event/created
+                       :task/id 123}
+        !submitted-events (atom [])
+        !decoded-payloads (atom [])
+        adapter (ring-websocket/make-ring-websocket-adapter
+                 {:submit-event! (fn [event]
+                                   (swap! !submitted-events conj event))
+                  :send-websocket! (constantly :ok)
+                  :decode (fn [payload]
+                            (swap! !decoded-payloads conj payload)
+                            decoded-event)})
+        !websocket (get-in adapter [:bridge-opts :!websocket])]
+    (is (some? !websocket))
+    (is (nil? @!websocket))
+    ((get-in adapter [:listener :on-open]) fake-websocket-handle)
+    (is (identical? fake-websocket-handle @!websocket)
+        "on-open should capture the live websocket handle into :!websocket")
+    ((get-in adapter [:listener :on-message]) fake-websocket-handle raw-payload)
+    ((get-in adapter [:listener :on-close]) fake-websocket-handle 1000 "normal closure")
+    (is (= [raw-payload]
+           @!decoded-payloads))
+    (is (= [{:type :pavlov.web.server/connected}
+            {:type :pavlov.web.server/event-received
+             :event decoded-event}
+            {:type :pavlov.web.server/disconnected}]
+           @!submitted-events))
+    (is (nil? @!websocket)
+        "on-close should clear :!websocket")))
 
 (deftest make-ring-websocket-adapter-on-open-captures-websocket-for-bridge-sends
   (let [fake-websocket-handle {:websocket/id "fake-ws"}
@@ -43,9 +82,9 @@
            @!submitted-events))
     (is (fn? bridge-send!))
     (when (fn? bridge-send!)
-     (bridge-send! outbound-payload))
-     (is (= [[fake-websocket-handle outbound-payload]]
-            @!send-websocket-calls))))
+      (bridge-send! outbound-payload))
+    (is (= [[fake-websocket-handle outbound-payload]]
+           @!send-websocket-calls))))
 
 (deftest make-ring-websocket-adapter-on-message-decodes-and-submits-shared-event-received
   (let [fake-websocket-handle {:websocket/id "fake-ws"}
@@ -58,6 +97,7 @@
         adapter (ring-websocket/make-ring-websocket-adapter
                  {:submit-event! (fn [event]
                                    (swap! !submitted-events conj event))
+                  :send-websocket! (constantly :ok)
                   :decode (fn [payload]
                             (swap! !decoded-payloads conj payload)
                             decoded-event)})]
@@ -65,7 +105,7 @@
     (is (= [raw-payload]
            @!decoded-payloads))
     (is (= [{:type :pavlov.web.server/event-received
-              :event decoded-event}]
+             :event decoded-event}]
            @!submitted-events))))
 
 (deftest make-ring-websocket-adapter-on-close-submits-disconnected-and-clears-captured-websocket
@@ -88,9 +128,9 @@
     (bridge-send! outbound-payload)
     (is (= [{:type :pavlov.web.server/connected}
             {:type :pavlov.web.server/disconnected}]
-            @!submitted-events))
-      (is (= [[fake-websocket-handle outbound-payload]]
-            @!send-websocket-calls))))
+           @!submitted-events))
+    (is (= [[fake-websocket-handle outbound-payload]]
+           @!send-websocket-calls))))
 
 (deftest make-ring-websocket-adapter-on-error-calls-adapter-local-hook-without-submitting-public-event
   (let [fake-websocket-handle {:websocket/id "fake-ws"}
@@ -103,6 +143,7 @@
                   :submit-event! (fn [event]
                                    (swap! !submitted-events conj event))
                   :encode identity
+                  :send-websocket! (constantly :ok)
                   :decode identity})]
     ((get-in adapter [:listener :on-error]) fake-websocket-handle fake-error)
     (is (= [[fake-websocket-handle fake-error]]
@@ -117,6 +158,7 @@
         adapter (ring-websocket/make-ring-websocket-adapter
                  {:submit-event! (fn [event]
                                    (swap! !submitted-events conj event))
+                  :send-websocket! (constantly :ok)
                   :encode identity
                   :decode identity})]
     ((get-in adapter [:listener :on-open]) fake-websocket-handle)

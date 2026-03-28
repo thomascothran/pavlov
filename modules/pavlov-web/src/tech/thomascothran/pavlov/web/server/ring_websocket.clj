@@ -1,11 +1,7 @@
-(ns tech.thomascothran.pavlov.web.server.ring-websocket
-  (:require [tech.thomascothran.pavlov.web.server :as server]))
-
-(defn- noop
-  [& _])
+(ns tech.thomascothran.pavlov.web.server.ring-websocket)
 
 (def ^:private shared-bridge-opt-keys
-  [:connect! :send! :_close! :encode :decode])
+  [:connect! :send! :close! :encode :decode :!websocket])
 
 (defn- make-bridge-opts
   "Returns only the shared bridge options exposed past the Ring adapter seam."
@@ -14,32 +10,37 @@
     bridge-send! (assoc :send! bridge-send!)))
 
 (defn make-ring-websocket-adapter
-  "Builds a thin Ring websocket adapter around the shared server bridge callbacks.
+  "Builds a thin Ring websocket adapter around the shared server bridge seam.
 
-  Ring owns websocket lifecycle delivery, so this adapter captures the runtime
-  websocket handle on open and delegates the shared bridge event mapping to
-  `server/make-server-bridge-callbacks` instead of re-encoding it locally."
+  Ring owns websocket lifecycle delivery, so this adapter keeps listener wiring
+  local: it captures the runtime websocket handle, maintains `:!websocket`, and
+  submits the shared Pavlov bridge events directly."
   [opts]
   (let [!websocket (atom nil)
-        submit-event! (or (:submit-event! opts) noop)
-        bridge-callbacks (server/make-server-bridge-callbacks submit-event!
-                                                              (or (:decode opts)
-                                                                  identity))
-        send-websocket! (:send-websocket! opts)
-        on-error! (or (:on-error! opts) noop)
+        submit-event! (get opts :submit-event!)
+        _ (assert (fn? submit-event!))
+        decode (get opts :decode identity)
+        send-websocket! (get opts :send-websocket!)
+        _ (assert (fn? send-websocket!))
+        on-error! (or (:on-error! opts) (constantly :error))
         bridge-send! (or (:send! opts)
                          (when send-websocket!
-                           (fn [payload]
-                             (when-let [websocket @!websocket]
-                               (send-websocket! websocket payload)))))]
+                           (fn
+                             ([payload]
+                              (when-let [websocket @!websocket]
+                                (send-websocket! websocket payload)))
+                             ([websocket payload]
+                              (send-websocket! websocket payload)))))]
     {:listener {:on-open (fn [websocket]
                            (reset! !websocket websocket)
-                           ((:on-connected bridge-callbacks) websocket))
+                           (submit-event! {:type :pavlov.web.server/connected}))
                 :on-message (fn [_websocket raw-payload]
-                              ((:on-message bridge-callbacks) raw-payload))
+                              (submit-event! {:type :pavlov.web.server/event-received
+                                              :event (decode raw-payload)}))
                 :on-close (fn [_websocket _status-code _reason]
                             (reset! !websocket nil)
-                            ((:on-disconnected bridge-callbacks)))
+                            (submit-event! {:type :pavlov.web.server/disconnected}))
                 :on-error (fn [websocket error]
                             (on-error! websocket error))}
-     :bridge-opts (make-bridge-opts opts bridge-send!)}))
+     :bridge-opts (make-bridge-opts (assoc opts :!websocket !websocket)
+                                    bridge-send!)}))
