@@ -1,11 +1,14 @@
 (ns pavlov-web-example.game-of-life.page
   (:require [dev.onionpancakes.chassis.core :as chassis]))
 
+(def ^:private cell-size-px 12)
+(def ^:private cell-gap-px 2)
+
 (def ^:private tailwind-config-script
   "tailwind.config = {\n  darkMode: \"class\",\n  theme: {\n    extend: {\n      colors: {\n        background: \"#0e0e0e\",\n        primary: \"#8ff5ff\",\n        secondary: \"#ff6b98\",\n        tertiary: \"#8eff71\",\n        surface: \"#0e0e0e\",\n        \"surface-container-low\": \"#131313\",\n        \"surface-container-highest\": \"#262626\",\n        \"on-surface\": \"#ffffff\",\n        \"on-surface-variant\": \"#adaaaa\",\n        outline: \"#767575\",\n        \"outline-variant\": \"#484847\"\n      },\n      fontFamily: {\n        headline: [\"Space Grotesk\"],\n        body: [\"Manrope\"],\n        label: [\"Space Grotesk\"]\n      },\n      borderRadius: {\n        DEFAULT: \"0rem\",\n        lg: \"0rem\",\n        xl: \"0rem\",\n        full: \"9999px\"\n      }\n    }\n  }\n}")
 
 (def ^:private style-text
-  "body {\n  margin: 0;\n  background-image: radial-gradient(circle at 50% 50%, rgba(38, 38, 38, 0.3) 0%, rgba(14, 14, 14, 1) 100%);\n  cursor: crosshair;\n}\n\n.scanline {\n  width: 100%;\n  height: 100px;\n  z-index: 10;\n  background: linear-gradient(0deg, rgba(143, 245, 255, 0) 0%, rgba(143, 245, 255, 0.05) 50%, rgba(143, 245, 255, 0) 100%);\n  position: absolute;\n  pointer-events: none;\n}\n\n.game-of-life-status {\n  background: #131313;\n  padding: 0.75rem 1rem;\n  font-family: \"Space Grotesk\", sans-serif;\n  font-size: 0.75rem;\n  letter-spacing: 0.2em;\n  text-transform: uppercase;\n}\n\n.game-of-life-status--running {\n  color: #8eff71;\n  box-shadow: inset 3px 0 0 #8eff71;\n}\n\n.game-of-life-status--paused {\n  color: #adaaaa;\n  box-shadow: inset 3px 0 0 rgba(118, 117, 117, 0.5);\n}\n\n[data-game-of-life-board] {\n  display: grid;\n  gap: 0.5rem;\n  padding: 0.75rem;\n  background: #0e0e0e;\n}\n\n.game-of-life-cell {\n  width: 4.5rem;\n  height: 4.5rem;\n  border: 0;\n  font-family: \"Space Grotesk\", sans-serif;\n  font-size: 1.5rem;\n  font-weight: 700;\n  cursor: pointer;\n  transition: background-color 150ms ease, box-shadow 150ms ease, color 150ms ease;\n}\n\n.game-of-life-cell--dead {\n  background: #131313;\n  color: #767575;\n  box-shadow: inset 0 0 0 1px rgba(72, 72, 71, 0.35);\n}\n\n.game-of-life-cell--alive {\n  background: #8ff5ff;\n  color: #0e0e0e;\n  box-shadow: 0 0 18px rgba(143, 245, 255, 0.45), inset 0 0 0 1px rgba(255, 107, 152, 0.45);\n}")
+  "body {\n  margin: 0;\n  background-image: radial-gradient(circle at 50% 50%, rgba(38, 38, 38, 0.3) 0%, rgba(14, 14, 14, 1) 100%);\n  cursor: crosshair;\n}\n\n.scanline {\n  width: 100%;\n  height: 100px;\n  z-index: 10;\n  background: linear-gradient(0deg, rgba(143, 245, 255, 0) 0%, rgba(143, 245, 255, 0.05) 50%, rgba(143, 245, 255, 0) 100%);\n  position: absolute;\n  pointer-events: none;\n}\n\n.game-of-life-status {\n  background: #131313;\n  padding: 0.75rem 1rem;\n  font-family: \"Space Grotesk\", sans-serif;\n  font-size: 0.75rem;\n  letter-spacing: 0.2em;\n  text-transform: uppercase;\n}\n\n.game-of-life-status--running {\n  color: #8eff71;\n  box-shadow: inset 3px 0 0 #8eff71;\n}\n\n.game-of-life-status--paused {\n  color: #adaaaa;\n  box-shadow: inset 3px 0 0 rgba(118, 117, 117, 0.5);\n}\n\n[data-game-of-life-board] {\n  display: grid;\n  gap: 2px;\n  padding: 0.25rem;\n  background: #0e0e0e;\n  width: fit-content;\n}\n\n.game-of-life-cell {\n  width: 12px;\n  height: 12px;\n  min-width: 12px;\n  border: 0;\n  padding: 0;\n  cursor: pointer;\n  font-size: 0;\n  line-height: 0;\n  transition: background-color 150ms ease, box-shadow 150ms ease;\n}\n\n.game-of-life-cell--dead {\n  background: #131313;\n  box-shadow: inset 0 0 0 1px rgba(0, 222, 236, 0.12), 0 0 8px rgba(143, 245, 255, 0.08);\n}\n\n.game-of-life-cell--alive {\n  background: #8ff5ff;\n  box-shadow: 0 0 10px rgba(143, 245, 255, 0.95), 0 0 4px rgba(255, 107, 152, 0.55);\n}\n\n.game-of-life-grid-frame {\n  overflow-x: auto;\n  max-width: 100%;\n  padding: 1rem;\n}")
 
 (defn- board-cells
   [height width]
@@ -51,19 +54,21 @@
       [:div {:class "mb-4 flex w-full max-w-4xl items-end justify-between font-headline text-[10px] uppercase tracking-widest"}
        [:div {:class "flex flex-col text-on-surface-variant"}
         [:span "NODE_STATUS: " [:span {:class "text-tertiary"} "STABLE"]]
-        [:span "ARRAY_DIM: " [:span {:class "text-primary"} (str height "x" width "_SHARED")]]]
+        [:span "ARRAY_DIM: " [:span {:class "text-primary"} (str width "x" height "_SHARED")]]]
        [:h1 {:class "text-2xl font-black tracking-tighter text-white"} "GAME_OF_LIFE"]
        [:div {:class "flex flex-col text-right text-on-surface-variant"}
         [:span "MODE: " [:span {:class "text-secondary"} "BACKEND_DRIVEN"]]
         [:span "SYNC: " [:span {:class "text-primary"} "WEBSOCKET"]]]]
-      [:div {:class "relative border border-outline-variant bg-surface-container-highest p-1 shadow-[0_0_50px_rgba(143,245,255,0.05)]"}
-       [:div {:class "scanline"}]
-       [:div {:class "bg-background p-4"}
-        (into
+       [:div {:class "relative border border-outline-variant bg-surface-container-highest p-1 shadow-[0_0_50px_rgba(143,245,255,0.05)]"}
+        [:div {:class "scanline"}]
+        [:div {:class "game-of-life-grid-frame bg-background"}
+         (into
          [:section {:aria-label "board"
                     :data-game-of-life-board true
-                    :style (str "grid-template-columns: repeat(" width ", 4.5rem);")}]
-         (board-cells height width))]]]
+                    :style (str "grid-template-columns: repeat(" width ", " cell-size-px "px); "
+                                "grid-template-rows: repeat(" height ", " cell-size-px "px); "
+                                "gap: " cell-gap-px "px;")}]
+          (board-cells height width))]]]
      [:aside {:class "z-20 flex w-full flex-col gap-8 bg-surface-container-highest p-6 md:w-80"}
       [:div {:class "space-y-4"}
        [:div {:class "mb-2 flex items-center gap-2"}

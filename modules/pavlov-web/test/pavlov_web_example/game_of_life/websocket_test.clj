@@ -1,8 +1,9 @@
 (ns pavlov-web-example.game-of-life.websocket-test
   (:require [clojure.edn :as edn]
-            [clojure.test :refer [deftest is testing]]
-            [pavlov-web-example.game-of-life.websocket :as websocket]
-            [ring.websocket]))
+             [clojure.test :refer [deftest is testing]]
+             [pavlov-web-example.game-of-life.config :as config]
+             [pavlov-web-example.game-of-life.websocket :as websocket]
+             [ring.websocket]))
 
 (def target-row "1")
 (def target-col "2")
@@ -72,11 +73,11 @@
 (defn- board-state-from-events
   ([events]
    (board-state-from-events
-    (into {}
-          (for [row (map str (range 3))
-                col (map str (range 3))]
-            [[row col] "."]))
-    events))
+     (into {}
+          (for [row (map str (range config/board-height))
+                col (map str (range config/board-width))]
+             [[row col] "."]))
+     events))
   ([initial-board events]
    (reduce (fn [board {:keys [selector value] :as op}]
              (if (game-of-life-cell-op? op)
@@ -88,8 +89,8 @@
 (defn- expected-board-state
   [live-cells]
   (into {}
-        (for [row (map str (range 3))
-              col (map str (range 3))]
+        (for [row (map str (range config/board-height))
+              col (map str (range config/board-width))]
           [[row col] (if (contains? live-cells [row col]) "O" ".")])))
 
 (def seed-board
