@@ -33,7 +33,9 @@
       :decode (or decode decode-event)})))
 
 (defn make-bridged-program!
-  [{:keys [query-selector submit! transport page-bthreads forwarded-events]}]
+  [{:keys [query-selector submit! transport page-bthreads forwarded-events forwarded-event->server-event]
+    :or {forwarded-event->server-event (fn [event]
+                                        {:type (:type event)})}}]
   (bpe/make-program!
    (into (cond-> [[:dom-op (dom/make-dom-op-bthread query-selector)]
                   [:dom-event-redirect
@@ -43,15 +45,15 @@
                              (fn [event]
                                {:request #{(:event event)}}))]]
            (seq forwarded-events)
-           (conj [:forward-events
-                  (b/on-any forwarded-events
-                            (fn [event]
-                              {:request #{{:type :pavlov.web.server/send-event
-                                           :event {:type (:type event)}}}}))])
-           transport
-           (conj [:browser-websocket-bridge
-                  (server/make-server-bridge-bthread submit! transport)]))
-         page-bthreads)))
+            (conj [:forward-events
+                   (b/on-any forwarded-events
+                             (fn [event]
+                               {:request #{{:type :pavlov.web.server/send-event
+                                            :event (forwarded-event->server-event event)}}}))])
+            transport
+            (conj [:browser-websocket-bridge
+                   (server/make-server-bridge-bthread submit! transport)]))
+          page-bthreads)))
 
 (defn init!
   [{:keys [make-program root query-selector ws-path encode decode]

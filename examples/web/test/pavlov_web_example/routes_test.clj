@@ -32,6 +32,29 @@
     (is (str/includes? body "data-grid-row"))
     (is (str/includes? body "/js/main.js"))))
 
+(deftest game-of-life-route-serves-static-shell
+  (let [{:keys [status headers body]} (response-for "/game-of-life")
+        content-type (or (get headers "content-type") "")
+        body (or body "")]
+    (is (= 200 status))
+    (is (string? body))
+    (is (str/starts-with? content-type "text/html"))
+    (is (str/includes? body "PAVLOV_OS"))
+    (is (str/includes? body "CONTROL_PANEL"))
+    (is (str/includes? body "id=\"tailwind-config\""))
+    (is (str/includes? body "id=\"game-of-life-root\""))
+    (is (str/includes? body "data-pavlov-page=\"game-of-life\""))
+    (is (str/includes? body "data-game-of-life-status"))
+    (is (str/includes? body "id=\"game-of-life-start-button\""))
+    (is (str/includes? body "id=\"game-of-life-pause-button\""))
+    (is (str/includes? body "id=\"game-of-life-reset-button\""))
+    (is (str/includes? body "data-game-of-life-board"))
+    (is (str/includes? body "data-game-of-life-cell"))
+    (is (str/includes? body "pavlov-on-click=\":game-of-life/cell-clicked\""))
+    (is (str/includes? body "data-row=\"1\""))
+    (is (str/includes? body "data-col=\"2\""))
+    (is (str/includes? body "/js/main.js"))))
+
 (deftest missing-route-falls-through-to-default-404
   (let [{:keys [status]} (response-for "/missing")]
     (is (= 404 status))))
