@@ -3,6 +3,7 @@
   (:require [tech.thomascothran.pavlov.event.selection :as selection]
             [tech.thomascothran.pavlov.bthread :as b]
             [tech.thomascothran.pavlov.bprogram.state :as state]
+            [tech.thomascothran.pavlov.bid.proto :as bid]
             [hasch.core :as hasch])
   #?(:clj (:import [clojure.lang PersistentQueue])))
 
@@ -109,6 +110,17 @@
                      (conj seen sid)
                      acc')))))))) ; finished
 
+(defn- bids->hashable-bthread-bid
+  "bthreads are not hashable. But we need to hash bids.
+
+  Remove the bthread itself and keep the bthread names"
+  [bids]
+  (update-vals bids
+               (fn [bid]
+                 (if-let [bthreads (bid/bthreads bid)]
+                   (assoc bid :bthreads (keys bthreads))
+                   bid))))
+
 (defn make-navigator
   "Create a StateNavigator for the behavioral program."
   [all-bthreads]
@@ -145,7 +157,8 @@
       (identifier [_ wrapped]
         ;; Use saved states instead of live bthread states to avoid mutation issues
         (let [saved-states (get wrapped :saved-bthread-states)
-              bthread->bid (get-in wrapped
-                                   [:bprogram/state :bthread->bid])
+              bthread->bid (-> (get-in wrapped
+                                       [:bprogram/state :bthread->bid])
+                               bids->hashable-bthread-bid)
               last-event-terminal (get-in wrapped [:bprogram/state :last-event :terminal])]
           (hasch/uuid [last-event-terminal saved-states bthread->bid]))))))

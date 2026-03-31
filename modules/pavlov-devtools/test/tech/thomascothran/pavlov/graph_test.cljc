@@ -398,4 +398,21 @@
                             :step step
                             :round-robin round-robin
                             :after-all after-all})]
-      (is  lts))))
+      (is lts))))
+
+(deftest test-spawning-bthreads
+  (let [bthread-b (b/bids [{:request #{:b}}])
+        bthread-a (b/bids [{:bthreads {:bthread-b bthread-b}
+                            :request #{:d}}])
+        bthread-c (b/bids [{:wait-on #{:b}}
+                           {:request #{:c}}])
+        bthread-d (b/bids [{:wait-on #{:e}}
+                           {:request #{:e}}])
+        graph (graph/->lts {:bthread-a bthread-a
+                            :bthread-c bthread-c
+                            :bthread-d bthread-d})]
+    (is (= 4 (count (get graph :nodes))))
+    (is (= #{:b :c :d}
+           (into #{}
+                 (map :event)
+                 (get graph :edges))))))
