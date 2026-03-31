@@ -8,8 +8,8 @@ Pavlov is an opinionated [behavioral programming](https://cacm.acm.org/research/
 |--------|--------|---------|
 | core   | beta   | [![Clojars Project](https://img.shields.io/clojars/v/tech.thomascothran/pavlov.svg)](https://clojars.org/tech.thomascothran/pavlov) |
 | devtools | beta | [![Clojars Project](https://img.shields.io/clojars/v/tech.thomascothran/pavlov-devtools.svg)](https://clojars.org/tech.thomascothran/pavlov-devtools) |
-| skills | pre-alpha | [![Clojars Project](https://img.shields.io/clojars/v/tech.thomascothran/pavlov-devtools.svg)](https://clojars.org/tech.thomascothran/pavlov-skills) |
-| web | pre-alpha | [![Clojars Project](https://img.shields.io/clojars/v/tech.thomascothran/pavlov-devtools.svg)](https://clojars.org/tech.thomascothran/pavlov-skills) |
+| skills | pre-alpha | [![Clojars Project](https://img.shields.io/clojars/v/tech.thomascothran/pavlov-skills.svg)](https://clojars.org/tech.thomascothran/pavlov-skills) |
+| web | pre-alpha | [![Clojars Project](https://img.shields.io/clojars/v/tech.thomascothran/pavlov-web.svg)](https://clojars.org/tech.thomascothran/pavlov-web) |
 
 Behavioral programming uses a basic unit called a bthread (for "behavioral thread"). Bthreads encapsulate behaviors.  They park until events to which they are subscribed occur. Bthreads communicate exclusively via queues.
 
