@@ -1,10 +1,15 @@
 # Pavlov: Behavioral Programming for Clojure
 
-*Status: alpha*
+Pavlov is an opinionated [behavioral programming](https://cacm.acm.org/research/behavioral-programming/#R26) library for Clojure(Script). Behavioral programming was invented by David Harel, who also invented statecharts. It has a solid theoretical foundation and is extremely simple by design.
 
-[![Clojars Project](https://img.shields.io/clojars/v/tech.thomascothran/pavlov.svg)](https://clojars.org/tech.thomascothran/pavlov) [![Clojars Project](https://img.shields.io/clojars/v/tech.thomascothran/pavlov-devtools.svg)](https://clojars.org/tech.thomascothran/pavlov-devtools)
+## Modules
 
-Pavlov is an opinionated [behavioral programming](https://cacm.acm.org/research/behavioral-programming/#R26) library for Clojure(Script). Behavioral programming was invented by David Harel, who also invented statecharts. It has a solid theoretical foundation, and is extremely simple by design.
+| Module | Status | Version |
+|--------|--------|---------|
+| core   | beta   | [![Clojars Project](https://img.shields.io/clojars/v/tech.thomascothran/pavlov.svg)](https://clojars.org/tech.thomascothran/pavlov) |
+| devtools | beta | [![Clojars Project](https://img.shields.io/clojars/v/tech.thomascothran/pavlov-devtools.svg)](https://clojars.org/tech.thomascothran/pavlov-devtools) |
+| skills | pre-alpha | [![Clojars Project](https://img.shields.io/clojars/v/tech.thomascothran/pavlov-devtools.svg)](https://clojars.org/tech.thomascothran/pavlov-skills) |
+| web | pre-alpha | [![Clojars Project](https://img.shields.io/clojars/v/tech.thomascothran/pavlov-devtools.svg)](https://clojars.org/tech.thomascothran/pavlov-skills) |
 
 Behavioral programming uses a basic unit called a bthread (for "behavioral thread"). Bthreads encapsulate behaviors.  They park until events to which they are subscribed occur. Bthreads communicate exclusively via queues.
 
@@ -18,10 +23,10 @@ Pavlov's implementation of behavioral programming:
 
 ## Design Goals
 
-1. *Zero dependencies*.
-2. *Swappable implementations*. Bthreads and bprograms are open for extension and modification.
-3. *BYO parallelization*. Bthreads can run in parallel and you should choose how. Bring your own thread pool, or use core.async.
-4. *CLJS support*.
+1. *Zero prod dependencies*. Pavlov's core has 0 dependencies. Pavlov devtools has dependencies, but is used only during development and testing
+2. *CLJS Support*. Pavlov runs on both the JVM and the browser.
+3. *Model-check-driven-development*. Describe what scenarios you want to support and the properties of your program, and the model checker will walk you through the implementation.
+4. *Bprograms as data*. Use tools like `portal` to inspect execution branches of a behavioral program.
 
 ## Bthreads
 
