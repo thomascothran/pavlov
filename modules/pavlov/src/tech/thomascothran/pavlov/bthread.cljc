@@ -164,11 +164,11 @@
    - `tech.thomascothran.pavlov.model.check` for model checking bthreads and bprograms"
 
   (:refer-clojure :exclude [repeat])
-  (:require [clojure.datafy :refer [datafy]]
-            [tech.thomascothran.pavlov.bthread.proto :as proto]
+  (:require [tech.thomascothran.pavlov.bthread.proto :as proto]
             [tech.thomascothran.pavlov.event.proto :as event-proto]
             [tech.thomascothran.pavlov.defaults])
-  #?(:cljs (:require-macros [tech.thomascothran.pavlov.bthread])))
+  #?(:squint nil
+     :cljs (:require-macros [tech.thomascothran.pavlov.bthread])))
 
 (defn notify!
   "Notify a bthread of an event and receive its next bid.
@@ -285,7 +285,7 @@
                                    (event-proto/type event)))
                     {:request #{{:type error-event-type
                                  :event event
-                                 :error (datafy e)
+                                 :error (Throwable->map e)
                                  :invariant-violated true
                                  :terminal true}}})))))))))
 
@@ -380,18 +380,12 @@
 
   Example:
   ```clojure
-  (def on-invoice
+  (defn make-on-invoice
+    []
     (b/on :invoice/received
           (fn [event]
             {:request #{{:type :invoice/processed
                          :id (:invoice/id event)}}})))
-
-  (b/notify! on-invoice nil)
-  ;=> {:wait-on #{:invoice/received}}
-
-  (b/notify! on-invoice {:type :invoice/received :invoice/id 42})
-  ;=> {:request #{{:type :invoice/processed :id 42}}
-  ;    :wait-on #{:invoice/received}}
   ```"
   [event-type f]
   (step (fn [_prev-state event]
@@ -399,9 +393,41 @@
                        (= event-type (event-proto/type event)))
             [:initialized {:wait-on #{event-type}}] ;; initialize
             (let [bid (f event)
-                  wait-on (->> (get event :wait-on #{})
-                               (into #{event-type}))]
-              [:initialized (assoc bid :wait-on wait-on)])))))
+                  new-waits (get bid :wait-on #{})
+                  new-requests (get bid :request #{})
+                  new-blocks (get bid :block #{})
+                  new-bid {:request new-requests
+                           :block new-blocks
+                           :wait-on (conj new-waits
+                                          event-type)}]
+              [:initialized new-bid])))))
+
+(defn on-any
+  "bthread that reacts to any of the members of the `event-types` set
+
+  Example:
+  ```clojure
+  (defn make-request-c-on-a-or-b
+    []
+    (b/on #{:a :b}
+          (fn [event]
+             {:request #{:c}})))
+  ```
+  "
+  [event-types f]
+  (step (fn [prev-state event]
+          (if (or (nil? event)
+                  (not (get event-types
+                            (event-proto/type event))))
+            [:initialized {:wait-on event-types}]
+            (let [bid (f event)
+                  new-waits (get bid :wait-on #{})
+                  new-requests (get bid :request #{})
+                  new-blocks (get bid :block #{})
+                  new-bid {:request new-requests
+                           :block new-blocks
+                           :wait-on (into event-types new-waits)}]
+              [prev-state new-bid])))))
 
 (defn after-all
   "Create a bthread that waits for all specified events before proceeding.
@@ -581,13 +607,13 @@
   (macroexpand-1
    '(thread [prev-state event]
 
-            :pavlov/init
-            [{:initialized true}
-             {:wait-on #{:fire-missiles}}]
+      :pavlov/init
+      [{:initialized true}
+       {:wait-on #{:fire-missiles}}]
 
-            #{:fire-missiles}
-            (let [result (missiles-api/fire!)]
-              [prev-state {:request #{{:type :missiles-fired
-                                       :result result}}}])
+      #{:fire-missiles}
+      (let [result (missiles-api/fire!)]
+        [prev-state {:request #{{:type :missiles-fired
+                                 :result result}}}])
 
-            [prev-state {:wait-on #{:fire-missiles}}])))
+      [prev-state {:wait-on #{:fire-missiles}}])))

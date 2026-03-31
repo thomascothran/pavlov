@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+  <title>PAVLOV_OS // GAME_OF_LIFE</title>
+  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700;900&amp;family=Manrope:wght@300;400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+  <script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            background: "#0e0e0e",
+            primary: "#8ff5ff",
+            secondary: "#ff6b98",
+            tertiary: "#8eff71",
+            surface: "#0e0e0e",
+            "surface-container-low": "#131313",
+            "surface-container-highest": "#262626",
+            "on-surface": "#ffffff",
+            "on-surface-variant": "#adaaaa",
+            outline: "#767575",
+            "outline-variant": "#484847"
+          },
+          fontFamily: {
+            headline: ["Space Grotesk"],
+            body: ["Manrope"],
+            label: ["Space Grotesk"]
+          },
+          borderRadius: {
+            DEFAULT: "0rem",
+            lg: "0rem",
+            xl: "0rem",
+            full: "9999px"
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body {
+      margin: 0;
+      background-image: radial-gradient(circle at 50% 50%, rgba(38, 38, 38, 0.3) 0%, rgba(14, 14, 14, 1) 100%);
+      cursor: crosshair;
+    }
+
+    .scanline {
+      width: 100%;
+      height: 100px;
+      z-index: 10;
+      background: linear-gradient(0deg, rgba(143, 245, 255, 0) 0%, rgba(143, 245, 255, 0.05) 50%, rgba(143, 245, 255, 0) 100%);
+      position: absolute;
+      pointer-events: none;
+    }
+
+    .game-of-life-status {
+      background: #131313;
+      padding: 0.75rem 1rem;
+      font-family: "Space Grotesk", sans-serif;
+      font-size: 0.75rem;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+    }
+
+    .game-of-life-status--running {
+      color: #8eff71;
+      box-shadow: inset 3px 0 0 #8eff71;
+    }
+
+    .game-of-life-status--paused {
+      color: #adaaaa;
+      box-shadow: inset 3px 0 0 rgba(118, 117, 117, 0.5);
+    }
+
+    [data-game-of-life-board] {
+      display: grid;
+      grid-template-columns: repeat(3, 4.5rem);
+      gap: 0.5rem;
+      padding: 0.75rem;
+      background: #0e0e0e;
+    }
+
+    .game-of-life-cell {
+      width: 4.5rem;
+      height: 4.5rem;
+      border: 0;
+      font-family: "Space Grotesk", sans-serif;
+      font-size: 1.5rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background-color 150ms ease, box-shadow 150ms ease, color 150ms ease;
+    }
+
+    .game-of-life-cell--dead {
+      background: #131313;
+      color: #767575;
+      box-shadow: inset 0 0 0 1px rgba(72, 72, 71, 0.35);
+    }
+
+    .game-of-life-cell--alive {
+      background: #8ff5ff;
+      color: #0e0e0e;
+      box-shadow: 0 0 18px rgba(143, 245, 255, 0.45), inset 0 0 0 1px rgba(255, 107, 152, 0.45);
+    }
+  </style>
+</head>
+<body class="bg-background text-on-surface font-body overflow-x-hidden selection:bg-secondary selection:text-black" data-pavlov-page="game-of-life">
+  <header class="fixed top-0 z-50 flex h-16 w-full items-center justify-between bg-[#0e0e0e] px-6 shadow-[0_0_40px_rgba(143,245,255,0.08)]">
+    <div class="flex items-center gap-8">
+      <span class="font-headline text-xl font-black tracking-tighter text-[#8ff5ff]">PAVLOV_OS</span>
+      <nav class="hidden gap-6 md:flex">
+        <span class="border-b-2 border-[#8ff5ff] pb-1 font-['Space_Grotesk'] text-xs uppercase tracking-[0.05em] text-[#8ff5ff]">GAME_OF_LIFE</span>
+        <span class="font-['Space_Grotesk'] text-xs uppercase tracking-[0.05em] text-[#adaaaa]">SYNTHETIC_GRID</span>
+      </nav>
+    </div>
+    <div class="flex items-center gap-2 font-['Space_Grotesk'] text-[10px] uppercase tracking-[0.2em] text-[#8eff71]">
+      <div class="h-1.5 w-1.5 bg-[#8eff71]"></div>
+      <span>SYSTEM_ACTIVE</span>
+    </div>
+  </header>
+
+  <main class="flex min-h-screen w-full flex-col pt-16 md:flex-row" id="game-of-life-root">
+    <section class="relative flex flex-1 flex-col items-center justify-center overflow-hidden bg-surface p-8">
+      <div class="mb-4 flex w-full max-w-4xl items-end justify-between font-headline text-[10px] uppercase tracking-widest">
+        <div class="flex flex-col text-on-surface-variant">
+          <span>NODE_STATUS: <span class="text-tertiary">STABLE</span></span>
+          <span>ARRAY_DIM: <span class="text-primary">3x3_SHARED</span></span>
+        </div>
+        <h1 class="text-2xl font-black tracking-tighter text-white">GAME_OF_LIFE</h1>
+        <div class="flex flex-col text-right text-on-surface-variant">
+          <span>MODE: <span class="text-secondary">BACKEND_DRIVEN</span></span>
+          <span>SYNC: <span class="text-primary">WEBSOCKET</span></span>
+        </div>
+      </div>
+
+      <div class="relative border border-outline-variant bg-surface-container-highest p-1 shadow-[0_0_50px_rgba(143,245,255,0.05)]">
+        <div class="scanline"></div>
+        <div class="bg-background p-4">
+          <section aria-label="board" data-game-of-life-board>
+            <button class="game-of-life-cell game-of-life-cell--dead" data-cell-state="dead" data-game-of-life-cell data-col="0" data-row="0" pavlov-col="0" pavlov-on-click=":game-of-life/cell-clicked" pavlov-row="0" type="button">.</button>
+            <button class="game-of-life-cell game-of-life-cell--dead" data-cell-state="dead" data-game-of-life-cell data-col="1" data-row="0" pavlov-col="1" pavlov-on-click=":game-of-life/cell-clicked" pavlov-row="0" type="button">.</button>
+            <button class="game-of-life-cell game-of-life-cell--dead" data-cell-state="dead" data-game-of-life-cell data-col="2" data-row="0" pavlov-col="2" pavlov-on-click=":game-of-life/cell-clicked" pavlov-row="0" type="button">.</button>
+            <button class="game-of-life-cell game-of-life-cell--dead" data-cell-state="dead" data-game-of-life-cell data-col="0" data-row="1" pavlov-col="0" pavlov-on-click=":game-of-life/cell-clicked" pavlov-row="1" type="button">.</button>
+            <button class="game-of-life-cell game-of-life-cell--dead" data-cell-state="dead" data-game-of-life-cell data-col="1" data-row="1" pavlov-col="1" pavlov-on-click=":game-of-life/cell-clicked" pavlov-row="1" type="button">.</button>
+            <button class="game-of-life-cell game-of-life-cell--dead" data-cell-state="dead" data-game-of-life-cell data-col="2" data-row="1" pavlov-col="2" pavlov-on-click=":game-of-life/cell-clicked" pavlov-row="1" type="button">.</button>
+            <button class="game-of-life-cell game-of-life-cell--dead" data-cell-state="dead" data-game-of-life-cell data-col="0" data-row="2" pavlov-col="0" pavlov-on-click=":game-of-life/cell-clicked" pavlov-row="2" type="button">.</button>
+            <button class="game-of-life-cell game-of-life-cell--dead" data-cell-state="dead" data-game-of-life-cell data-col="1" data-row="2" pavlov-col="1" pavlov-on-click=":game-of-life/cell-clicked" pavlov-row="2" type="button">.</button>
+            <button class="game-of-life-cell game-of-life-cell--dead" data-cell-state="dead" data-game-of-life-cell data-col="2" data-row="2" pavlov-col="2" pavlov-on-click=":game-of-life/cell-clicked" pavlov-row="2" type="button">.</button>
+          </section>
+        </div>
+      </div>
+    </section>
+
+    <aside class="z-20 flex w-full flex-col gap-8 bg-surface-container-highest p-6 md:w-80">
+      <div class="space-y-4">
+        <div class="mb-2 flex items-center gap-2">
+          <div class="h-1.5 w-1.5 bg-tertiary"></div>
+          <h2 class="font-headline text-xs font-bold uppercase tracking-[0.2em] text-on-surface-variant">CONTROL_PANEL</h2>
+        </div>
+
+        <p class="game-of-life-status game-of-life-status--paused" data-game-of-life-status>Waiting for backend</p>
+
+        <section aria-label="controls" class="flex flex-col gap-3 pt-2">
+          <button class="bg-primary px-4 py-4 font-headline text-sm font-black tracking-tighter text-black transition-all hover:bg-[#00eefc]" id="game-of-life-start-button" pavlov-on-click=":game-of-life/start-clicked" type="button">START_SYNC</button>
+          <div class="grid grid-cols-2 gap-3">
+            <button class="border border-outline-variant px-4 py-3 font-headline text-[10px] font-bold uppercase tracking-widest text-on-surface transition-all hover:bg-surface-container-low" id="game-of-life-pause-button" pavlov-on-click=":game-of-life/pause-clicked" type="button">PAUSE</button>
+            <button class="border border-outline-variant px-4 py-3 font-headline text-[10px] font-bold uppercase tracking-widest text-on-surface transition-all hover:bg-surface-container-low" id="game-of-life-reset-button" pavlov-on-click=":game-of-life/reset-clicked" type="button">RESET</button>
+          </div>
+        </section>
+      </div>
+
+      <div class="mt-auto border-t border-outline-variant pt-6">
+        <label class="mb-2 block font-headline text-[10px] uppercase tracking-widest text-on-surface-variant">DIAGNOSTIC_LOG</label>
+        <div class="space-y-1 font-headline text-[9px] text-on-surface-variant">
+          <p><span class="text-tertiary">INFO:</span> BACKEND STATE OWNS GENERATIONS.</p>
+          <p><span class="text-tertiary">INFO:</span> CELL CLICKS FORWARD OVER PAVLOV EVENTS.</p>
+          <p><span class="text-secondary">WARN:</span> DOM CLASSES ARE SERVER-MANAGED.</p>
+        </div>
+      </div>
+    </aside>
+  </main>
+
+  <script src="/js/main.js?v=snazzy-demo-1"></script>
+</body>
+</html>

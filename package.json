@@ -1,0 +1,7 @@
+{
+  "name": "pavlov-web",
+  "version": "1.0.0",
+  "dependencies": {
+    "jsdom": "^29.0.0"
+  }
+}

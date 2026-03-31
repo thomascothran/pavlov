@@ -231,8 +231,33 @@
     (is (= [{:type :test-event}] @!events))
 
     (is (= {:wait-on #{:test-event}
-            :request #{:test-event-received}}
+            :request #{:test-event-received}
+            :block #{}}
            bid))))
+
+(deftest test-on-any
+  (let [!events (atom [])
+        bthread
+        (b/on-any #{:a :b}
+                  (fn [event]
+                    (swap! !events conj event)
+                    {:request #{:c}}))
+        init-bid (b/notify! bthread nil) ;; initialize
+        bid-a (b/notify! bthread {:type :a})
+        _ (b/notify! bthread {:type :c})
+        bid-c (b/notify! bthread {:type :b})]
+
+    (is (= {:wait-on #{:a :b}} init-bid))
+    (is (= [{:type :a} {:type :b}] @!events))
+
+    (is (= {:wait-on #{:a :b}
+            :request #{:c}
+            :block #{}}
+           bid-a))
+    (is (= {:wait-on #{:a :b}
+            :request #{:c}
+            :block #{}}
+           bid-c))))
 
 (deftest test-after-all
   (let [event-set #{:a :b :c}

@@ -10,6 +10,14 @@
           (block [this] (get this :block #{}))
           (bthreads [this] (get this :bthreads)))
 
+   :squint (extend-protocol proto/Bid
+             object
+             (request [this] (get this :request #{}))
+             (wait-on [this] (-> (get this :wait-on #{})
+                                 (set/difference (get this :request #{}))))
+             (block [this] (get this :block #{}))
+             (bthreads [this] (get this :bthreads)))
+
    :cljs (extend-protocol proto/Bid
 
            cljs.core.PersistentArrayMap
@@ -24,15 +32,7 @@
            (wait-on [this] (-> (get this :wait-on #{})
                                (set/difference (get this :request #{}))))
            (block [this] (get this :block #{}))
-           (bthreads [this] (get this :bthreads)))
-
-   :squint (extend-protocol proto/Bid
-             js/Object
-             (request [this] (get this :request #{}))
-             (wait-on [this] (-> (get this :wait-on #{})
-                                 (set/difference (get this :request #{}))))
-             (block [this] (get this :block #{}))
-             (bthreads [this] (get this :bthreads))))
+           (bthreads [this] (get this :bthreads))))
 
 (extend-protocol proto/Bid
   nil

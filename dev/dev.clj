@@ -1,5 +1,6 @@
 (ns dev
-  (:require [portal.api :as portal]
+  (:require [pavlov-web-example.app :as web-app]
+            [portal.api :as portal]
             [cljs.repl.browser :as b]
             [cider.piggieback :as p]
             [nrepl.server :as nrepl]
@@ -28,9 +29,19 @@
 
 (defn shadow-go!
   []
-  (do
-    (server/start!)
-    (shadow/watch :test)))
+  (server/start!)
+  (shadow/watch :test)
+  (shadow/watch :web-browser-only))
+
+(defn watch-web-browser-only!
+  []
+  (server/start!)
+  (shadow/watch :web-browser-only))
+
+(defn web-browser-only!
+  [& _]
+  (web-app/start! {:hot-reload true})
+  (watch-web-browser-only!))
 
 (comment
   (shadow/repl :test))
@@ -39,6 +50,7 @@
   [& _]
   (start-nrepl!)
   (shadow-go!)
+  (web-browser-only!)
   @(promise))
 
 (defn run-plain-repl

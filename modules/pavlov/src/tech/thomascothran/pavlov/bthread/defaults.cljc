@@ -8,6 +8,13 @@
           (label [this] this)
           (set-state [_this serialized] serialized))
 
+   :squint (extend-protocol bthread/BThread
+             js/Object
+             (notify! [this _event] this)
+             (state [this] this)
+             (label [this] this)
+             (set-state [_this serialized] serialized))
+
    :cljs (extend-protocol bthread/BThread
 
            cljs.core.PersistentArrayMap

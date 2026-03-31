@@ -1,16 +1,19 @@
 {:deps {tech.thomascothran/pavlov {:local/root "./modules/pavlov"}
         tech.thomascothran/pavlov-devtools {:local/root "./modules/pavlov-devtools"}
-        tech.thomascothran/pavlov-skills {:local/root "./modules/pavlov-skills"}}
+        tech.thomascothran/pavlov-skills {:local/root "./modules/pavlov-skills"}
+        tech.thomascothran/pavlov-web {:local/root "./modules/pavlov-web"}
+        tech.thomascothran/pavlov-web-examples {:local/root "./examples/web"}}
  :aliases
- {:test {:extra-paths ["modules/pavlov/test" "modules/pavlov-devtools/test"]
+ {:test {:extra-paths ["modules/pavlov/test" "modules/pavlov-devtools/test" "modules/pavlov-web/test"]
          :extra-deps {org.clojure/test.check {:mvn/version "1.1.1"}
                       lambdaisland/kaocha {:mvn/version "1.91.1392"}
                       org.clojure/math.combinatorics {:mvn/version "0.3.0"}}
          :exec-fn kaocha.runner/exec-fn}
-  :dev {:extra-deps {org.clojure/clojurescript {:mvn/version "1.11.54"}
+  :dev {:extra-deps {org.clojure/clojurescript {:mvn/version "1.12.134"}
                      nrepl/nrepl {:mvn/version "1.2.0"}
                      info.sunng/ring-jetty9-adapter {:mvn/version "0.39.0"}
                      cider/piggieback {:mvn/version "0.4.2"}
                      org.clojure/clojure {:mvn/version "1.12.1"}
-                     thheller/shadow-cljs {:mvn/version "2.28.18"}}
+                     thheller/shadow-cljs {:mvn/version "3.3.6"}
+                     etaoin/etaoin {:mvn/version "1.1.43"}}
         :extra-paths ["dev"]}}}
