@@ -5,6 +5,8 @@
             [tech.thomascothran.pavlov.bid.defaults]
             [tech.thomascothran.pavlov.bthread.defaults]
             [tech.thomascothran.pavlov.bthread :as b]
+            [tech.thomascothran.pavlov.event :as event]
+            [tech.thomascothran.pavlov.event.selection :as selection]
             [tech.thomascothran.pavlov.bprogram.state :as s]
             [tech.thomascothran.pavlov.bprogram.notification :as notification]))
 
