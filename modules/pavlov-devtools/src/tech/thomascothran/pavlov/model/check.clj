@@ -259,11 +259,12 @@
   (let [;; Create bthreads from each category
         safety-bthreads (get config :safety-bthreads)
         main-bthreads (get config :bthreads)
-        env-bthreads (get config :environment-bthreads)]
-    (reduce into []
+        env-bthreads (get config :environment-bthreads)
+        equal-priority? (not (sequential? main-bthreads))]
+    (reduce into (if equal-priority? {} [])
             [safety-bthreads
-             main-bthreads
-             env-bthreads])))
+             env-bthreads
+             main-bthreads])))
 
 (defn- find-path
   "Find a path from root to target node in the LTS graph.

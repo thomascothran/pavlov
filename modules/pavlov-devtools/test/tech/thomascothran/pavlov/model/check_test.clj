@@ -312,6 +312,61 @@
                                :liveness liveness})]
       (is (nil? result)))))
 
+(deftest map-bthreads-preserve-equal-priority-branching
+  (testing "Map bthreads should preserve equal-priority branching through check/check"
+    (letfn [(make-map-bthreads []
+              {:request-a
+               (b/bids [{:request #{:a}}])
+
+               :request-b
+               (b/bids [{:request #{:b}}])
+
+               :finish-a
+               (b/bids [{:wait-on #{:a}}
+                        {:request #{{:type :a-confirmed :terminal true}}
+                         :block #{:b}}
+                        {:block #{:b}}])
+
+               :finish-b
+               (b/bids [{:wait-on #{:b}}
+                        {:request #{{:type :b-confirmed :terminal true}}
+                         :block #{:a}}
+                        {:block #{:a}}])})
+            (make-ordered-bthreads []
+              [[:request-a
+                (b/bids [{:request #{:a}}])]
+
+               [:request-b
+                (b/bids [{:request #{:b}}])]
+
+               [:finish-a
+                (b/bids [{:wait-on #{:a}}
+                         {:request #{{:type :a-confirmed :terminal true}}
+                          :block #{:b}}
+                         {:block #{:b}}])]
+
+               [:finish-b
+                (b/bids [{:wait-on #{:b}}
+                         {:request #{{:type :b-confirmed :terminal true}}
+                          :block #{:a}}
+                         {:block #{:a}}])]])]
+      (let [liveness {:a-confirmed {:quantifier :existential
+                                    :eventually #{:a-confirmed}}
+                      :b-confirmed {:quantifier :existential
+                                    :eventually #{:b-confirmed}}}
+            map-result (check/check {:bthreads (make-map-bthreads)
+                                     :liveness liveness
+                                     :check-deadlock? false})
+            ordered-result (check/check {:bthreads (make-ordered-bthreads)
+                                         :liveness liveness
+                                         :check-deadlock? false})]
+        (is (nil? map-result)
+            "Map input should keep :request-a and :request-b at equal priority, so both confirmations are reachable")
+        (is (= [{:property :b-confirmed
+                 :quantifier :existential}]
+               (:liveness-violations ordered-result))
+            "Ordered input should only follow :request-a first, leaving :b-confirmed unreachable")))))
+
 (deftest no-livelock-when-program-terminates
   (testing "Program that terminates normally should not be flagged as livelock"
     (let [result (check/check
