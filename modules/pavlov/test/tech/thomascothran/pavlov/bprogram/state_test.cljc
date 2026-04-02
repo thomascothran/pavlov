@@ -120,6 +120,20 @@
         next-state (s/step state {:type :a})]
     (is (nil? (get-in next-state [:bthread->bid bthread-a])))))
 
+(deftest spawned-child-preserves-equal-priority-for-map-bthreads
+  (let [parent (b/bids [{:bthreads {:child (b/bids [{:request #{:child}}])}}])
+        sibling (b/bids [{:request #{:sibling}}])
+        state (s/init {:parent parent
+                       :sibling sibling})]
+    (is (set? (:bthreads-by-priority state))
+        "Map input should remain equal-priority after spawned bthreads are inserted")
+    (is (= #{:child :sibling}
+           (into #{}
+                 (map event/type)
+                 (selection/prioritized-events (:bthreads-by-priority state)
+                                               (:bthread->bid state))))
+        "Spawned child and existing sibling should both remain selectable at equal priority")))
+
 (deftest test-step
   (let [bid-a {:request #{:a}}
         bid-b (b/step (constantly {:request #{:b}}))
