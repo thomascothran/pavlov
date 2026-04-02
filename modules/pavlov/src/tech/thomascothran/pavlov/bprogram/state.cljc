@@ -29,7 +29,7 @@
                           curr-bthread-name)]
               (into acc (into [curr-bthread-name] child-bthread-names))
               (conj acc curr-bthread-name)))
-          []
+          (if (sequential? bthread-priorities) [] #{})
           bthread-priorities))
 
 ;; Here, we can put the bthreads in order of priority
