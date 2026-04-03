@@ -408,9 +408,9 @@
                            {:request #{:c}}])
         bthread-d (b/bids [{:wait-on #{:e}}
                            {:request #{:e}}])
-        graph (graph/->lts {:bthread-a bthread-a
-                            :bthread-c bthread-c
-                            :bthread-d bthread-d})]
+        graph (graph/->lts [[:bthread-a bthread-a]
+                            [:bthread-c bthread-c]
+                            [:bthread-d bthread-d]])]
     (is (= 4 (count (get graph :nodes))))
     (is (= #{:b :c :d}
            (into #{}
