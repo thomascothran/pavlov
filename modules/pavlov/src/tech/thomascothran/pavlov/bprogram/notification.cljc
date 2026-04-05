@@ -70,6 +70,10 @@
        (empty? (bid/block bid))))
 
 (defn- retired-bid?
+  "Return true when a bid means the bthread should leave the program.
+
+  Both `nil` bids and spawn-only bids terminate the current bthread. Spawn-only
+  bids may still contribute child bthreads to the transition result."
   [bid]
   (or (nil? bid)
       (spawn-only-bid? bid)))
@@ -95,6 +99,9 @@
   - :requests - index of requested event types to bthread names
   - :waits - index of waited event types to bthread names
   - :blocks - index of blocked event types to bthread names
+  - :bthreads - newly spawned child bthreads
+  - :parent->child-bthreads - spawn ordering links for priority bookkeeping
+  - :retired-bthreads - bthread names that terminated during notification
 
   The caller is responsible for merging these updates into the main state."
   ([state]
