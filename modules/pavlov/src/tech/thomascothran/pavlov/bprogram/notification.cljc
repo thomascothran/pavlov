@@ -69,6 +69,11 @@
        (empty? (bid/wait-on bid))
        (empty? (bid/block bid))))
 
+(defn- retired-bid?
+  [bid]
+  (or (nil? bid)
+      (spawn-only-bid? bid)))
+
 (defn notify-bthreads!
   "Notifies relevant bthreads of an event and collects their updated bids.
 
@@ -102,14 +107,17 @@
                    _ (when-not bthread (println "No bthread found for" bthread-name))
                    bid (b/notify! bthread event)
                    bthreads (bid/bthreads bid)
-                   spawn-only? (spawn-only-bid? bid)]
+                   retired? (retired-bid? bid)]
                (cond-> acc
                  (seq bthreads)
                  (-> (update :bthreads merge bthreads)
                      (assoc-in [:parent->child-bthreads bthread-name]
                                (into #{} (keys bthreads))))
 
-                 (not spawn-only?)
+                 retired?
+                 (update :retired-bthreads (fnil conj #{}) bthread-name)
+
+                 (not retired?)
                  (-> (assoc-in [:bthread->bid bthread-name] bid)
                      (index-bid-events bthread-name bid :requests)
                      (index-bid-events bthread-name bid :waits)

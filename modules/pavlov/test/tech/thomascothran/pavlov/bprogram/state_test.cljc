@@ -10,6 +10,10 @@
             [tech.thomascothran.pavlov.bprogram.state :as s]
             [tech.thomascothran.pavlov.bprogram.notification :as notification]))
 
+(defn indexed-bthreads
+  [event->bthreads]
+  (into #{} (mapcat val) event->bthreads))
+
 (deftest test-init
   (let [bid-a {:request #{{:type :a}}}
         bid-b {:wait-on #{{:type :b}}}
@@ -121,6 +125,61 @@
         state (s/init [[:bthread-a bthread-a]])
         next-state (s/step state {:type :a})]
     (is (nil? (get-in next-state [:bthread->bid bthread-a])))))
+
+(deftest init-deregisters-bthread-that-returns-nil
+  (let [state (s/init [[:worker (b/bids [nil])]])]
+    (is (not (contains? (:name->bthread state) :worker)))
+    (is (not-any? #{:worker} (:bthreads-by-priority state)))
+    (is (not (contains? (:bthread->bid state) :worker)))
+    (is (not (contains? (indexed-bthreads (:waits state)) :worker)))
+    (is (not (contains? (indexed-bthreads (:requests state)) :worker)))
+    (is (not (contains? (indexed-bthreads (:blocks state)) :worker)))
+    (is (nil? (:next-event state)))))
+
+(deftest step-deregisters-bthread-that-returns-nil-after-event
+  (let [worker (b/bids [{:request #{:go}} nil])
+        state (s/init [[:worker worker]])
+        next-state (s/step state {:type :go})]
+    (is (not (contains? (:name->bthread next-state) :worker)))
+    (is (not-any? #{:worker} (:bthreads-by-priority next-state)))
+    (is (not (contains? (:bthread->bid next-state) :worker)))
+    (is (not (contains? (indexed-bthreads (:waits next-state)) :worker)))
+    (is (not (contains? (indexed-bthreads (:requests next-state)) :worker)))
+    (is (not (contains? (indexed-bthreads (:blocks next-state)) :worker)))))
+
+(deftest init-deregisters-spawn-only-parent
+  (let [parent (b/bids [{:bthreads {:child (b/bids [{:wait-on #{:go}}])}}])
+        state (s/init [[:parent parent]])]
+    (is (not (contains? (:name->bthread state) :parent)))
+    (is (not-any? #{:parent} (:bthreads-by-priority state)))
+    (is (not (contains? (:bthread->bid state) :parent)))
+    (is (contains? (:name->bthread state) :child))
+    (is (contains? (:bthread->bid state) :child))
+    (is (contains? (indexed-bthreads (:waits state)) :child))))
+
+(deftest step-deregisters-spawned-child-that-terminates
+  (let [parent (b/bids [{:bthreads {:child (b/bids [{:wait-on #{:go}}
+                                                    nil])}}])
+        state (s/init [[:parent parent]])
+        next-state (s/step state {:type :go})]
+    (is (not (contains? (:name->bthread next-state) :child)))
+    (is (not-any? #{:child} (:bthreads-by-priority next-state)))
+    (is (not (contains? (:bthread->bid next-state) :child)))
+    (is (not (contains? (indexed-bthreads (:waits next-state)) :child)))
+    (is (not (contains? (indexed-bthreads (:requests next-state)) :child)))
+    (is (not (contains? (indexed-bthreads (:blocks next-state)) :child)))))
+
+(deftest respawning-same-child-name-does-not-duplicate-priority-entry
+  (let [mk-child (fn [] (b/bids [{:wait-on #{:go}}]))
+        parent (b/bids [{:request #{:tick}
+                         :bthreads {:child (mk-child)}}
+                        {:request #{:tick}
+                         :bthreads {:child (mk-child)}}])
+        state (s/init [[:parent parent]])
+        next-state (s/step state {:type :tick})]
+    (is (= 1
+           (count (filter #{:child}
+                          (:bthreads-by-priority next-state)))))))
 
 (deftest spawned-child-preserves-equal-priority-for-map-bthreads
   (let [parent (b/bids [{:bthreads {:child (b/bids [{:request #{:child}}])}}])

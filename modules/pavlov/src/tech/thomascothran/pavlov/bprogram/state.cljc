@@ -34,13 +34,24 @@
   [notification-results]
   (get notification-results :parent->child-bthreads))
 
+(defn- notification-retired-bthreads
+  "Read the bthreads that should be deregistered after a notification pass.
+
+  Notification determines lifecycle outcome for notified bthreads, while state
+  owns removing them from registries, indexes, and priority bookkeeping."
+  [notification-results]
+  (get notification-results :retired-bthreads))
+
 (defn- notification-index-delta
   "Read only the bid/event-index updates from a notification pass.
 
   Spawn bookkeeping is handled on a separate path, so this helper marks the
   portion of notification output that can be merged directly into state."
   [notification-results]
-  (dissoc notification-results :bthreads :parent->child-bthreads))
+  (dissoc notification-results
+          :bthreads
+          :parent->child-bthreads
+          :retired-bthreads))
 
 (defn- splice-bthread-priorities
   "Given an existing list of bthread priorities,
@@ -65,6 +76,15 @@
       (update :requests merge-event->bthreads requests)
       (update :blocks merge-event->bthreads blocks)))
 
+(defn- remove-bthreads-from-event-index
+  [event->threads triggered-bthreads]
+  (into {}
+        (map (fn [[event bthreads]]
+               [event (->> bthreads
+                           (remove (or triggered-bthreads #{}))
+                           (into #{}))]))
+        event->threads))
+
 (defn- update-bthread-registry
   "Merge newly available bthreads into the registry.
 
@@ -73,6 +93,13 @@
   [state bthreads]
   (update state :name->bthread merge (into {} bthreads)))
 
+(defn- remove-bthreads-from-priorities
+  [bthreads-by-priority removed-bthreads]
+  (let [removed-bthreads (or removed-bthreads #{})]
+    (into (if (sequential? bthreads-by-priority) [] #{})
+          (remove removed-bthreads)
+          bthreads-by-priority)))
+
 (defn- update-bthread-priorities
   "Apply the current priority bookkeeping for spawned bthreads.
 
@@ -80,46 +107,67 @@
   a distinct concern from name lookup, and later lifecycle changes will likely
   need to adjust them independently."
   [state spawned-bthreads parent->child-bthreads]
-  (if spawned-bthreads
-    (update state
-            :bthreads-by-priority
-            splice-bthread-priorities
-            parent->child-bthreads)
+  (if (seq spawned-bthreads)
+    (let [spawned-bthread-names (into #{} (map first) spawned-bthreads)]
+      (update state
+              :bthreads-by-priority
+              (fn [bthreads-by-priority]
+                (-> bthreads-by-priority
+                    (remove-bthreads-from-priorities spawned-bthread-names)
+                    (splice-bthread-priorities parent->child-bthreads)))))
     state))
+
+(defn- deregister-bthreads
+  "Remove terminated bthreads from all lifecycle-owned state indexes.
+
+  A bthread is not fully gone until it has been removed from lookup by name,
+  scheduling priority bookkeeping, active bids, and the event indexes that can
+  otherwise keep it reachable on later steps."
+  [state retired-bthreads]
+  (let [retired-bthreads (or retired-bthreads #{})]
+    (if (seq retired-bthreads)
+      (-> state
+          (update :name->bthread #(apply dissoc % retired-bthreads))
+          (update :bthread->bid #(apply dissoc % retired-bthreads))
+          (update :bthreads-by-priority remove-bthreads-from-priorities retired-bthreads)
+          (update :waits remove-bthreads-from-event-index retired-bthreads)
+          (update :requests remove-bthreads-from-event-index retired-bthreads)
+          (update :blocks remove-bthreads-from-event-index retired-bthreads))
+      state)))
 
 (defn- initialize-spawned-bthreads
   [state spawned-bthreads parent->child-bthreads]
-  (loop [state state
-         spawned-bthreads spawned-bthreads
-         parent->child-bthreads parent->child-bthreads]
-    (if (seq spawned-bthreads)
-      (let [notification-results (notification/notify-bthreads!
-                                  {:name->bthread spawned-bthreads})
-            next-spawned-bthreads
-            (notification-spawned-bthreads notification-results)
-            next-parent->child-bthreads
-            (notification-parent->child-bthreads notification-results)
-            state (-> state
-                      (update-bthread-registry spawned-bthreads)
-                      (update-bthread-priorities spawned-bthreads
-                                                 parent->child-bthreads)
-                      (merge-notification-results
-                       (notification-index-delta notification-results)))]
-        (recur state next-spawned-bthreads next-parent->child-bthreads))
-      state)))
+  (if (seq spawned-bthreads)
+    (let [notification-results (notification/notify-bthreads!
+                                {:name->bthread spawned-bthreads})
+          next-spawned-bthreads
+          (notification-spawned-bthreads notification-results)
+          next-parent->child-bthreads
+          (notification-parent->child-bthreads notification-results)
+          retired-bthreads
+          (notification-retired-bthreads notification-results)
+          state (-> state
+                    (update-bthread-registry spawned-bthreads)
+                    (update-bthread-priorities spawned-bthreads
+                                               parent->child-bthreads)
+                    (merge-notification-results
+                     (notification-index-delta notification-results)))]
+      (-> (initialize-spawned-bthreads state
+                                       next-spawned-bthreads
+                                       next-parent->child-bthreads)
+          (deregister-bthreads retired-bthreads)))
+    state))
 
 (defn- update-bthread-bids
   "Rebuild the active bid map for the next state.
 
-  This combines bids from notified bthreads with any bids produced when newly
-  spawned bthreads are initialized, while preserving the current semantics for
-  triggered bthread removal."
-  [state triggered-bthreads notification-bids spawned-bthreads spawned-init-results]
+  Step updates replace bids for triggered bthreads with the bids reported by the
+  current notification pass. Spawned bthreads are initialized separately and
+  merged through the spawned-bthread initialization pipeline."
+  [state triggered-bthreads notification-bids]
   (-> (get state :bthread->bid)
       (#(apply dissoc % triggered-bthreads))
-      (into notification-bids)
-      (cond-> spawned-bthreads
-        (merge (get spawned-init-results :bthread->bid)))))
+      (into notification-bids)))
 
 (defn- initial-bthread-priorities
   [named-bthreads]
@@ -161,20 +209,8 @@
     (-> state
         (merge-initial-notification-results notification-results)
         (initialize-startup-bthreads notification-results)
+        (deregister-bthreads (notification-retired-bthreads notification-results))
         with-next-event)))
-
-(defn- remove-bthreads-from-event-index
-  [event->threads triggered-bthreads]
-  (into {}
-        (map (fn [[event bthreads]]
-               [event (->> bthreads
-                           (remove (or triggered-bthreads #{}))
-                           (into #{}))]))
-        event->threads))
-
-(defn- initialize-new-bthreads!
-  [name->bthread]
-  (notification/notify-bthreads! {:name->bthread name->bthread}))
 
 (defn- triggered-bthreads
   "Identify the bthreads that advance in response to the current event.
@@ -187,15 +223,6 @@
         (mapcat #(get % (event/type event)))
         [(get state :waits)
          (get state :requests)]))
-
-(defn- initialize-step-spawned-bthreads!
-  "Initialize child bthreads spawned during a step.
-
-  Step-time spawns are initialized after the triggering event is processed so
-  they contribute bids only to subsequent selection state."
-  [spawned-bthreads]
-  (when spawned-bthreads
-    (initialize-new-bthreads! spawned-bthreads)))
 
 (defn- update-event-index
   [event->threads event triggered-bthreads notification-index spawned-index]
@@ -213,23 +240,22 @@
   compute them together to keep step assembly focused on lifecycle phases rather
   than three parallel map updates."
   [state event triggered-bthreads
-   notification-waits notification-requests notification-blocks
-   spawned-waits spawned-requests spawned-blocks]
+   notification-waits notification-requests notification-blocks]
   {:waits (update-event-index (get state :waits)
                               event
                               triggered-bthreads
                               notification-waits
-                              spawned-waits)
+                              nil)
    :requests (update-event-index (get state :requests)
                                  event
                                  triggered-bthreads
                                  notification-requests
-                                 spawned-requests)
+                                 nil)
    :blocks (update-event-index (get state :blocks)
                                event
                                triggered-bthreads
                                notification-blocks
-                               spawned-blocks)})
+                               nil)})
 
 (defn- assemble-next-state
   "Assemble the next program state from a step notification pass.
@@ -241,39 +267,24 @@
     notification-waits :waits
     notification-requests :requests
     notification-blocks :blocks
+    retired-bthreads :retired-bthreads
     spawned-bthreads :bthreads
     :keys [parent->child-bthreads]}
    state
    event]
   (let [triggered-bthreads (triggered-bthreads state event)
-        spawned-init-results
-        (initialize-step-spawned-bthreads! spawned-bthreads)
-        spawned-waits (get spawned-init-results :waits)
-        spawned-requests (get spawned-init-results :requests)
-        spawned-blocks (get spawned-init-results :blocks)
         {:keys [waits requests blocks]}
         (next-event-indexes state
                             event
                             triggered-bthreads
                             notification-waits
                             notification-requests
-                            notification-blocks
-                            spawned-waits
-                            spawned-requests
-                            spawned-blocks)
+                            notification-blocks)
 
         next-bthread->bid
         (update-bthread-bids state
                              triggered-bthreads
-                             notification-bids
-                             spawned-bthreads
-                             spawned-init-results)
-
-        next-bthread-priorities
-        (get (update-bthread-priorities state
-                                        spawned-bthreads
-                                        parent->child-bthreads)
-             :bthreads-by-priority)
+                             notification-bids)
 
         next-state
         (assoc state
@@ -281,12 +292,11 @@
                :waits waits
                :requests requests
                :blocks blocks
-               :bthreads-by-priority next-bthread-priorities
-               :bthread->bid next-bthread->bid
-               :name->bthread (:name->bthread
-                               (update-bthread-registry state
-                                                        spawned-bthreads)))]
-    (with-next-event next-state)))
+               :bthread->bid next-bthread->bid)]
+    (-> next-state
+        (initialize-spawned-bthreads spawned-bthreads parent->child-bthreads)
+        (deregister-bthreads retired-bthreads)
+        with-next-event)))
 
 (defn step
   "Return the next state based on the event"
