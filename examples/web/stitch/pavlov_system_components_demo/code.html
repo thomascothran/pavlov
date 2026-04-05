@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;700;900&amp;family=Manrope:wght@300;400;500;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "surface-container-highest": "#262626",
+                        "tertiary-fixed": "#2ff801",
+                        "on-surface": "#ffffff",
+                        "secondary-dim": "#e4006c",
+                        "surface-tint": "#8ff5ff",
+                        "on-tertiary-fixed": "#064200",
+                        "primary-fixed-dim": "#00deec",
+                        "surface-container-high": "#201f1f",
+                        "outline-variant": "#484847",
+                        "primary-container": "#00eefc",
+                        "surface-container": "#1a1919",
+                        "outline": "#767575",
+                        "tertiary": "#8eff71",
+                        "on-tertiary": "#0d6100",
+                        "surface-dim": "#0e0e0e",
+                        "surface-variant": "#262626",
+                        "secondary-container": "#bb0058",
+                        "on-primary-fixed-variant": "#005e64",
+                        "on-secondary-fixed": "#6d0030",
+                        "on-primary": "#005d63",
+                        "inverse-on-surface": "#565555",
+                        "on-primary-fixed": "#003f43",
+                        "error-dim": "#d7383b",
+                        "tertiary-container": "#2ff801",
+                        "surface-bright": "#2c2c2c",
+                        "tertiary-dim": "#2be800",
+                        "surface-container-low": "#131313",
+                        "secondary": "#ff6b98",
+                        "on-secondary-container": "#fff5f6",
+                        "secondary-fixed-dim": "#ffadc0",
+                        "background": "#0e0e0e",
+                        "surface-container-lowest": "#000000",
+                        "on-secondary": "#47001d",
+                        "on-error-container": "#ffa8a3",
+                        "primary-fixed": "#00eefc",
+                        "on-tertiary-container": "#0b5800",
+                        "inverse-primary": "#006a71",
+                        "on-background": "#ffffff",
+                        "inverse-surface": "#fcf9f8",
+                        "primary": "#8ff5ff",
+                        "primary-dim": "#00deec",
+                        "on-tertiary-fixed-variant": "#0d6200",
+                        "error-container": "#9f0519",
+                        "on-secondary-fixed-variant": "#a1004b",
+                        "on-error": "#490006",
+                        "surface": "#0e0e0e",
+                        "secondary-fixed": "#ffc1ce",
+                        "on-surface-variant": "#adaaaa",
+                        "tertiary-fixed-dim": "#2be800",
+                        "on-primary-container": "#005359",
+                        "error": "#ff716c"
+                    },
+                    fontFamily: {
+                        "headline": ["Space Grotesk"],
+                        "body": ["Manrope"],
+                        "label": ["Space Grotesk"]
+                    },
+                    borderRadius: { "DEFAULT": "0px", "lg": "0px", "xl": "0px", "full": "9999px" },
+                },
+            },
+        }
+    </script>
+<style>.material-symbols-outlined {
+    font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24;
+    vertical-align: middle
+    }
+.glitch-text {
+    position: relative
+    }
+.noise-bg {
+    background-image: url(https://lh3.googleusercontent.com/aida-public/AB6AXuCOcwqYfiAM70LprPcR_rN0BU7CNG6-KSRz94FdtbMc1EZxzBcOxQyhPMAWeBM3bicCaswZFP5N4-PaHMizXeH0EI9Dkre978j9SBr9yDDcq_T5PpBsNG1Dk3UPJ0YgYICng49pXExH-wSd8TzaO_O1G29PIYst_sSNzlWiuPD6XNDw2C5BKcLDS9LJqzR_t3pc2HRy1CVaagyTTuF_3AooVmQ0hRd_E1UrkoEOo2MY-F_mmJ9v9fRCGYfDr6hoJ-A45_j69Kdfb24);
+    opacity: 0.03;
+    pointer-events: none
+    }</style>
+</head>
+<body class="bg-surface text-on-surface font-body selection:bg-primary selection:text-on-primary">
+<div class="fixed inset-0 noise-bg z-[100]"></div>
+<!-- Navigation -->
+<nav class="fixed top-0 w-full z-50 bg-[#0e0e0e]/80 backdrop-blur-xl shadow-[0_0_40px_rgba(143,245,255,0.08)] flex justify-between items-center px-8 py-4 w-full border-b-0">
+<div class="text-2xl font-black text-[#8ff5ff] tracking-tighter font-headline uppercase">PAVLOV</div>
+<div class="hidden md:flex gap-8 items-center">
+<a class="font-['Space_Grotesk'] uppercase tracking-[0.05em] text-sm text-[#adaaaa] hover:text-[#8ff5ff] transition-colors" href="#">NEURAL_LINK</a>
+<a class="font-['Space_Grotesk'] uppercase tracking-[0.05em] text-sm text-[#adaaaa] hover:text-[#8ff5ff] transition-colors" href="#">DATA_GRID</a>
+<a class="font-['Space_Grotesk'] uppercase tracking-[0.05em] text-sm text-[#8ff5ff] border-b-2 border-[#8ff5ff] pb-1" href="#">SENTINEL_OS</a>
+<a class="font-['Space_Grotesk'] uppercase tracking-[0.05em] text-sm text-[#adaaaa] hover:text-[#8ff5ff] transition-colors" href="#">DOCUMENTATION</a>
+</div>
+<button class="bg-primary text-on-primary px-6 py-2 font-headline font-bold text-sm tracking-widest uppercase hover:bg-primary-container active:scale-95 duration-200">
+            INITIALIZE
+        </button>
+</nav>
+<main class="pt-24 pb-12 px-8 max-w-7xl mx-auto space-y-24">
+<!-- Section Header -->
+<header class="relative border-l-4 border-tertiary pl-6 py-4">
+<span class="font-label text-tertiary text-xs tracking-[0.3em] uppercase block mb-2">System Status: Optimal</span>
+<h1 class="font-headline text-5xl font-black tracking-tighter uppercase italic">SYSTEM_COMPONENTS</h1>
+<div class="absolute -top-2 -left-1 w-2 h-2 bg-tertiary"></div>
+</header>
+<!-- Main Content Grid -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-12">
+<!-- Left Column: Neural Typeahead & Param Config -->
+<div class="lg:col-span-7 space-y-16">
+<!-- NEURAL_TYPEAHEAD -->
+<section class="space-y-6">
+<div class="flex items-center gap-4">
+<span class="w-2 h-2 bg-primary"></span>
+<h2 class="font-headline text-xl font-bold tracking-tight uppercase">NEURAL_TYPEAHEAD</h2>
+</div>
+<div class="relative group">
+<div class="flex items-center bg-surface-container-highest border-b-2 border-primary-dim p-4 focus-within:shadow-[0_4px_12px_rgba(143,245,255,0.2)] transition-all">
+<span class="material-symbols-outlined text-primary-dim mr-3">terminal</span>
+<input class="bg-transparent border-none text-on-surface w-full focus:ring-0 font-label placeholder:text-outline uppercase text-sm" placeholder="QUERY_CORE_INDEX..." type="text"/>
+<span class="font-label text-[10px] text-primary-dim opacity-50">SYS_V4.02</span>
+</div>
+<!-- Dropdown Suggestion List -->
+<div class="absolute top-full left-0 w-full mt-2 bg-surface-container-high border border-primary/20 backdrop-blur-md z-10">
+<div class="p-3 border-b border-outline-variant/30 flex justify-between items-center bg-surface-container-highest/50">
+<span class="font-label text-[10px] text-outline uppercase">Suggested Protocols</span>
+<span class="material-symbols-outlined text-primary text-xs">keyboard_arrow_down</span>
+</div>
+<div class="hover:bg-primary/10 p-4 flex justify-between items-center group/item cursor-pointer">
+<span class="font-label text-sm text-on-surface uppercase">LINK_ESTABLISH_ALPHA</span>
+<span class="text-[10px] text-tertiary bg-tertiary/10 px-2 py-1">STABLE</span>
+</div>
+<div class="bg-primary/5 p-4 flex justify-between items-center group/item cursor-pointer border-l-2 border-secondary">
+<div class="flex flex-col">
+<span class="font-label text-sm text-secondary uppercase glitch-text">DATA_SCRUB_SEQUENCE</span>
+<span class="text-[10px] text-outline">ENCRYPTION_ACTIVE</span>
+</div>
+<span class="material-symbols-outlined text-secondary text-sm">emergency_home</span>
+</div>
+<div class="hover:bg-primary/10 p-4 flex justify-between items-center group/item cursor-pointer">
+<span class="font-label text-sm text-on-surface-variant uppercase">SYNTH_NEST_REBOOT</span>
+<span class="text-[10px] text-error bg-error/10 px-2 py-1">DANGER</span>
+</div>
+</div>
+</div>
+</section>
+<!-- PARAM_CONFIGURATION -->
+<section class="space-y-8 bg-surface-container-low p-8 relative overflow-hidden">
+<div class="absolute top-0 right-0 w-32 h-32 bg-secondary/5 -rotate-45 translate-x-16 -translate-y-16"></div>
+<div class="flex items-center gap-4 mb-8">
+<span class="w-2 h-2 bg-secondary"></span>
+<h2 class="font-headline text-xl font-bold tracking-tight uppercase">PARAM_CONFIGURATION</h2>
+</div>
+<form class="space-y-10">
+<!-- Text Input -->
+<div class="space-y-2">
+<label class="font-label text-[10px] text-outline uppercase tracking-widest block">Core Identity Tag</label>
+<input class="w-full bg-surface-container-highest border-0 border-b border-outline-variant text-on-surface font-headline uppercase focus:border-primary focus:ring-0 py-3 transition-colors" type="text" value="SENTINEL_77_X"/>
+<p class="font-label text-[9px] text-outline italic">&gt;_ enter unique hardware identifier</p>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-12">
+<!-- Radio Group -->
+<div class="space-y-4">
+<label class="font-label text-[10px] text-outline uppercase tracking-widest block">Energy Mode</label>
+<div class="space-y-3">
+<label class="flex items-center gap-3 cursor-pointer group">
+<div class="relative flex items-center justify-center">
+<input class="peer appearance-none w-5 h-5 border border-primary checked:bg-primary transition-all" name="mode" type="radio"/>
+<div class="absolute w-2 h-2 bg-on-primary opacity-0 peer-checked:opacity-100"></div>
+</div>
+<span class="font-label text-xs uppercase text-on-surface-variant group-hover:text-primary transition-colors">Stealth_Passive</span>
+</label>
+<label class="flex items-center gap-3 cursor-pointer group">
+<div class="relative flex items-center justify-center">
+<input checked="" class="peer appearance-none w-5 h-5 border border-primary checked:bg-primary transition-all" name="mode" type="radio"/>
+<div class="absolute w-2 h-2 bg-on-primary opacity-0 peer-checked:opacity-100"></div>
+</div>
+<span class="font-label text-xs uppercase text-on-surface group-hover:text-primary transition-colors">Hyper_Active</span>
+</label>
+</div>
+</div>
+<!-- Checkbox Group -->
+<div class="space-y-4">
+<label class="font-label text-[10px] text-outline uppercase tracking-widest block">System Overrides</label>
+<div class="space-y-3">
+<label class="flex items-center gap-3 cursor-pointer group">
+<div class="relative flex items-center justify-center">
+<input checked="" class="peer appearance-none w-5 h-5 border border-tertiary checked:bg-tertiary transition-all" type="checkbox"/>
+<span class="material-symbols-outlined text-[14px] text-on-tertiary absolute opacity-0 peer-checked:opacity-100">check</span>
+</div>
+<span class="font-label text-xs uppercase text-on-surface group-hover:text-tertiary transition-colors">Neural_Dampening</span>
+</label>
+<label class="flex items-center gap-3 cursor-pointer group">
+<div class="relative flex items-center justify-center">
+<input class="peer appearance-none w-5 h-5 border border-tertiary checked:bg-tertiary transition-all" type="checkbox"/>
+<span class="material-symbols-outlined text-[14px] text-on-tertiary absolute opacity-0 peer-checked:opacity-100">check</span>
+</div>
+<span class="font-label text-xs uppercase text-on-surface-variant group-hover:text-tertiary transition-colors">Visual_Overlay_V3</span>
+</label>
+</div>
+</div>
+</div>
+<!-- CTA -->
+<div class="pt-6 border-t border-outline-variant/20">
+<button class="w-full bg-secondary text-white py-4 font-headline font-black tracking-[0.2em] uppercase text-sm hover:bg-secondary-container transition-all active:scale-[0.98] relative overflow-hidden group" type="submit">
+<span class="relative z-10">SUBMIT_INITIALIZATION</span>
+<div class="absolute inset-0 bg-white/10 translate-x-full group-hover:translate-x-0 transition-transform duration-500"></div>
+</button>
+</div>
+</form>
+</section>
+</div>
+<!-- Right Column: Temporal Timeline -->
+<div class="lg:col-span-5">
+<section class="sticky top-32 space-y-8">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-4">
+<span class="w-2 h-2 bg-tertiary"></span>
+<h2 class="font-headline text-xl font-bold tracking-tight uppercase">TEMPORAL_TIMELINE</h2>
+</div>
+<span class="font-label text-[10px] text-outline uppercase">Live Stream</span>
+</div>
+<div class="relative pl-8">
+<!-- Vertical Connecting Line -->
+<div class="absolute left-[3.5px] top-2 bottom-2 w-[1px] bg-gradient-to-b from-primary via-tertiary to-secondary opacity-30"></div>
+<div class="space-y-12">
+<!-- Event 1 -->
+<div class="relative">
+<div class="absolute -left-[32px] top-1.5 w-4 h-4 bg-primary flex items-center justify-center">
+<div class="w-1.5 h-1.5 bg-on-primary"></div>
+</div>
+<div class="space-y-2">
+<div class="flex justify-between items-baseline">
+<h3 class="font-headline font-bold text-sm text-primary uppercase">NEURAL_LINK_ESTABLISHED</h3>
+<span class="font-label text-[10px] text-outline">04:22:11</span>
+</div>
+<div class="bg-surface-container p-4 border-l-2 border-primary-dim">
+<p class="text-xs text-on-surface-variant leading-relaxed">
+                                            Handshake protocol successful. Biometric data streaming to central hub. Latency &lt; 2ms.
+                                        </p>
+</div>
+</div>
+</div>
+<!-- Event 2 -->
+<div class="relative">
+<div class="absolute -left-[32px] top-1.5 w-4 h-4 bg-tertiary flex items-center justify-center shadow-[0_0_15px_rgba(142,255,113,0.4)]">
+<div class="w-1.5 h-1.5 bg-on-tertiary animate-pulse"></div>
+</div>
+<div class="space-y-2">
+<div class="flex justify-between items-baseline">
+<h3 class="font-headline font-bold text-sm text-tertiary uppercase">OS_UPDATE_PATCH_7.4</h3>
+<span class="font-label text-[10px] text-outline">03:55:04</span>
+</div>
+<div class="bg-surface-container p-4 border-l-2 border-tertiary">
+<p class="text-xs text-on-surface-variant leading-relaxed font-mono">
+                                            [INFO] KERNEL_MODIFIED<br/>
+                                            [INFO] VISION_RECALIBRATED<br/>
+                                            [INFO] SENSOR_ARRAY_OPTIMIZED
+                                        </p>
+</div>
+</div>
+</div>
+<!-- Event 3 -->
+<div class="relative">
+<div class="absolute -left-[32px] top-1.5 w-4 h-4 border border-outline-variant flex items-center justify-center">
+<div class="w-1.5 h-1.5 bg-outline-variant"></div>
+</div>
+<div class="space-y-2">
+<div class="flex justify-between items-baseline">
+<h3 class="font-headline font-bold text-sm text-outline uppercase">HARDWARE_CHECK_INIT</h3>
+<span class="font-label text-[10px] text-outline">03:12:59</span>
+</div>
+<div class="bg-surface-container/40 p-4 border-l-2 border-outline-variant">
+<p class="text-xs text-outline leading-relaxed italic">
+                                            Diagnostic scan initiated. All actuators responding at 98.4% efficiency.
+                                        </p>
+</div>
+</div>
+</div>
+<!-- Event 4 (Failure) -->
+<div class="relative">
+<div class="absolute -left-[32px] top-1.5 w-4 h-4 bg-secondary flex items-center justify-center">
+<span class="material-symbols-outlined text-[10px] text-white">warning</span>
+</div>
+<div class="space-y-2">
+<div class="flex justify-between items-baseline">
+<h3 class="font-headline font-bold text-sm text-secondary uppercase italic">SYSTEM_BREACH_DETECTED</h3>
+<span class="font-label text-[10px] text-outline">01:44:20</span>
+</div>
+<div class="bg-secondary-container/20 p-4 border-l-2 border-secondary">
+<div class="flex gap-3">
+<div class="w-10 h-10 shrink-0">
+<img alt="Breach visual" class="w-full h-full object-cover grayscale" data-alt="Abstract distorted digital interference pattern" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD5zbfRgY0n8bUju9R8bqpXCmWLSDJX19lNPL5rqIOQhWIR1wtcHp-H3bSKmGqew2SobCfCT5Dl6jQnAYFeZrvWot9yqbgxQENBzpvunoEYJGb03ztC5xLNu_-H3JNn6IX5ksX8oT2CYoq-9XLL5bpAxmtt0m6MSkvG6UPjGkITrZbo55-T58Q8NN2Tkzl9qQMg5bOEuTTgAB47JgKSVDVA2WA4QrVqWSCC7HCR0dWedbfeQpdbsvG70hCxNchYVgHUH-RTZ5jEL28"/>
+</div>
+<p class="text-xs text-on-secondary-container leading-relaxed">
+                                                Unauthorized access attempt from NODE_448. Firewall activated. Intrusion isolated.
+                                            </p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+</div>
+</div>
+</main>
+<!-- Footer -->
+<footer class="bg-[#0e0e0e] flex flex-col md:flex-row justify-between items-center px-12 py-8 w-full border-t border-[#484847]/15">
+<div class="text-[#8ff5ff] font-bold font-headline uppercase tracking-tighter text-lg">PAVLOV_SYSTEMS // CLOJURE_OS</div>
+<div class="flex gap-8 my-6 md:my-0">
+<a class="font-['Space_Grotesk'] text-[10px] tracking-widest uppercase text-[#484847] hover:text-[#ff6b98] transition-all duration-300" href="#">TERMINAL</a>
+<a class="font-['Space_Grotesk'] text-[10px] tracking-widest uppercase text-[#484847] hover:text-[#ff6b98] transition-all duration-300" href="#">ENCRYPTED_FEED</a>
+<a class="font-['Space_Grotesk'] text-[10px] tracking-widest uppercase text-[#484847] hover:text-[#ff6b98] transition-all duration-300" href="#">HARDWARE_SPECS</a>
+<a class="font-['Space_Grotesk'] text-[10px] tracking-widest uppercase text-[#484847] hover:text-[#ff6b98] transition-all duration-300" href="#">CORE_PROTOCOL</a>
+</div>
+<div class="font-['Space_Grotesk'] text-[10px] tracking-widest uppercase text-[#484847]">©2024 PAVLOV_SYSTEMS</div>
+</footer>
+</body></html>

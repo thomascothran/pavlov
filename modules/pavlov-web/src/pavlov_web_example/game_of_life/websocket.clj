@@ -6,9 +6,18 @@
             [pavlov-web-example.game-of-life.dom-ops :as dom-ops]
             [pavlov-web-example.game-of-life.game-status :as game-status]
             [ring.websocket]
-            [tech.thomascothran.pavlov.bprogram :as bp]
-            [tech.thomascothran.pavlov.bprogram.ephemeral :as bpe])
+             [tech.thomascothran.pavlov.bprogram :as bp]
+             [tech.thomascothran.pavlov.bprogram.ephemeral :as bpe])
   (:import (java.util.concurrent Executors TimeUnit)))
+
+(defn- log
+  [& args]
+  (apply println "[game-of-life.websocket]" args))
+
+(defn- warn
+  [& args]
+  (binding [*out* *err*]
+    (apply println "[game-of-life.websocket]" args)))
 
 (def ^:private !shared-runtimes (atom {}))
 
@@ -32,7 +41,18 @@
 
 (defn- send-event!
   [websocket event]
-  (ring.websocket/send websocket (pr-str event)))
+  (let [payload (pr-str event)]
+    (log "send websocket-id=" (:websocket/id websocket)
+         " event-type=" (:type event)
+         (when-let [ops (:ops event)]
+           (str " ops=" (count ops))))
+    (try
+      (ring.websocket/send websocket payload)
+      (catch Throwable error
+        (warn "send failed websocket-id=" (:websocket/id websocket)
+              " event-type=" (:type event)
+              " error=" (.getMessage error))
+        (throw error)))))
 
 (defn- runtime-key [{::keys [runtime-id start-clock?]}]
   [ring.websocket/send
@@ -44,12 +64,19 @@
   (fn [selected-event _program]
     (case (:type selected-event)
       :game-of-life/broadcast
-      (doseq [websocket (vals @!clients)]
-        (send-event! websocket (:event selected-event)))
+      (do
+        (log "broadcast event-type=" (get-in selected-event [:event :type])
+             " clients=" (count @!clients))
+        (doseq [websocket (vals @!clients)]
+          (send-event! websocket (:event selected-event))))
 
       :game-of-life/send-to-client
-      (when-let [websocket (get-websocket-by-id (:client-id selected-event))]
-        (send-event! websocket (:event selected-event)))
+      (do
+        (log "send-to-client client-id=" (:client-id selected-event)
+             " event-type=" (get-in selected-event [:event :type])
+             " connected=" (boolean (get-websocket-by-id (:client-id selected-event))))
+        (when-let [websocket (get-websocket-by-id (:client-id selected-event))]
+          (send-event! websocket (:event selected-event))))
 
       nil)))
 
@@ -98,17 +125,29 @@
   [request]
   (let [runtime-opts (select-keys request [runtime-id-key start-clock?-key])
         {:keys [!clients !client-ids program] :as runtime} (ensure-runtime! runtime-opts)]
+    (log "handler request runtime-key=" (runtime-key runtime-opts)
+         " clients=" (count @!clients))
     {:ring.websocket/listener
      {:on-open (fn [websocket]
-                 (let [client-id (new-client-id websocket)]
-                   (swap! !clients assoc client-id websocket)
-                   (swap! !client-ids assoc websocket client-id)
-                   (bp/submit-event! program {:type :game-of-life/client-opened
-                                              :client-id client-id})))
-      :on-message (fn [_websocket raw-payload]
-                    (bp/submit-event! program (edn/read-string raw-payload)))
+                  (let [client-id (new-client-id websocket)]
+                    (log "on-open client-id=" client-id
+                         " websocket-id=" (:websocket/id websocket))
+                    (swap! !clients assoc client-id websocket)
+                    (swap! !client-ids assoc websocket client-id)
+                    (bp/submit-event! program {:type :game-of-life/client-opened
+                                               :client-id client-id})))
+      :on-message (fn [websocket raw-payload]
+                    (let [client-id (get @!client-ids websocket)
+                          event (edn/read-string raw-payload)]
+                      (log "on-message client-id=" client-id
+                           " websocket-id=" (:websocket/id websocket)
+                           " event-type=" (:type event)
+                           " payload=" raw-payload)
+                      (bp/submit-event! program event)))
       :on-close (fn [websocket _status-code _reason]
                   (when-let [client-id (get @!client-ids websocket)]
+                    (log "on-close client-id=" client-id
+                         " websocket-id=" (:websocket/id websocket))
                     (swap! !client-ids dissoc websocket)
                     (swap! !clients dissoc client-id)
                     (bp/submit-event! program {:type :game-of-life/client-closed

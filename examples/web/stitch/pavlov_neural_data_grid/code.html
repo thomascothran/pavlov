@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700;900&amp;family=Manrope:wght@200;300;400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "tertiary-dim": "#2be800",
+              "surface": "#0e0e0e",
+              "primary-container": "#00eefc",
+              "surface-bright": "#2c2c2c",
+              "background": "#0e0e0e",
+              "inverse-surface": "#fcf9f8",
+              "surface-tint": "#8ff5ff",
+              "surface-variant": "#262626",
+              "on-secondary": "#47001d",
+              "on-error-container": "#ffa8a3",
+              "secondary": "#ff6b98",
+              "on-primary-fixed-variant": "#005e64",
+              "surface-dim": "#0e0e0e",
+              "error": "#ff716c",
+              "on-surface": "#ffffff",
+              "primary-fixed-dim": "#00deec",
+              "on-tertiary": "#0d6100",
+              "surface-container-lowest": "#000000",
+              "surface-container-high": "#201f1f",
+              "error-dim": "#d7383b",
+              "on-secondary-fixed": "#6d0030",
+              "on-surface-variant": "#adaaaa",
+              "secondary-container": "#bb0058",
+              "surface-container-low": "#131313",
+              "primary-dim": "#00deec",
+              "tertiary-fixed": "#2ff801",
+              "inverse-primary": "#006a71",
+              "outline-variant": "#484847",
+              "surface-container-highest": "#262626",
+              "on-background": "#ffffff",
+              "secondary-dim": "#e4006c",
+              "inverse-on-surface": "#565555",
+              "tertiary-container": "#2ff801",
+              "on-secondary-container": "#fff5f6",
+              "on-primary-fixed": "#003f43",
+              "outline": "#767575",
+              "on-primary-container": "#005359",
+              "secondary-fixed": "#ffc1ce",
+              "primary": "#8ff5ff",
+              "on-tertiary-container": "#0b5800",
+              "primary-fixed": "#00eefc",
+              "secondary-fixed-dim": "#ffadc0",
+              "on-secondary-fixed-variant": "#a1004b",
+              "tertiary": "#8eff71",
+              "on-primary": "#005d63",
+              "error-container": "#9f0519",
+              "on-error": "#490006",
+              "tertiary-fixed-dim": "#2be800",
+              "on-tertiary-fixed-variant": "#0d6200",
+              "surface-container": "#1a1919",
+              "on-tertiary-fixed": "#064200"
+            },
+            fontFamily: {
+              "headline": ["Space Grotesk"],
+              "body": ["Manrope"],
+              "label": ["Space Grotesk"]
+            },
+            borderRadius: {"DEFAULT": "0px", "lg": "0px", "xl": "0px", "full": "9999px"},
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body {
+            background-image: 
+                radial-gradient(circle at 2px 2px, rgba(143, 245, 255, 0.05) 1px, transparent 0);
+            background-size: 40px 40px;
+        }
+        .scanline {
+            width: 100%;
+            height: 2px;
+            background: rgba(143, 245, 255, 0.1);
+            position: absolute;
+            z-index: 10;
+        }
+        .glitch-text {
+            text-shadow: 2px 0 #ff6b98, -2px 0 #8eff71;
+        }
+        .hud-border {
+            clip-path: polygon(0 0, 100% 0, 100% 70%, 95% 100%, 0 100%);
+        }
+        .grid-bg {
+            background-image: linear-gradient(rgba(143, 245, 255, 0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(143, 245, 255, 0.03) 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+    </style>
+</head>
+<body class="bg-surface text-on-surface font-body selection:bg-primary selection:text-on-primary">
+<!-- Top Navigation -->
+<nav class="fixed top-0 left-0 w-full flex justify-between items-center px-6 py-4 bg-[#0e0e0e]/80 backdrop-blur-md z-50 border-b border-[#484847]/15 shadow-[0_0_40px_rgba(143,245,255,0.08)]">
+<div class="text-2xl font-black text-[#8ff5ff] tracking-tighter font-headline">PAVLOV</div>
+<div class="hidden md:flex gap-8 items-center">
+<a class="font-headline uppercase tracking-[0.05em] text-sm text-[#8ff5ff] border-b-2 border-[#8ff5ff] pb-1" href="#">CORE</a>
+<a class="font-headline uppercase tracking-[0.05em] text-sm text-[#adaaaa] hover:text-[#8ff5ff] transition-colors" href="#">NEURAL</a>
+<a class="font-headline uppercase tracking-[0.05em] text-sm text-[#adaaaa] hover:text-[#8ff5ff] transition-colors" href="#">DOCUMENTATION</a>
+<a class="font-headline uppercase tracking-[0.05em] text-sm text-[#adaaaa] hover:text-[#8ff5ff] transition-colors" href="#">RELEASES</a>
+</div>
+<button class="bg-primary text-on-primary px-6 py-2 font-headline font-bold text-sm tracking-widest hover:bg-primary-container transition-all active:scale-95">
+            INITIALIZE
+        </button>
+</nav>
+<!-- Side Interface (Desktop) -->
+<aside class="hidden lg:flex fixed left-0 top-0 h-screen w-20 flex-col items-center py-20 gap-8 bg-[#131313] z-40">
+<div class="flex flex-col items-center gap-1 mb-8">
+<div class="w-10 h-10 bg-surface-container-highest flex items-center justify-center border-l-2 border-secondary">
+<span class="material-symbols-outlined text-secondary text-xl">pets</span>
+</div>
+<span class="font-label text-[0.5rem] tracking-tighter text-[#adaaaa]">K9_UNIT</span>
+</div>
+<div class="flex flex-col gap-6">
+<button class="p-3 bg-[#262626] text-[#8ff5ff] border-l-2 border-[#8ff5ff] hover:translate-x-1 transition-all">
+<span class="material-symbols-outlined">terminal</span>
+</button>
+<button class="p-3 text-[#adaaaa] opacity-60 hover:opacity-100 hover:bg-[#1a1a1a] hover:translate-x-1 transition-all">
+<span class="material-symbols-outlined">settings_input_antenna</span>
+</button>
+<button class="p-3 text-[#adaaaa] opacity-60 hover:opacity-100 hover:bg-[#1a1a1a] hover:translate-x-1 transition-all">
+<span class="material-symbols-outlined">lan</span>
+</button>
+<button class="p-3 text-[#adaaaa] opacity-60 hover:opacity-100 hover:bg-[#1a1a1a] hover:translate-x-1 transition-all">
+<span class="material-symbols-outlined">memory</span>
+</button>
+</div>
+<div class="mt-auto flex flex-col items-center gap-2">
+<div class="w-1 h-1 bg-tertiary"></div>
+<div class="w-1 h-1 bg-tertiary"></div>
+<div class="w-1 h-1 bg-tertiary opacity-30"></div>
+</div>
+</aside>
+<main class="lg:pl-20 pt-20">
+<!-- Hero Section -->
+<section class="relative min-height-[921px] flex flex-col items-center justify-center px-6 py-20 overflow-hidden">
+<!-- Decorative Elements -->
+<div class="absolute top-20 right-10 w-64 h-64 border border-primary/10 rounded-full opacity-20 pointer-events-none"></div>
+<div class="absolute bottom-40 left-10 w-96 h-96 border border-secondary/5 rounded-full opacity-20 pointer-events-none"></div>
+<div class="max-w-6xl w-full grid md:grid-cols-2 gap-12 items-center relative z-10">
+<div class="space-y-8">
+<div class="inline-flex items-center gap-2 px-3 py-1 bg-surface-container-highest border-l-2 border-tertiary">
+<span class="w-2 h-2 bg-tertiary"></span>
+<span class="font-label text-[0.6875rem] tracking-widest text-tertiary uppercase">System Status: Optimal</span>
+</div>
+<h1 class="font-headline font-black text-6xl md:text-8xl leading-tight tracking-tighter text-on-surface">
+                        PAVLOV <span class="text-primary italic">IS HERE</span> <br/>
+                        FOR THE <span class="text-secondary glitch-text">WEB</span>
+</h1>
+<p class="text-on-surface-variant text-lg max-w-md font-body leading-relaxed">
+                        A high-performance Clojure web client engineered for the modern synthetic landscape. Fast, functional, and fiercely efficient.
+                    </p>
+<div class="flex flex-col gap-4">
+<label class="font-label text-xs text-primary/60 tracking-[0.2em] uppercase">Initialize Response</label>
+<div class="relative group">
+<span class="absolute left-4 top-1/2 -translate-y-1/2 text-tertiary font-label">&gt;_</span>
+<input class="w-full bg-surface-container-highest border-0 border-b-2 border-primary/30 py-4 pl-12 pr-4 text-on-surface placeholder:text-outline focus:ring-0 focus:border-primary transition-all font-body text-xl" placeholder="so I feel ..." type="text"/>
+<div class="absolute bottom-0 left-0 w-0 h-0.5 bg-primary group-focus-within:w-full transition-all duration-500 shadow-[0_0_10px_#8ff5ff]"></div>
+</div>
+</div>
+</div>
+<div class="relative flex justify-center items-center">
+<!-- Robot Dog Motif Container -->
+<div class="relative w-full aspect-square max-w-md bg-surface-container-low border border-outline-variant/15 p-1">
+<div class="absolute -top-2 -left-2 w-6 h-6 border-t-2 border-l-2 border-secondary"></div>
+<div class="absolute -bottom-2 -right-2 w-6 h-6 border-b-2 border-r-2 border-primary"></div>
+<div class="w-full h-full bg-surface relative overflow-hidden group">
+<img alt="Futuristic cybernetic robotic dog with neon blue lights" class="w-full h-full object-cover opacity-60 grayscale group-hover:grayscale-0 transition-all duration-700" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD5udweu_Vv09deoR_bXFcXtWlDeKQ5709P_df0_1Tp4JB1egSGUZusmYyta_6ZLsZKAqIy4Yx5Xk0tGZmIWzUYSiSPXk-v00BfXfK1KE2OU2P5sOxzgkRiMyqmV5rjJhORJ0veitbRPWRHipNLN1bRbk7ea0H2nIMJBYmNMFs4kVCIOMdRsOPixAR563JnXU5vvwHTASTacLrDVjx7c-mgar821RhePy1yiy-KzTVlACz7MwDJukgi5_kHFCEI6JK2xH0IfFDKaxk"/>
+<!-- Tactical Overlays -->
+<div class="absolute inset-0 flex flex-col justify-between p-6 pointer-events-none">
+<div class="flex justify-between items-start">
+<div class="font-label text-[10px] text-primary space-y-1">
+<p>REF: K9-SYNTH-01</p>
+<p>SCAN: 100%</p>
+</div>
+<div class="text-right font-label text-[10px] text-secondary">
+<p>NEURAL_LINK: ACTIVE</p>
+<p>LATENCY: 2ms</p>
+</div>
+</div>
+<div class="w-full h-1/3 border-t border-primary/20 bg-gradient-to-b from-primary/5 to-transparent"></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Amplification Area -->
+<section class="bg-surface-container-low py-32 px-6 border-y border-outline-variant/10">
+<div class="max-w-6xl mx-auto flex flex-col items-center text-center gap-12">
+<div class="w-20 h-1 bg-secondary shadow-[0_0_15px_#ff6b98]"></div>
+<h2 class="font-label text-xs tracking-[0.5em] text-on-surface-variant uppercase">Neural Amplification Output</h2>
+<div class="w-full min-h-[300px] flex items-center justify-center relative">
+<!-- Holographic Grid Background -->
+<div class="absolute inset-0 bg-[linear-gradient(rgba(143,245,255,0.05)_1px,transparent_1px),linear-gradient(90deg,rgba(143,245,255,0.05)_1px,transparent_1px)] bg-[size:20px_20px] [mask-image:radial-gradient(ellipse_at_center,black,transparent_80%)]"></div>
+<div class="relative">
+<p class="font-headline font-black text-7xl md:text-[10rem] text-primary opacity-90 glitch-text leading-none tracking-tighter uppercase select-none">
+                            SYNTHETIC
+                        </p>
+<p class="absolute top-1 left-1 font-headline font-black text-7xl md:text-[10rem] text-secondary/30 leading-none tracking-tighter uppercase select-none translate-x-1">
+                            SYNTHETIC
+                        </p>
+</div>
+</div>
+<div class="grid md:grid-cols-3 gap-8 w-full mt-12">
+<div class="p-8 bg-surface-container-highest border-t-2 border-primary">
+<span class="material-symbols-outlined text-primary mb-4">bolt</span>
+<h3 class="font-headline font-bold text-xl mb-2">ULTRA-FAST</h3>
+<p class="text-sm text-on-surface-variant">Zero-latency request cycles optimized for the modern edge.</p>
+</div>
+<div class="p-8 bg-surface-container-highest border-t-2 border-secondary">
+<span class="material-symbols-outlined text-secondary mb-4">security</span>
+<h3 class="font-headline font-bold text-xl mb-2">ENCRYPTED</h3>
+<p class="text-sm text-on-surface-variant">Quantum-ready header sanitization and stream encryption.</p>
+</div>
+<div class="p-8 bg-surface-container-highest border-t-2 border-tertiary">
+<span class="material-symbols-outlined text-tertiary mb-4">psychology</span>
+<h3 class="font-headline font-bold text-xl mb-2">PREDICTIVE</h3>
+<p class="text-sm text-on-surface-variant">AI-driven caching patterns that anticipate user data needs.</p>
+</div>
+</div>
+</div>
+</section>
+<!-- Datagrid Specs Section -->
+<section class="py-24 px-6 max-w-6xl mx-auto">
+<div class="bg-surface-container-low border border-outline-variant/20 p-6 md:p-8 relative overflow-hidden grid-bg">
+<!-- Header Area -->
+<div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8 relative z-10">
+<div class="space-y-1">
+<h3 class="font-headline text-2xl font-black text-on-surface tracking-tight">NEURAL_TELEMETRY_LOG</h3>
+<p class="text-xs font-label text-primary/60 tracking-widest uppercase">Active Node Monitoring Sequence</p>
+</div>
+<div class="flex flex-wrap items-center gap-4 w-full md:w-auto">
+<div class="relative flex-1 md:w-64">
+<span class="absolute left-3 top-1/2 -translate-y-1/2 material-symbols-outlined text-outline text-sm">search</span>
+<input class="w-full bg-surface border border-outline-variant/30 py-2 pl-10 pr-4 text-xs font-label text-on-surface focus:border-primary focus:ring-1 focus:ring-primary/20 transition-all outline-none" placeholder="FILTER_STREAM..." type="text"/>
+</div>
+<div class="flex items-center gap-2">
+<button class="bg-surface-container-highest border border-outline-variant/30 px-4 py-2 text-[10px] font-label tracking-widest text-on-surface-variant hover:text-primary hover:border-primary/50 transition-all flex items-center gap-2">
+<span class="material-symbols-outlined text-sm">download</span> EXPORT
+                </button>
+<button class="bg-surface-container-highest border border-outline-variant/30 p-2 text-on-surface-variant hover:text-secondary hover:border-secondary/50 transition-all">
+<span class="material-symbols-outlined text-sm">settings</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Datagrid -->
+<div class="overflow-x-auto relative z-10">
+<table class="w-full border-collapse">
+<thead>
+<tr class="border-b border-outline-variant/30 bg-surface-container-high/50">
+<th class="p-4 text-left">
+<div class="flex items-center gap-2 group cursor-pointer">
+<span class="text-[10px] font-label tracking-[0.2em] text-on-surface-variant uppercase group-hover:text-primary">Node ID</span>
+<div class="flex flex-col -space-y-1">
+<span class="material-symbols-outlined text-[10px] leading-none text-primary">arrow_drop_up</span>
+<span class="material-symbols-outlined text-[10px] leading-none text-outline">arrow_drop_down</span>
+</div>
+</div>
+</th>
+<th class="p-4 text-left">
+<div class="flex items-center gap-2 group cursor-pointer">
+<span class="text-[10px] font-label tracking-[0.2em] text-on-surface-variant uppercase group-hover:text-primary">Latency</span>
+<div class="flex flex-col -space-y-1">
+<span class="material-symbols-outlined text-[10px] leading-none text-outline">arrow_drop_up</span>
+<span class="material-symbols-outlined text-[10px] leading-none text-outline">arrow_drop_down</span>
+</div>
+</div>
+</th>
+<th class="p-4 text-left">
+<div class="flex items-center gap-2 group cursor-pointer">
+<span class="text-[10px] font-label tracking-[0.2em] text-on-surface-variant uppercase group-hover:text-primary">Protocol</span>
+<span class="material-symbols-outlined text-xs text-outline">more_vert</span>
+</div>
+</th>
+<th class="p-4 text-left">
+<div class="flex items-center gap-2 group cursor-pointer">
+<span class="text-[10px] font-label tracking-[0.2em] text-on-surface-variant uppercase group-hover:text-primary">Status</span>
+<span class="material-symbols-outlined text-xs text-outline">more_vert</span>
+</div>
+</th>
+<th class="p-4 text-right">
+<div class="flex items-center justify-end gap-2 group cursor-pointer">
+<span class="text-[10px] font-label tracking-[0.2em] text-on-surface-variant uppercase group-hover:text-primary">Security</span>
+</div>
+</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-outline-variant/10">
+<tr class="hover:bg-primary/5 transition-colors group">
+<td class="p-4 font-label text-xs text-on-surface border-l-2 border-transparent group-hover:border-primary">SYNTH-NODE-001</td>
+<td class="p-4 text-xs font-label text-tertiary">0.82 ms</td>
+<td class="p-4 text-xs font-label text-on-surface-variant">PAVLOV/UDP</td>
+<td class="p-4">
+<span class="inline-flex items-center gap-1.5 px-2 py-0.5 bg-tertiary/10 border border-tertiary/30 text-[9px] font-label text-tertiary uppercase">Active</span>
+</td>
+<td class="p-4 text-right text-xs font-label text-secondary">L5_ENCRYPTED</td>
+</tr>
+<tr class="hover:bg-primary/5 transition-colors group">
+<td class="p-4 font-label text-xs text-on-surface border-l-2 border-transparent group-hover:border-primary">SYNTH-NODE-002</td>
+<td class="p-4 text-xs font-label text-tertiary">1.14 ms</td>
+<td class="p-4 text-xs font-label text-on-surface-variant">PAVLOV/GRPC</td>
+<td class="p-4">
+<span class="inline-flex items-center gap-1.5 px-2 py-0.5 bg-tertiary/10 border border-tertiary/30 text-[9px] font-label text-tertiary uppercase">Active</span>
+</td>
+<td class="p-4 text-right text-xs font-label text-secondary">L5_ENCRYPTED</td>
+</tr>
+<tr class="hover:bg-primary/5 transition-colors group bg-surface-container-high/20">
+<td class="p-4 font-label text-xs text-on-surface border-l-2 border-primary">SYNTH-NODE-042</td>
+<td class="p-4 text-xs font-label text-secondary">12.5 ms</td>
+<td class="p-4 text-xs font-label text-on-surface-variant">PAVLOV/TCP</td>
+<td class="p-4">
+<span class="inline-flex items-center gap-1.5 px-2 py-0.5 bg-secondary/10 border border-secondary/30 text-[9px] font-label text-secondary uppercase">Syncing</span>
+</td>
+<td class="p-4 text-right text-xs font-label text-secondary">L4_PARTIAL</td>
+</tr>
+<tr class="hover:bg-primary/5 transition-colors group">
+<td class="p-4 font-label text-xs text-on-surface border-l-2 border-transparent group-hover:border-primary">SYNTH-NODE-099</td>
+<td class="p-4 text-xs font-label text-tertiary">0.45 ms</td>
+<td class="p-4 text-xs font-label text-on-surface-variant">PAVLOV/UDP</td>
+<td class="p-4">
+<span class="inline-flex items-center gap-1.5 px-2 py-0.5 bg-tertiary/10 border border-tertiary/30 text-[9px] font-label text-tertiary uppercase">Active</span>
+</td>
+<td class="p-4 text-right text-xs font-label text-secondary">L5_ENCRYPTED</td>
+</tr>
+<tr class="hover:bg-primary/5 transition-colors group">
+<td class="p-4 font-label text-xs text-on-surface border-l-2 border-transparent group-hover:border-primary">SYNTH-NODE-105</td>
+<td class="p-4 text-xs font-label text-tertiary">0.98 ms</td>
+<td class="p-4 text-xs font-label text-on-surface-variant">PAVLOV/WS</td>
+<td class="p-4">
+<span class="inline-flex items-center gap-1.5 px-2 py-0.5 bg-tertiary/10 border border-tertiary/30 text-[9px] font-label text-tertiary uppercase">Active</span>
+</td>
+<td class="p-4 text-right text-xs font-label text-secondary">L5_ENCRYPTED</td>
+</tr>
+<tr class="hover:bg-primary/5 transition-colors group">
+<td class="p-4 font-label text-xs text-on-surface border-l-2 border-transparent group-hover:border-primary">SYNTH-NODE-211</td>
+<td class="p-4 text-xs font-label text-on-surface-variant opacity-50 italic">-- timeout --</td>
+<td class="p-4 text-xs font-label text-on-surface-variant">NONE</td>
+<td class="p-4">
+<span class="inline-flex items-center gap-1.5 px-2 py-0.5 bg-error/10 border border-error/30 text-[9px] font-label text-error uppercase">Offline</span>
+</td>
+<td class="p-4 text-right text-xs font-label text-error">NULL</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Footer Stats -->
+<div class="mt-8 pt-6 border-t border-outline-variant/30 flex justify-between items-center relative z-10">
+<div class="flex gap-8">
+<div class="flex flex-col">
+<span class="text-[8px] font-label text-on-surface-variant tracking-[0.2em] uppercase">Total_Throughput</span>
+<span class="text-lg font-headline font-bold text-primary">84.2 GB/S</span>
+</div>
+<div class="flex flex-col">
+<span class="text-[8px] font-label text-on-surface-variant tracking-[0.2em] uppercase">Error_Rate</span>
+<span class="text-lg font-headline font-bold text-secondary">0.002%</span>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<span class="text-[10px] font-label text-on-surface-variant">PAGE 1 OF 12</span>
+<div class="flex gap-1">
+<button class="w-8 h-8 flex items-center justify-center bg-surface-container-highest border border-outline-variant/30 text-on-surface-variant hover:text-primary transition-all">
+<span class="material-symbols-outlined text-sm">chevron_left</span>
+</button>
+<button class="w-8 h-8 flex items-center justify-center bg-surface-container-highest border border-outline-variant/30 text-on-surface-variant hover:text-primary transition-all">
+<span class="material-symbols-outlined text-sm">chevron_right</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Decorative Corner Accents -->
+<div class="absolute top-0 right-0 w-12 h-12 bg-gradient-to-bl from-primary/10 to-transparent"></div>
+<div class="absolute bottom-0 left-0 w-24 h-1 bg-primary/40"></div>
+</div>
+</section>
+<!-- Footer -->
+<footer class="w-full py-8 px-10 flex flex-col md:flex-row justify-between items-center gap-4 bg-[#0e0e0e] border-t border-[#484847]/15">
+<div class="text-[#8ff5ff] font-headline font-black text-xl tracking-tighter uppercase">PAVLOV</div>
+<div class="font-['Space_Grotesk'] text-[10px] tracking-[0.2em] uppercase text-[#adaaaa] text-center md:text-left">
+                © 2024 SYNTHETIC_SENTINEL_DIV. ALL RIGHTS RESERVED.
+            </div>
+<div class="flex gap-6">
+<a class="font-['Space_Grotesk'] text-[10px] tracking-[0.2em] uppercase text-[#adaaaa] hover:text-[#ff6b98] transition-colors" href="#">PRIVACY_PROTOCOL</a>
+<a class="font-['Space_Grotesk'] text-[10px] tracking-[0.2em] uppercase text-[#adaaaa] hover:text-[#ff6b98] transition-colors" href="#">ENCRYPTION_STANDARDS</a>
+<a class="font-['Space_Grotesk'] text-[10px] tracking-[0.2em] uppercase text-[#adaaaa] hover:text-[#ff6b98] transition-colors" href="#">SOURCE_CODE</a>
+</div>
+</footer>
+</main>
+<!-- Scanning Line Effect -->
+<div class="scanline top-1/4 animate-pulse opacity-20 pointer-events-none"></div>
+<div class="scanline bottom-1/4 animate-pulse opacity-10 pointer-events-none"></div>
+</body></html>

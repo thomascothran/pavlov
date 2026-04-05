@@ -7,6 +7,10 @@
             [tech.thomascothran.pavlov.web.server :as server]
             [tech.thomascothran.pavlov.web.server.websocket :as websocket]))
 
+(defn- log
+  [& args]
+  (.log js/console (apply str "[pavlov-web-example.client] " args)))
+
 (defn websocket-url
   [ws-path]
   (let [location (.-location js/window)
@@ -35,22 +39,27 @@
 (defn make-bridged-program!
   [{:keys [query-selector submit! transport page-bthreads forwarded-events forwarded-event->server-event]
     :or {forwarded-event->server-event (fn [event]
-                                        {:type (:type event)})}}]
+                                         {:type (:type event)})}}]
   (bpe/make-program!
    (into (cond-> [[:dom-op (dom/make-dom-op-bthread query-selector)]
                   [:dom-event-redirect
                    (dom/make-dom-event-redirect-bthread)]
                   [:server-event-received
                    (b/on-any #{:pavlov.web.server/event-received}
-                             (fn [event]
-                               {:request #{(:event event)}}))]]
-           (seq forwarded-events)
-            (conj [:forward-events
-                   (b/on-any forwarded-events
-                             (fn [event]
-                               {:request #{{:type :pavlov.web.server/send-event
-                                            :event (forwarded-event->server-event event)}}}))])
-            transport
+                              (fn [event]
+                                (log "received server event type=" (:type (:event event))
+                                     (when-let [ops (:ops (:event event))]
+                                       (str " ops=" (count ops))))
+                                {:request #{(:event event)}}))]]
+            (seq forwarded-events)
+             (conj [:forward-events
+                    (b/on-any forwarded-events
+                              (fn [event]
+                                (log "forwarding event to server type=" (:type event)
+                                     " payload=" (pr-str (forwarded-event->server-event event)))
+                                {:request #{{:type :pavlov.web.server/send-event
+                                             :event (forwarded-event->server-event event)}}}))])
+             transport
             (conj [:browser-websocket-bridge
                    (server/make-server-bridge-bthread submit! transport)]))
           page-bthreads)))
@@ -59,6 +68,7 @@
   [{:keys [make-program root query-selector ws-path encode decode]
     :or {root js/document
           query-selector #(.querySelectorAll js/document %)}}]
+  (log "init! ws-path=" ws-path)
   (let [!program (atom nil)
         submit! #(when-let [program @!program]
                    (bp/submit-event! program %))
@@ -71,6 +81,8 @@
                                :transport transport})]
     (reset! !program program)
     (when transport
+      (log "connecting transport")
       ((:connect! transport)))
+    (log "attaching DOM events")
     (dom/attach-dom-events! {:root root
                              :submit! submit!})))

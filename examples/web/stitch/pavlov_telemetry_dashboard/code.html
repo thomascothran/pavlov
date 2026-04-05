@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>PAVLOV // NEURAL_LINK - DASHBOARD</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700;900&amp;family=Manrope:wght@300;400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              colors: {
+                "inverse-surface": "#fcf9f8",
+                "outline-variant": "#484847",
+                "inverse-on-surface": "#565555",
+                "primary-fixed": "#00eefc",
+                "inverse-primary": "#006a71",
+                "on-surface": "#ffffff",
+                "primary-dim": "#00deec",
+                "on-secondary-fixed-variant": "#a1004b",
+                "background": "#0e0e0e",
+                "tertiary-container": "#2ff801",
+                "surface-tint": "#8ff5ff",
+                "primary-container": "#00eefc",
+                "surface-dim": "#0e0e0e",
+                "tertiary-dim": "#2be800",
+                "tertiary": "#8eff71",
+                "error": "#ff716c",
+                "outline": "#767575",
+                "on-tertiary": "#0d6100",
+                "on-error-container": "#ffa8a3",
+                "tertiary-fixed-dim": "#2be800",
+                "on-tertiary-fixed-variant": "#0d6200",
+                "secondary-fixed-dim": "#ffadc0",
+                "surface-container-low": "#131313",
+                "secondary-dim": "#e4006c",
+                "primary": "#8ff5ff",
+                "secondary-container": "#bb0058",
+                "on-tertiary-container": "#0b5800",
+                "surface-bright": "#2c2c2c",
+                "on-primary-fixed-variant": "#005e64",
+                "surface": "#0e0e0e",
+                "tertiary-fixed": "#2ff801",
+                "surface-container-highest": "#262626",
+                "secondary": "#ff6b98",
+                "on-secondary": "#47001d",
+                "on-secondary-container": "#fff5f6",
+                "surface-container-lowest": "#000000",
+                "on-tertiary-fixed": "#064200",
+                "secondary-fixed": "#ffc1ce",
+                "error-container": "#9f0519",
+                "on-error": "#490006",
+                "on-primary-fixed": "#003f43",
+                "on-background": "#ffffff",
+                "surface-variant": "#262626",
+                "on-primary-container": "#005359",
+                "surface-container": "#1a1919",
+                "on-primary": "#005d63",
+                "on-secondary-fixed": "#6d0030",
+                "on-surface-variant": "#adaaaa",
+                "surface-container-high": "#201f1f",
+                "primary-fixed-dim": "#00deec",
+                "error-dim": "#d7383b"
+              },
+              fontFamily: {
+                "headline": ["Space Grotesk"],
+                "body": ["Manrope"],
+                "label": ["Space Grotesk"]
+              },
+              borderRadius: {"DEFAULT": "0px", "lg": "0px", "xl": "0px", "full": "9999px"},
+            },
+          },
+        }
+    </script>
+<style>.material-symbols-outlined {
+    font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24
+    }
+.scanline {
+    width: 100%;
+    height: 2px;
+    background: rgba(143, 245, 255, 0.1);
+    position: fixed;
+    z-index: 50;
+    pointer-events: none;
+    animation: scan 8s linear infinite
+    }
+@keyframes scan {
+    0% {
+        top: -2%;
+        } 100% {
+        top: 100%;
+        }
+    }
+.glitch-text {
+    position: relative
+    }
+.glitch-text::before {
+    content: attr(data-text);
+    position: absolute;
+    left: -2px;
+    text-shadow: 1px 0 #ff6b98;
+    background: #0e0e0e;
+    overflow: hidden;
+    clip: rect(0, 900px, 0, 0);
+    animation: glitch-anim 3s infinite linear alternate-reverse
+    }
+@keyframes glitch-anim {
+    0% {
+        clip: rect(10px, 9999px, 40px, 0);
+        } 20% {
+        clip: rect(50px, 9999px, 80px, 0);
+        } 40% {
+        clip: rect(30px, 9999px, 60px, 0);
+        } 60% {
+        clip: rect(70px, 9999px, 10px, 0);
+        } 80% {
+        clip: rect(90px, 9999px, 50px, 0);
+        } 100% {
+        clip: rect(20px, 9999px, 100px, 0);
+        }
+    }
+.noise-bg {
+    background-image: url(https://lh3.googleusercontent.com/aida-public/AB6AXuCS2khGb_D0pT1HSUYuPwOZ7jIdLhCHbbbwTkM1uqsaH_4gDozmMEBbPwrEyN4WH12AvnKQCOnFBNY5hgU1bg4rU8ZbLjyAFLOzmFjCLHmHXpUdCimyHzYyueTl5LCN2d5jsY-DbwXokRyc05B6UU1UtMnSuSHqn3aLARFrgbjBt53Wkq41AOdK3esh2el8j43zcql_YwNVga-NVSUGuM3mnjCpkjMTG9fJmWxHSh_YS0PZ6OqmrVNsogZp7NhQqfGm555sE-ucAbQ);
+    opacity: 0.03
+    }</style>
+</head>
+<body class="bg-background text-on-surface font-body selection:bg-primary selection:text-on-primary-container overflow-x-hidden">
+<div class="scanline"></div>
+<div class="fixed inset-0 noise-bg pointer-events-none"></div>
+<!-- TopNavBar -->
+<nav class="bg-[#0e0e0e] flex justify-between items-center w-full px-6 py-4 h-16 docked full-width top-0 rounded-none border-b border-[#484847]/15 z-40 bg-[#131313] shadow-[0_0_40px_rgba(143,245,255,0.08)]">
+<div class="flex items-center gap-8">
+<span class="text-xl font-black tracking-tighter text-[#8ff5ff] italic font-['Space_Grotesk'] uppercase">PAVLOV // NEURAL_LINK</span>
+<div class="hidden md:flex gap-6">
+<a class="font-['Space_Grotesk'] uppercase tracking-[0.05em] text-xs text-[#8ff5ff] border-b-2 border-[#8ff5ff] pb-1" href="#">DASHBOARD</a>
+<a class="font-['Space_Grotesk'] uppercase tracking-[0.05em] text-xs text-[#adaaaa] hover:text-[#8ff5ff] transition-colors" href="#">NEURAL_CORE</a>
+<a class="font-['Space_Grotesk'] uppercase tracking-[0.05em] text-xs text-[#adaaaa] hover:text-[#8ff5ff] transition-colors" href="#">THROUGHPUT</a>
+<a class="font-['Space_Grotesk'] uppercase tracking-[0.05em] text-xs text-[#adaaaa] hover:text-[#8ff5ff] transition-colors" href="#">SYSTEM_LOGS</a>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<button class="bg-primary text-on-primary px-4 py-1.5 font-label text-[10px] tracking-[0.2em] uppercase font-bold hover:bg-primary-container active:scale-95 transition-all">LINK_ACTIVATE</button>
+<div class="w-8 h-8 bg-surface-container-highest flex items-center justify-center">
+<span class="material-symbols-outlined text-primary text-lg">face_retouching_natural</span>
+</div>
+</div>
+</nav>
+<main class="min-h-screen pt-24 pb-12 px-6 md:px-12 max-w-[1600px] mx-auto relative z-10">
+<!-- Dashboard Header -->
+<header class="mb-12 flex flex-col md:flex-row justify-between items-end gap-6">
+<div>
+<div class="flex items-center gap-2 mb-2">
+<div class="w-2 h-2 bg-tertiary"></div>
+<span class="font-label text-[10px] text-tertiary tracking-[0.3em] uppercase">SYSTEM_STATUS: NOMINAL</span>
+</div>
+<h1 class="font-headline text-5xl md:text-7xl font-black tracking-tighter uppercase leading-none glitch-text" data-text="DASHBOARD_LIVE">
+                    DASHBOARD_LIVE
+                </h1>
+</div>
+<div class="flex flex-col items-end gap-2">
+<div class="font-label text-[10px] text-on-surface-variant uppercase tracking-widest flex items-center gap-2">
+<span>UPTIME: 402:12:09:55</span>
+<span class="text-primary font-bold">●</span>
+</div>
+<div class="flex gap-1 h-1 w-64 bg-surface-container-low overflow-hidden">
+<div class="bg-primary h-full w-1/3"></div>
+<div class="bg-secondary h-full w-1/4 opacity-50"></div>
+</div>
+</div>
+</header>
+<!-- Main Telemetry Grid -->
+<div class="grid grid-cols-1 md:grid-cols-12 gap-8">
+<!-- NEURAL_THROUGHPUT Line Chart Card -->
+<section class="md:col-span-12 lg:col-span-8 bg-surface-container-low p-6 flex flex-col gap-6 group relative overflow-hidden">
+<div class="absolute top-0 left-0 w-1 h-full bg-primary opacity-50 group-hover:opacity-100 transition-opacity"></div>
+<div class="flex justify-between items-start">
+<div>
+<h2 class="font-headline text-lg font-bold text-primary tracking-widest uppercase">NEURAL_THROUGHPUT</h2>
+<p class="font-label text-[10px] text-on-surface-variant tracking-wider uppercase">METRIC_TYPE: REAL_TIME_BURST_DATA</p>
+</div>
+<div class="flex gap-4">
+<div class="flex items-center gap-2">
+<div class="w-3 h-0.5 bg-primary"></div>
+<span class="font-label text-[9px] uppercase tracking-tighter text-on-surface-variant">UPLINK</span>
+</div>
+<div class="flex items-center gap-2">
+<div class="w-3 h-0.5 bg-secondary"></div>
+<span class="font-label text-[9px] uppercase tracking-tighter text-on-surface-variant">DOWNLINK</span>
+</div>
+<div class="flex items-center gap-2">
+<div class="w-3 h-0.5 bg-tertiary"></div>
+<span class="font-label text-[9px] uppercase tracking-tighter text-on-surface-variant">SYNC</span>
+</div>
+</div>
+</div>
+<div class="h-[300px] w-full relative flex items-end justify-between px-2 pb-6 border-l border-b border-outline-variant/20">
+<!-- Fake Line Chart Background Grid -->
+<div class="absolute inset-0 flex flex-col justify-between pointer-events-none opacity-5">
+<div class="w-full h-[1px] bg-white"></div>
+<div class="w-full h-[1px] bg-white"></div>
+<div class="w-full h-[1px] bg-white"></div>
+<div class="w-full h-[1px] bg-white"></div>
+<div class="w-full h-[1px] bg-white"></div>
+</div>
+<!-- Simplified SVG Line Art for Chart -->
+<svg class="absolute inset-0 w-full h-full px-2 py-6 overflow-visible" preserveaspectratio="none">
+<!-- Uplink (Cyan) -->
+<polyline class="opacity-80" fill="none" points="0,150 50,120 100,180 150,40 200,90 250,30 300,110 350,160 400,20 450,140 500,80 550,150 600,10 650,100 700,50 800,120" stroke="#8ff5ff" stroke-width="2"></polyline>
+<!-- Downlink (Pink) -->
+<polyline class="opacity-60" fill="none" points="0,200 50,180 100,210 150,190 200,140 250,230 300,170 350,190 400,250 450,200 500,180 550,210 600,150 650,240 700,200 800,220" stroke="#ff6b98" stroke-dasharray="4" stroke-width="2"></polyline>
+<!-- Sync (Green) -->
+<polyline class="opacity-40" fill="none" points="0,80 100,75 200,85 300,70 400,82 500,78 600,88 700,74 800,80" stroke="#8eff71" stroke-width="1.5"></polyline>
+</svg>
+<!-- Chart Ticks -->
+<div class="absolute left-[-2rem] top-0 bottom-6 flex flex-col justify-between items-end font-label text-[8px] text-on-surface-variant pr-2">
+<span>1.0 PB</span>
+<span>0.5 PB</span>
+<span>0.0 PB</span>
+</div>
+</div>
+</section>
+<!-- SYSTEM_INTEGRITY_INDEX Radial Card -->
+<section class="md:col-span-12 lg:col-span-4 bg-surface-container-low p-6 flex flex-col items-center justify-between group relative">
+<div class="absolute top-0 right-0 w-8 h-8 border-t-2 border-r-2 border-secondary opacity-30"></div>
+<div class="w-full">
+<h2 class="font-headline text-lg font-bold text-secondary tracking-widest uppercase">SYSTEM_INTEGRITY</h2>
+<p class="font-label text-[10px] text-on-surface-variant tracking-wider uppercase mb-8">SEC_PROTOCOL: OVERRIDE_READY</p>
+</div>
+<div class="relative w-48 h-48 flex items-center justify-center">
+<!-- Semicircle / Donut Graphic -->
+<svg class="w-full h-full transform -rotate-90">
+<circle cx="96" cy="96" fill="transparent" r="80" stroke="#262626" stroke-width="12"></circle>
+<circle class="drop-shadow-[0_0_8px_#ff6b98]" cx="96" cy="96" fill="transparent" r="80" stroke="#ff6b98" stroke-dasharray="502" stroke-dashoffset="40" stroke-width="12"></circle>
+</svg>
+<div class="absolute flex flex-col items-center">
+<span class="font-headline text-4xl font-black text-on-surface leading-none">92.4</span>
+<span class="font-label text-[10px] text-secondary tracking-[0.2em] font-bold">PERCENT</span>
+</div>
+</div>
+<div class="w-full mt-6 grid grid-cols-2 gap-4">
+<div class="border-l border-secondary/30 pl-3">
+<div class="font-label text-[8px] text-on-surface-variant uppercase">Neural_Drift</div>
+<div class="font-headline text-xs font-bold text-on-surface tracking-wide">0.002%</div>
+</div>
+<div class="border-l border-secondary/30 pl-3">
+<div class="font-label text-[8px] text-on-surface-variant uppercase">Buffer_Health</div>
+<div class="font-headline text-xs font-bold text-on-surface tracking-wide">OPTIMAL</div>
+</div>
+</div>
+</section>
+<!-- MEMORY_ALLOCATION Bar Chart Card -->
+<section class="md:col-span-12 lg:col-span-7 bg-surface-container-low p-6 group relative">
+<div class="flex items-center gap-2 mb-6">
+<span class="material-symbols-outlined text-tertiary text-lg">memory</span>
+<h2 class="font-headline text-lg font-bold text-tertiary tracking-widest uppercase">MEMORY_ALLOCATION</h2>
+</div>
+<div class="space-y-6">
+<!-- Bar 1 -->
+<div class="space-y-2">
+<div class="flex justify-between font-label text-[10px] tracking-wider uppercase">
+<span class="text-on-surface-variant">CORE_PROCESSOR_A</span>
+<span class="text-tertiary">88%</span>
+</div>
+<div class="h-4 bg-surface-container-highest flex gap-0.5">
+<div class="h-full w-[88%] bg-tertiary"></div>
+<div class="h-full w-[12%] bg-outline-variant/10"></div>
+</div>
+</div>
+<!-- Bar 2 -->
+<div class="space-y-2">
+<div class="flex justify-between font-label text-[10px] tracking-wider uppercase">
+<span class="text-on-surface-variant">SENSORY_ARRAY_B</span>
+<span class="text-tertiary">42%</span>
+</div>
+<div class="h-4 bg-surface-container-highest flex gap-0.5">
+<div class="h-full w-[42%] bg-tertiary opacity-70"></div>
+<div class="h-full w-[58%] bg-outline-variant/10"></div>
+</div>
+</div>
+<!-- Bar 3 -->
+<div class="space-y-2">
+<div class="flex justify-between font-label text-[10px] tracking-wider uppercase">
+<span class="text-on-surface-variant">NEURAL_SYNAPSE_X</span>
+<span class="text-tertiary">65%</span>
+</div>
+<div class="h-4 bg-surface-container-highest flex gap-0.5">
+<div class="h-full w-[65%] bg-tertiary opacity-85"></div>
+<div class="h-full w-[35%] bg-outline-variant/10"></div>
+</div>
+</div>
+</div>
+</section>
+<!-- LATENCY_SPIKES Scatter/Area Card -->
+<section class="md:col-span-12 lg:col-span-5 bg-surface-container-low p-6 group relative overflow-hidden">
+<div class="flex justify-between items-center mb-6">
+<h2 class="font-headline text-lg font-bold text-primary tracking-widest uppercase">LATENCY_SPIKES</h2>
+<div class="px-2 py-0.5 border border-primary text-primary font-label text-[9px] uppercase tracking-tighter">LIVE_FEED</div>
+</div>
+<div class="h-48 relative border border-outline-variant/10 bg-surface-container-lowest">
+<!-- Scatter points simulated by divs -->
+<div class="absolute bottom-[20%] left-[10%] w-2 h-2 bg-primary animate-pulse"></div>
+<div class="absolute bottom-[45%] left-[25%] w-1 h-1 bg-secondary"></div>
+<div class="absolute bottom-[10%] left-[40%] w-2 h-2 bg-primary"></div>
+<div class="absolute bottom-[80%] left-[60%] w-3 h-3 bg-error drop-shadow-[0_0_10px_#ff716c]"></div>
+<div class="absolute bottom-[35%] left-[75%] w-1 h-1 bg-primary"></div>
+<div class="absolute bottom-[55%] left-[90%] w-2 h-2 bg-primary"></div>
+<!-- Scan line effect -->
+<div class="absolute left-0 top-0 w-1 h-full bg-primary/20 animate-[move_5s_infinite_linear]"></div>
+</div>
+<div class="mt-6 flex justify-between items-end">
+<div class="font-label text-[10px] text-on-surface-variant tracking-widest leading-relaxed">
+                        DETECTED: 12ms<br/>
+                        JITTER: 0.4ms<br/>
+                        PACKET_LOSS: 0.00%
+                    </div>
+<button class="font-label text-[10px] text-error font-black tracking-widest uppercase flex items-center gap-2">
+<span class="material-symbols-outlined text-sm">warning</span>
+                        DIAGNOSTIC_REQUIRED
+                    </button>
+</div>
+</section>
+</div>
+<!-- Terminal Feed Strip -->
+<section class="mt-12 bg-surface-container-highest p-4 border-l-4 border-primary">
+<div class="flex items-center gap-4 font-label text-[10px] tracking-widest">
+<span class="text-primary font-bold">TERMINAL_OUTPUT:</span>
+<span class="text-on-surface-variant animate-pulse opacity-80">&gt; [12:00:04] NEURAL_LINK ESTABLISHED...</span>
+<span class="text-on-surface-variant hidden md:inline opacity-60">&gt; [12:00:05] DOWNLINK STABILIZED @ 4.2 GB/S...</span>
+<span class="text-on-surface-variant hidden md:inline opacity-40">&gt; [12:00:07] SYNCING CORE PROTOCOLS...</span>
+</div>
+</section>
+</main>
+<!-- Footer -->
+<footer class="w-full px-8 py-6 flex flex-col md:flex-row justify-between items-center gap-4 bg-[#0e0e0e] rounded-none border-t border-[#484847]/15">
+<div class="flex items-center gap-4">
+<span class="text-[#8eff71] font-bold font-['Space_Grotesk'] text-[10px] tracking-widest uppercase">PAVLOV_SYSTEMS // STATUS_ACTIVE</span>
+</div>
+<div class="flex gap-8">
+<a class="font-['Space_Grotesk'] text-[10px] tracking-widest uppercase text-[#adaaaa] hover:text-[#ff6b98] transition-all hover:skew-x-2" href="#">API_DOCS</a>
+<a class="font-['Space_Grotesk'] text-[10px] tracking-widest uppercase text-[#adaaaa] hover:text-[#ff6b98] transition-all hover:skew-x-2" href="#">TERMINAL_PROTOCOLS</a>
+<a class="font-['Space_Grotesk'] text-[10px] tracking-widest uppercase text-[#adaaaa] hover:text-[#ff6b98] transition-all hover:skew-x-2" href="#">ENCRYPTION_LAYER</a>
+</div>
+<div class="font-['Space_Grotesk'] text-[10px] tracking-widest uppercase text-[#adaaaa]">
+            © 202X PAVLOV_SYSTEMS // STATUS_ACTIVE
+        </div>
+</footer>
+<style>
+        @keyframes move {
+            0% { left: 0%; }
+            100% { left: 100%; }
+        }
+    </style>
+</body></html>

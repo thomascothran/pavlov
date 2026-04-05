@@ -4,6 +4,16 @@
   (:require [tech.thomascothran.pavlov.event :as event]))
 
 #?(:cljs
+   (defn- log
+     [& args]
+     (.log js/console (apply str "[pavlov.web.dom.op] " args))))
+
+#?(:cljs
+   (defn- error
+     [& args]
+     (.error js/console (apply str "[pavlov.web.dom.op] " args))))
+
+#?(:cljs
    (defn- call-member!
      [dom-node member args]
      (.apply (aget dom-node member) dom-node (into-array args))))
@@ -101,5 +111,19 @@
 
 (defn -run-ops!
   [query-selector event]
-  (doseq [op (event->ops event)]
-    (-run-op! query-selector op)))
+  (let [ops (event->ops event)]
+    #?(:cljs
+       (log "applying event type=" (event/type event)
+            " ops=" (count ops))
+       :clj nil)
+    (doseq [op ops]
+      (try
+        (-run-op! query-selector op)
+        (catch #?(:clj Throwable :cljs :default) e
+          #?(:cljs
+             (error "failed op selector=" (pr-str (:selector op))
+                    " kind=" (pr-str (:kind op))
+                    " member=" (pr-str (:member op))
+                    " error=" (.-message e))
+             :clj nil)
+          (throw e))))))

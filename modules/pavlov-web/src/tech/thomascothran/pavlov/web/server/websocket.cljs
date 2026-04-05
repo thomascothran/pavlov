@@ -1,5 +1,17 @@
 (ns tech.thomascothran.pavlov.web.server.websocket)
 
+(defn- log
+  [& args]
+  (.log js/console (apply str "[pavlov.web.websocket] " args)))
+
+(defn- warn
+  [& args]
+  (.warn js/console (apply str "[pavlov.web.websocket] " args)))
+
+(defn- error
+  [& args]
+  (.error js/console (apply str "[pavlov.web.websocket] " args)))
+
 (defn- submit-connected! [submit-event!]
   (submit-event! {:type :pavlov.web.server/connected}))
 
@@ -49,36 +61,54 @@
       :encode js/JSON.stringify
       :decode js/JSON.parse})`"
   [{:keys [url protocols websocket !websocket submit-event! websocket-factory encode decode]
-      :or {encode identity
-           decode identity
-           submit-event! (fn [_] nil)
-           websocket-factory default-websocket-factory}}]
+       :or {encode identity
+            decode identity
+            submit-event! (fn [_] nil)
+            websocket-factory default-websocket-factory}}]
   (let [!socket (or !websocket (atom websocket))]
     {:connect! (fn []
+                  (log "connect! url=" url
+                       (when (some? protocols)
+                         (str " protocols=" protocols)))
                   (let [socket (if (some? protocols)
                                  (websocket-factory url protocols)
                                  (try
                                    (websocket-factory url)
                                    (catch :default _
                                      (websocket-factory url protocols))))]
-                    (set! (.-onopen socket)
-                          (fn [& _]
-                            (reset! !socket socket)
-                            (submit-connected! submit-event!)))
-                    (set! (.-onmessage socket)
-                          (fn [event]
-                            (submit-received! submit-event! decode (.-data event))))
-                    (set! (.-onclose socket)
-                          (fn [& _]
-                            (reset! !socket nil)
-                            (submit-disconnected! submit-event!)))
-                    socket))
+                     (set! (.-onopen socket)
+                           (fn [& _]
+                             (log "onopen readyState=" (.-readyState socket))
+                             (reset! !socket socket)
+                             (submit-connected! submit-event!)))
+                     (set! (.-onmessage socket)
+                           (fn [event]
+                             (let [payload (.-data event)]
+                               (log "onmessage raw=" (pr-str payload))
+                               (submit-received! submit-event! decode payload))))
+                     (set! (.-onerror socket)
+                           (fn [event]
+                             (error "onerror readyState=" (.-readyState socket)
+                                    " event=" (pr-str event))))
+                     (set! (.-onclose socket)
+                           (fn [event]
+                             (warn "onclose readyState=" (.-readyState socket)
+                                   " code=" (.-code event)
+                                   " reason=" (pr-str (.-reason event))
+                                   " wasClean=" (.-wasClean event))
+                             (reset! !socket nil)
+                             (submit-disconnected! submit-event!)))
+                     socket))
       :send! (fn
-               ([payload]
-                (.send @!socket payload))
-               ([socket payload]
-                (.send socket payload)))
+                ([payload]
+                 (log "send! readyState=" (some-> @!socket .-readyState)
+                      " payload=" (pr-str payload))
+                 (.send @!socket payload))
+                ([socket payload]
+                 (log "send! explicit-socket readyState=" (.-readyState socket)
+                      " payload=" (pr-str payload))
+                 (.send socket payload)))
       :close! (fn [] nil)
-     :encode encode
-      :!websocket !socket
+      :encode encode
+       :!websocket !socket
       :decode decode}))
