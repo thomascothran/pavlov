@@ -232,8 +232,19 @@
 
     (is (= {:wait-on #{:test-event}
             :request #{:test-event-received}
+            :bthreads nil
             :block #{}}
            bid))))
+
+(deftest test-on-with-bthread-creation
+  (let [created-bthread (b/bids {:request #{:c}})
+        bthread (b/on :a (fn [_]
+                           {:bthreads created-bthread}))
+        _ (b/notify! bthread nil)
+        bid-b (b/notify! bthread {:type :a})]
+    (is (identical? created-bthread
+                    (get bid-b :bthreads))
+        "Should return bthreads")))
 
 (deftest test-on-any
   (let [!events (atom [])
@@ -252,12 +263,25 @@
 
     (is (= {:wait-on #{:a :b}
             :request #{:c}
+            :bthreads nil
             :block #{}}
            bid-a))
     (is (= {:wait-on #{:a :b}
             :request #{:c}
+            :bthreads nil
             :block #{}}
            bid-c))))
+
+(deftest test-on-any-with-bthread-creation
+  (let [created-bthread (b/bids {:request #{:c}})
+        bthread (b/on-any #{:a}
+                          (fn [_]
+                            {:bthreads created-bthread}))
+        _ (b/notify! bthread nil)
+        bid-b (b/notify! bthread {:type :a})]
+    (is (identical? created-bthread
+                    (get bid-b :bthreads))
+        "Should return bthreads")))
 
 (deftest test-after-all
   (let [event-set #{:a :b :c}
@@ -286,3 +310,5 @@
         bid2 (b/notify! bthread {:type :event-a})]
     (is (= {:wait-on #{:event-a}} bid1))
     (is (= {:request #{{:type :event-b}}} bid2))))
+
+;(deftest test-on-with-bthread-creation)

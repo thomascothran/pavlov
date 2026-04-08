@@ -166,6 +166,7 @@
   (:refer-clojure :exclude [repeat])
   (:require [tech.thomascothran.pavlov.bthread.proto :as proto]
             [tech.thomascothran.pavlov.event.proto :as event-proto]
+            [tech.thomascothran.pavlov.bid.proto :as bid-proto]
             [tech.thomascothran.pavlov.defaults])
   #?(:squint nil
      :cljs (:require-macros [tech.thomascothran.pavlov.bthread])))
@@ -393,12 +394,14 @@
                        (= event-type (event-proto/type event)))
             [:initialized {:wait-on #{event-type}}] ;; initialize
             (let [bid (f event)
-                  new-waits (get bid :wait-on #{})
-                  new-requests (get bid :request #{})
-                  new-blocks (get bid :block #{})
+                  new-waits (bid-proto/wait-on bid)
+                  new-requests (bid-proto/request bid)
+                  new-blocks (bid-proto/block bid)
+                  new-bthreads (bid-proto/bthreads bid)
                   new-bid {:request new-requests
                            :block new-blocks
-                           :wait-on (conj new-waits
+                           :bthreads new-bthreads
+                           :wait-on (conj (or new-waits #{})
                                           event-type)}]
               [:initialized new-bid])))))
 
@@ -421,11 +424,13 @@
                             (event-proto/type event))))
             [:initialized {:wait-on event-types}]
             (let [bid (f event)
-                  new-waits (get bid :wait-on #{})
-                  new-requests (get bid :request #{})
-                  new-blocks (get bid :block #{})
+                  new-waits (bid-proto/wait-on bid)
+                  new-requests (bid-proto/request bid)
+                  new-blocks (bid-proto/block bid)
+                  new-bthreads (bid-proto/bthreads bid)
                   new-bid {:request new-requests
                            :block new-blocks
+                           :bthreads new-bthreads
                            :wait-on (into event-types new-waits)}]
               [prev-state new-bid])))))
 
