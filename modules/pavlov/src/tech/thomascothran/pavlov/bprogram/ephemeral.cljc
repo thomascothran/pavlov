@@ -96,6 +96,22 @@
             (.put this event))
           (pop [this] (.take this))))
 
+(def ^:private kill-signal
+  ::kill-signal)
+
+#?(:clj
+   ;; Shared daemon scheduler for execute! :kill-after timeouts so repeated runs
+   ;; do not create one executor thread per program.
+   (def ^:private kill-after-scheduler
+     (delay
+       (Executors/newSingleThreadScheduledExecutor
+        (reify java.util.concurrent.ThreadFactory
+          (newThread [_ runnable]
+            (doto (Thread. runnable "pavlov-kill-after-scheduler")
+              (.setDaemon true)))))))
+
+   :cljs nil)
+
 #?(:cljs
    (defn deliver
      [m v]
@@ -178,11 +194,21 @@
                 (when next-event'
                   (handle-event! bprogram program-opts next-event'))
                 (when-not (event/terminal? next-event')
-                  (recur (bprogram/pop in-queue))))))))
+                  (let [next-event (bprogram/pop in-queue)]
+                    (when-not (= kill-signal next-event)
+                      (recur next-event)))))))))
 
 (defn kill!
+  "Force-terminate a running program.
+
+   CLJ programs may have an event-loop future blocked waiting for external
+   input. Force-kill realizes the killed promise first, then enqueues a private
+   wakeup sentinel so that an idle loop can observe shutdown and exit without
+   treating the wakeup as a real event. The stopped promise still resolves to
+   the same terminal kill event callers already expect."
   [program-opts]
   (set-killed! program-opts)
+  #?(:clj (bprogram/conj (get program-opts :in-queue) kill-signal))
   (set-stopped! program-opts {:type :pavlov/kill
                               :terminal true})
   #?(:clj (get program-opts :killed)
@@ -356,12 +382,19 @@
            (conj [::deadlock {:request #{{:type ::deadlock
                                           :terminal true}}}]))
 
-         bprogram (make-program! bthreads' opts)]
+         bprogram (make-program! bthreads' opts)
+         stopped (bprogram/stopped bprogram)]
      (when kill-after
        (let [killfn (fn [] (bprogram/kill! bprogram))]
-         #?(:clj (-> (Executors/newSingleThreadScheduledExecutor)
-                     (.schedule ^Runnable killfn
-                                kill-after
-                                TimeUnit/MILLISECONDS))
-            :cljs (js/setTimeout killfn kill-after))))
-     (bprogram/stopped bprogram))))
+         #?(:clj (let [timeout-task (.schedule @kill-after-scheduler
+                                               ^Runnable killfn
+                                               kill-after
+                                               TimeUnit/MILLISECONDS)]
+                   (future
+                     @stopped
+                     (.cancel timeout-task false)))
+            :cljs (let [timeout-task (js/setTimeout killfn kill-after)]
+                    (.then stopped
+                           (fn [_]
+                             (js/clearTimeout timeout-task)))))))
+     stopped)))
