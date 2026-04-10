@@ -135,6 +135,20 @@
      {:state (+ (* 2 state) 2) :event [:right state]}])
   (identifier [_ state] state))
 
+(defn make-spawned-environment-liveness-bug-repro
+  []
+  {::scenario
+   (b/bids [{:wait-on #{:c}}
+            {:request #{{:type ::done
+                         :terminal true}}}])
+
+   ::init
+   (b/bids [{:request #{:a}}
+            {:request #{:b}}
+            {:bthreads
+             {::create
+              (b/bids [{:request #{:c}}])}}])})
+
 (deftest lazy-evaluation-test
   (testing "Lazy sequences work with infinite graphs"
     (let [nav (->InfiniteNavigator)]
@@ -151,6 +165,21 @@
           (is (= 0 (first first-10)))
           ;; DFS will go deep first: 0, then explore left branch deeply
           (is (every? number? first-10)))))))
+
+(deftest make-navigator-successors-are-stable-for-spawned-bthreads
+  (testing "Repeated succ calls should return the same successor identifiers"
+    (let [nav (search/make-navigator (make-spawned-environment-liveness-bug-repro))
+          root (search/root nav)
+          a-state (:state (first (search/succ nav root)))
+          b-succ-1 (search/succ nav a-state)
+          b-succ-2 (search/succ nav a-state)
+          successor-ids-1 (mapv #(search/identifier nav (:state %)) b-succ-1)
+          successor-ids-2 (mapv #(search/identifier nav (:state %)) b-succ-2)]
+      (is (= (mapv (comp event/type :event) b-succ-1)
+             (mapv (comp event/type :event) b-succ-2))
+          "Repeated succ calls should expose the same events")
+      (is (= successor-ids-1 successor-ids-2)
+          "Repeated succ calls should point at the same successor states"))))
 
 (deftest dfs-reduce-early-termination-test
   (testing "DFS-reduce can terminate early with reduced"

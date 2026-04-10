@@ -894,6 +894,47 @@
       (is (nil? result)
           "Should return nil when existential liveness property is satisfied in cycle using :predicate"))))
 
+(deftest existential-liveness-satisfied-via-spawned-environment-bthread
+  (testing "Existential liveness should see terminal paths reached through spawned environment bthreads"
+    ;; Regression: the state-space search currently misses the :c -> ::done path when
+    ;; an environment bthread spawns the bthread that requests :c.
+    (let [control-result
+          (check/check
+           {:bthreads {::scenario
+                       (b/bids [{:wait-on #{:c}}
+                                {:request #{{:type ::done
+                                             :terminal true}}}])}
+            :environment-bthreads {::init
+                                   (b/bids [{:request #{:a}}
+                                            {:request #{:b}}
+                                            {:request #{:c}}])}
+            :liveness {::done-eventually
+                       {:quantifier :existential
+                        :eventually #{::done}}}
+            :check-deadlock? false})
+
+          bug-result
+          (check/check
+           {:bthreads {::scenario
+                       (b/bids [{:wait-on #{:c}}
+                                {:request #{{:type ::done
+                                             :terminal true}}}])}
+            :environment-bthreads {::init
+                                   (b/bids [{:request #{:a}}
+                                            {:request #{:b}}
+                                            {:bthreads
+                                             {::create
+                                              (b/bids [{:request #{:c}}])}}])}
+            :liveness {::done-eventually
+                       {:quantifier :existential
+                        :eventually #{::done}}}
+            :check-deadlock? false})]
+
+      (is (nil? control-result)
+          "Sanity check: direct environment path to ::done should satisfy existential liveness")
+      (is (nil? bug-result)
+          "Spawned environment path to ::done should also satisfy existential liveness"))))
+
 (deftest universal-liveness-checks-deadlock-paths
   (testing "Universal liveness property should be checked on paths that end in deadlock"
     ;; This is Cycle 3.3: Liveness on Deadlock Path

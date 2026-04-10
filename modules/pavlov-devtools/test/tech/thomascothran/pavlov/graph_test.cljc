@@ -94,6 +94,20 @@
             {:wait-on #{:work-result}}
             {:request #{{:type :test-passed :terminal true}}}])})
 
+(defn make-spawned-environment-liveness-bug-repro
+  []
+  {::scenario
+   (b/bids [{:wait-on #{:c}}
+            {:request #{{:type ::done
+                         :terminal true}}}])
+
+   ::init
+   (b/bids [{:request #{:a}}
+            {:request #{:b}}
+            {:bthreads
+             {::create
+              (b/bids [{:request #{:c}}])}}])})
+
 (comment
   (tap> (pnav/root (make-branching-bthreads))))
 
@@ -416,3 +430,12 @@
            (into #{}
                  (map :event)
                  (get graph :edges))))))
+
+(deftest lts-includes-terminal-path-through-spawned-environment-bthread
+  (testing "LTS should include the spawned :c edge and terminal ::done edge"
+    (let [lts (graph/->lts (make-spawned-environment-liveness-bug-repro))
+          edge-types (mapv :event (:edges lts))]
+      (is (some #(= :c %) edge-types)
+          "Spawned environment bthread should contribute a :c edge to the LTS")
+      (is (some #(= ::done (:type %)) edge-types)
+          "Scenario should be able to reach terminal ::done in the LTS"))))

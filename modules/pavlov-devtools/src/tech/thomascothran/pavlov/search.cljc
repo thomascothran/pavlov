@@ -121,13 +121,48 @@
                    (assoc bid :bthreads (keys bthreads))
                    bid))))
 
+(defn- compute-successor-templates
+  "Compute path-independent successor templates for a wrapped state.
+
+  Templates cache the event and next scheduler snapshot, but not the caller's
+  path, so the same semantic state can be revisited from multiple paths without
+  corrupting navigation history."
+  [wrapped]
+  (let [saved-bthread-states (:saved-bthread-states wrapped)
+        state (:bprogram/state wrapped)
+        bthread->bid (get state :bthread->bid)
+        bthreads-by-priority (get state :bthreads-by-priority)
+        branches (selection/prioritized-events bthreads-by-priority
+                                               bthread->bid)]
+    (mapv (fn [event]
+            (restore-bthread-states state saved-bthread-states)
+            (let [next-state (state/step state event)]
+              {:event event
+               :next-state next-state
+               :next-saved-bthread-states (save-bthread-states next-state)}))
+          branches)))
+
+(defn- materialize-successors
+  "Attach the caller's path to cached successor templates."
+  [path successor-templates]
+  (mapv (fn [successor-template]
+          (let [event (:event successor-template)
+                next-state (:next-state successor-template)
+                next-saved-bthread-states (:next-saved-bthread-states successor-template)]
+            {:state {:bprogram/state next-state
+                     :path (conj path event)
+                     :saved-bthread-states next-saved-bthread-states}
+             :event event}))
+        successor-templates))
+
 (defn make-navigator
   "Create a StateNavigator for the behavioral program."
   [all-bthreads]
   ;; Initialize the state first, which advances bthreads
   (let [initial-state (state/init all-bthreads)
         ;; Save bthread states AFTER init has advanced them
-        saved-initial-states (save-bthread-states initial-state)]
+        saved-initial-states (save-bthread-states initial-state)
+        successor-cache (atom {})]
     (reify StateNavigator
       (root [_]
         ;; Wrap state with path tracking and saved bthread states
@@ -135,24 +170,14 @@
          :path []
          :saved-bthread-states saved-initial-states})
 
-      (succ [_ wrapped]
-        (let [{:keys [path saved-bthread-states] :bprogram/keys [state]} wrapped
-              ;; Get branches from current state (not restored)
-              bthread->bid (get state :bthread->bid)
-              bthreads-by-priority (get state :bthreads-by-priority)
-              branches (selection/prioritized-events bthreads-by-priority
-                                                     bthread->bid)]
-          ;; Return a sequence of successor states, one for each branch
-          (into []
-                (map (fn [event]
-                       ;; Restore bthread states before stepping
-                       (restore-bthread-states state saved-bthread-states)
-                       (let [next-state (state/step state event)]
-                         {:state {:bprogram/state next-state
-                                  :path (conj path event)
-                                  :saved-bthread-states (save-bthread-states next-state)}
-                          :event event})))
-                branches)))
+      (succ [this wrapped]
+        (let [path (:path wrapped)
+              sid (identifier this wrapped)
+              successor-templates (or (get @successor-cache sid)
+                                      (let [templates (compute-successor-templates wrapped)]
+                                        (swap! successor-cache assoc sid templates)
+                                        templates))]
+          (materialize-successors path successor-templates)))
 
       (identifier [_ wrapped]
         ;; Use saved states instead of live bthread states to avoid mutation issues
