@@ -522,15 +522,13 @@
     ;; A bthread that terminates immediately without doing anything else
     ;; The liveness property requires :payment to occur on ALL paths
     ;; Expected: liveness violation because no :payment event occurred
-    (let [result (check/check
+     (let [result (check/check
                   {:bthreads {:terminate-immediately
                               (b/bids [{:request #{{:type :done :terminal true}}}])}
                    :liveness
-                   {:payment-required
-                    {:quantifier :universal
-                     :predicate (fn [trace]
-                                  ;; Use pavlov.event/type to handle both keywords and maps
-                                  (some #(= :payment (tech.thomascothran.pavlov.event/type %)) trace))}}})]
+                    {:payment-required
+                     {:quantifier :universal
+                      :eventually #{:payment}}}})]
 
       ;; The test SHOULD fail because :liveness is not implemented yet
       ;; Either result will be nil (no violation detected) OR
@@ -559,16 +557,14 @@
     ;; A bthread that requests :payment first, then terminates
     ;; The liveness property requires :payment to occur on ALL paths
     ;; Expected: nil (no violation) because :payment occurred before termination
-    (let [result (check/check
+     (let [result (check/check
                   {:bthreads {:payment-then-terminate
                               (b/bids [{:request #{:payment}}
                                        {:request #{{:type :done :terminal true}}}])}
                    :liveness
-                   {:payment-required
-                    {:quantifier :universal
-                     :predicate (fn [trace]
-                                  ;; Use pavlov.event/type to handle both keywords and maps
-                                  (some #(= :payment (tech.thomascothran.pavlov.event/type %)) trace))}}})]
+                    {:payment-required
+                     {:quantifier :universal
+                      :eventually #{:payment}}}})]
 
       ;; Should return nil - no violation
       (is (nil? result)
@@ -828,12 +824,12 @@
           (is (= #{:ping :pong} (set (:cycle livelock)))
               "Cycle should contain the ping-pong events that loop forever"))))))
 
-(deftest universal-liveness-predicate-checks-cycles
-  (testing "Universal liveness with PREDICATE (not :eventually) should check cycles for violations"
+(deftest universal-liveness-checks-cycles-with-eventually
+  (testing "Universal liveness with :eventually should check cycles for violations"
     ;; A bthread that loops forever on :ping/:pong (infinite cycle)
-    ;; Liveness property with CUSTOM PREDICATE (not :eventually shorthand) requires :payment
+    ;; Liveness property requires :payment
     ;; Expected: :liveness-violation because cycle doesn't contain :payment
-    ;; Current behavior: Returns nil (BUG — cycles not checked with :predicate)
+    ;; Current behavior: Returns nil (BUG — cycles not checked)
     ;;
     ;; We disable structural livelock checking to isolate liveness behavior
     (let [result (check/check
@@ -842,16 +838,14 @@
                                               {:request #{:pong}}])}
                    :check-livelock? false ;; Disable structural livelock to isolate liveness
                    :liveness
-                   {:payment-required
-                    {:quantifier :universal
-                     ;; Use CUSTOM PREDICATE (not :eventually) to expose the bug
-                     :predicate (fn [trace]
-                                  (some #(= :payment (tech.thomascothran.pavlov.event/type %)) trace))}}})]
+                    {:payment-required
+                     {:quantifier :universal
+                      :eventually #{:payment}}}})]
 
       ;; This test SHOULD fail with current implementation
-      ;; because cycles are not checked when using :predicate
+      ;; because cycles are not checked yet
       (is (some? result)
-          "Should detect liveness violation in cycle when using :predicate")
+          "Should detect liveness violation in cycle")
 
       (when result
         ;; New format: check for :liveness-violations vector (not :livelocks)
@@ -868,10 +862,10 @@
           (is (= #{:ping :pong} (set (:cycle violation)))
               "Cycle should show the ping-pong events that loop forever without payment"))))))
 
-(deftest existential-liveness-predicate-checks-cycles
-  (testing "Existential liveness with PREDICATE (not :eventually) should check cycles for satisfaction"
+(deftest existential-liveness-checks-cycles-with-eventually
+  (testing "Existential liveness with :eventually should check cycles for satisfaction"
     ;; A bthread that loops forever on :payment/:ack (infinite cycle)
-    ;; Liveness property with CUSTOM PREDICATE (not :eventually shorthand) requires :payment to occur on SOME path
+    ;; Liveness property requires :payment to occur on SOME path
     ;; Expected: nil (NO violation) because the cycle DOES contain :payment, satisfying the existential property
     ;; Current buggy behavior: Returns {:type :liveness-violation ...} (BUG — cycles not checked, only terminating paths)
     ;;
@@ -882,17 +876,98 @@
                                               {:request #{:ack}}])}
                    :check-livelock? false ;; Disable structural livelock to isolate liveness
                    :liveness
-                   {:payment-possible
-                    {:quantifier :existential
-                     ;; Use CUSTOM PREDICATE (not :eventually) to expose the bug
-                     :predicate (fn [trace]
-                                  (some #(= :payment (tech.thomascothran.pavlov.event/type %)) trace))}}})]
+                    {:payment-possible
+                     {:quantifier :existential
+                      :eventually #{:payment}}}})]
 
       ;; This test SHOULD fail with current implementation
-      ;; because cycles are not checked when using :predicate — only terminating paths
+      ;; because cycles are not checked yet — only terminating paths
       ;; The bug causes a false positive: it reports a violation when there shouldn't be one
       (is (nil? result)
-          "Should return nil when existential liveness property is satisfied in cycle using :predicate"))))
+          "Should return nil when existential liveness property is satisfied in cycle"))))
+
+(deftest legacy-liveness-predicate-is-rejected
+  (testing "Legacy trace-based liveness :predicate is rejected with guidance toward supported event-local forms"
+    (is (thrown-with-msg?
+         Throwable
+         #"(?is).*liveness.*:predicate.*(event-local|:eventually|supported).*"
+         (check/check
+          {:bthreads {:terminate-immediately
+                      (b/bids [{:request #{{:type :done :terminal true}}}])}
+           :liveness
+           {:payment-required
+            {:quantifier :universal
+             :predicate (fn [trace]
+                          (some #(= :payment (tech.thomascothran.pavlov.event/type %)) trace))}}}))
+        "Should reject legacy trace-based :predicate and direct callers to supported event-local forms")))
+
+(deftest existential-liveness-event-predicate-satisfied
+  (testing "Existential liveness succeeds when some reachable event satisfies :event-predicate"
+    (let [result
+          (check/check
+           {:bthreads {::failure-branch
+                       (b/bids [{:request #{{:type ::progress
+                                             :branch :failure}}}
+                                {:request #{{:type ::done-failure
+                                             :terminal true}}}])
+
+                       ::success-branch
+                       (b/bids [{:request #{{:type ::progress
+                                             :branch :success
+                                             :edge-token ::match}}}
+                                {:request #{{:type ::done-success
+                                             :terminal true}}}])}
+            :liveness {::progress-possible
+                       {:quantifier :existential
+                        :event-predicate (fn [event]
+                                           (= ::match (:edge-token event)))}}
+            :check-deadlock? false
+            :check-livelock? false})]
+
+      (is (nil? result)
+          "Should return nil when a reachable event object satisfies :event-predicate"))))
+
+(deftest universal-liveness-event-predicate-satisfied-on-terminating-path
+  (testing "Universal liveness succeeds when every terminating path contains an event whose event object satisfies :event-predicate"
+    (let [result
+          (check/check
+           {:bthreads {::payment-then-terminate
+                        (b/bids [{:request #{{:type ::progress
+                                              :stage :queued}}}
+                                 {:request #{{:type ::progress
+                                              :stage :paid
+                                              :invoice-id ::match}}}
+                                 {:request #{{:type ::done
+                                              :terminal true}}}])}
+             :liveness {::payment-required
+                        {:quantifier :universal
+                        :event-predicate (fn [event]
+                                           (= ::match (:invoice-id event)))}}
+            :check-deadlock? false
+            :check-livelock? false})]
+
+      (is (nil? result)
+          "Should return nil when each maximal terminating execution contains an event object satisfying :event-predicate"))))
+
+(deftest universal-liveness-event-predicate-satisfied-in-cycle
+  (testing "Universal liveness should inspect full cycle event objects for :event-predicate satisfaction"
+    (let [result
+          (check/check
+           {:bthreads {::payment-loop
+                       (b/round-robin [{:request #{{:type ::progress
+                                                    :stage :queued}}}
+                                       {:request #{{:type ::progress
+                                                    :stage :paid
+                                                    :invoice-id ::match}}}])}
+            :liveness {::payment-required
+                       {:quantifier :universal
+                        :event-predicate (fn [event]
+                                           (= ::match (:invoice-id event)))}}
+            :check-deadlock? false
+            :check-livelock? false})]
+
+      (is (nil? result)
+          "Should return nil when every maximal execution in the reachable cycle contains an event object satisfying :event-predicate"))))
 
 (deftest existential-liveness-satisfied-via-spawned-environment-bthread
   (testing "Existential liveness should see terminal paths reached through spawned environment bthreads"
@@ -934,6 +1009,83 @@
           "Sanity check: direct environment path to ::done should satisfy existential liveness")
       (is (nil? bug-result)
           "Spawned environment path to ::done should also satisfy existential liveness"))))
+
+(deftest existential-liveness-preserves-satisfying-branch-after-convergence
+  (testing "Existential liveness should succeed when one branch satisfies the property before paths converge"
+    (let [result
+          (check/check
+           {:bthreads {::brancher (b/bids [{:request #{:a :b}}])
+                       ::finisher (b/bids [{:wait-on #{:a :b}}
+                                           {:request #{{:type ::done
+                                                        :terminal true}}}])}
+            :liveness {::a-possible {:quantifier :existential
+                                     :eventually #{:a}}}
+            :check-deadlock? false
+            :check-livelock? false})]
+
+      (is (nil? result)
+          "A trace :a -> ::done exists, so existential liveness for :a should pass"))))
+
+(deftest universal-liveness-detects-nonmatching-branch-after-convergence
+  (testing "Universal liveness should fail when one reachable branch misses the matching event before convergence"
+    (let [result
+          (check/check
+           {:bthreads {::brancher (b/bids [{:request #{::paid ::skipped}}])
+                       ::finisher (b/bids [{:wait-on #{::paid ::skipped}}
+                                           {:request #{{:type ::done
+                                                        :terminal true}}}])}
+            :liveness {::payment-required {:quantifier :universal
+                                           :eventually #{::paid}}}
+            :check-deadlock? false
+            :check-livelock? false})]
+
+      (is (some? result)
+          "Should report a universal liveness violation because the ::skipped -> ::done execution never contains ::paid")
+
+      (when result
+        (is (seq (:liveness-violations result))
+            "Should report at least one liveness violation")
+
+        (when-let [violation (first (:liveness-violations result))]
+          (is (= ::payment-required (:property violation))
+              "Should identify the violated universal liveness property")
+          (is (= :universal (:quantifier violation))
+              "Should report the violated quantifier")
+          (is (= [::skipped ::done] (:trace violation))
+              "Should report the bad maximal execution that reaches the merged terminal state without ::paid"))))))
+
+(deftest universal-liveness-event-predicate-detects-nonmatching-branch-after-convergence
+  (testing "Universal liveness with :event-predicate should fail when one branch lacks a matching event object before convergence"
+    (let [result
+          (check/check
+           {:bthreads {::brancher
+                       (b/bids [{:request #{{:type ::progress
+                                             :invoice-id ::match}
+                                            {:type ::progress
+                                             :invoice-id ::other}}}])
+                       ::finisher
+                       (b/bids [{:wait-on #{::progress}}
+                                {:request #{{:type ::done
+                                             :terminal true}}}])}
+            :liveness {::payment-required
+                       {:quantifier :universal
+                        :event-predicate (fn [event]
+                                           (= ::match (:invoice-id event)))}}
+            :check-deadlock? false
+            :check-livelock? false})]
+
+      (is (some? result)
+          "Should report a universal liveness violation because one reachable ::progress branch never emits a matching event object before convergence")
+
+      (when result
+        (is (seq (:liveness-violations result))
+            "Should report at least one liveness violation")
+
+        (when-let [violation (first (:liveness-violations result))]
+          (is (= ::payment-required (:property violation))
+              "Should identify the violated universal liveness property")
+          (is (= :universal (:quantifier violation))
+              "Should report the violated quantifier"))))))
 
 (deftest universal-liveness-checks-deadlock-paths
   (testing "Universal liveness property should be checked on paths that end in deadlock"
@@ -1145,10 +1297,9 @@
                   {:bthreads {:terminate-immediately
                               (b/bids [{:request #{{:type :done :terminal true}}}])}
                    :liveness
-                   {:payment-required
-                    {:quantifier :universal
-                     :predicate (fn [trace]
-                                  (some #(= :payment (tech.thomascothran.pavlov.event/type %)) trace))}}})]
+                    {:payment-required
+                     {:quantifier :universal
+                      :eventually #{:payment}}}})]
 
       (is (some? result)
           "Should detect liveness violation")
