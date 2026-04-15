@@ -43,6 +43,7 @@
   ```clojure
   {:livelocks [{:path [...] :cycle [...]}]
    :liveness-violations [{:property ... :quantifier ... :trace [...]}]
+   :impossible #{:event-a :event-b}
    :safety-violations [{:event {...} :path [...] :state {...}}]
    :deadlocks [{:path [...] :state {...}}]
    :truncated true}  ;; optional flag when max-nodes exceeded
@@ -50,6 +51,7 @@
 
   - `:livelocks` — Programs stuck in infinite loops
   - `:liveness-violations` — Required events never occur
+  - `:impossible` — Requested possible events were not found in the explored LTS
   - `:safety-violations` — Invariants violated
   - `:deadlocks` — Programs stuck, no events possible
   - `:truncated` — Boolean flag when exploration hit `:max-nodes` limit
@@ -141,9 +143,10 @@
   ;;                            :trace [:process :done]}]}
   ```
 
-  #### Existential Quantifier (`:existential`)
+  ### Possibility Checks
 
-  The property must be satisfied on AT LEAST ONE path.
+  Use `:possible` to assert that some event can occur on at least one reachable
+  execution.
 
   ```clojure
   ;; Assert: payment must be POSSIBLE (at least one path has it)
@@ -152,10 +155,7 @@
                                  {:request #{{:type :done-a :terminal true}}}])
                 :path-b (b/bids [{:request #{:skip}}
                                  {:request #{{:type :done-b :terminal true}}}])}
-     :liveness
-     {:payment-possible
-      {:quantifier :existential
-       :eventually #{:payment}}}})
+     :possible #{:payment}})
   ;; => nil (satisfied - path-a has payment)
   ```
 
@@ -231,7 +231,7 @@
   1. Decide what bthreads you want to test
   2. Specify initiating events in a single request, establishing top-level branches
      in the execution graph and kicking things off
-  3. Specify positive scenarios and validate they occur with existential liveness checks
+  3. Specify positive scenarios and validate they occur with possibility checks
   4. Specify safety properties as their own bthreads
   5. Specify universal liveness properties
 
@@ -489,33 +489,27 @@
     ;; Combine all violations
     (vec (concat terminating-violations cycle-violations))))
 
-(defn- check-existential-liveness
-  "Check an existential liveness property: at least one reachable event must satisfy the property.
-   Returns a vector with one violation if NO reachable event satisfies the property, or empty vector if satisfied."
-  [lts property-key {:keys [eventually event-predicate]} _terminal-node-ids]
-  (let [event-ok? (or event-predicate
-                      (when eventually
-                        #(contains? eventually (e/type %))))
-        satisfies? (some (fn [{:keys [event]}]
-                           (event-ok? event))
-                         (:edges lts))]
+(defn- find-impossible-events
+  "Return the subset of `:possible` events that do not appear on any explored edge."
+  [lts config]
+  (when-let [possible (get config :possible)]
+    (let [events (into #{}
+                       (comp (map :event)
+                             (map e/type))
+                       (get lts :edges))]
+      (set/difference possible events))))
 
-    (if satisfies?
-      []
-      [{:property property-key
-        :quantifier :existential}])))
-
-(defn- assert-supported-liveness-property!
-  [property-key {:keys [predicate]}]
-  (when predicate
-    (throw (ex-info (str "Legacy liveness :predicate is not supported for property " property-key
-                         ". Liveness checks must use supported event-local forms such as :eventually or :event-predicate.")
-                    {:property property-key}))))
+(comment
+  (require '[tech.thomascothran.pavlov.bthread :as b])
+  (-> (graph/->lts
+       {:a->c (b/bids [{:request #{:a}}
+                       {:request #{:b}}
+                       {:request #{:c}}])})
+      (find-impossible-events {:possible #{:d}})))
 
 (defn- find-liveness-violations
   "Check liveness properties against the LTS graph.
-   For universal quantifier: returns violations for maximal executions with no matching event.
-   For existential quantifier: returns a violation if no reachable event satisfies the property.
+   Returns violations for maximal executions with no matching event.
 
    Checks deadlock/terminal paths and trapped cycles using event-local semantics.
 
@@ -534,14 +528,10 @@
           nodes-to-check (into terminal-node-ids deadlock-node-ids)]
        ;; Collect violations from all liveness properties
       (vec (mapcat (fn [[property-key prop]]
-                     (let [_ (assert-supported-liveness-property! property-key prop)
-                           {:keys [quantifier]} prop]
+                     (let [{:keys [quantifier]} prop]
                        (case quantifier
                          :universal
-                         (check-universal-liveness lts property-key prop nodes-to-check)
-
-                         :existential
-                         (check-existential-liveness lts property-key prop nodes-to-check))))
+                         (check-universal-liveness lts property-key prop nodes-to-check))))
                    liveness-props)))))
 
 (defn check
@@ -561,6 +551,7 @@
     :check-livelock? - if true, detect livelocks (default: true)
     :check-deadlock? - if true, detect deadlocks (default: true)
     :liveness - map of liveness properties to check (optional)
+    :possible (optional) - a set of events that must be possible
     :max-nodes - maximum nodes to explore (optional)
 
   Returns:
@@ -568,6 +559,7 @@
   - A map with violation categories (only non-empty categories included):
     {:livelocks [{:path [...] :cycle [...]}]
      :liveness-violations [{:property ... :quantifier ... :trace [...]}]
+     :impossible #{:event-a :event-b} ;; impossible events
      :safety-violations [{:event ... :path [...] :state {...}}]
      :deadlocks [{:path [...] :state {...}}]
      :truncated true}  ;; optional flag when max-nodes exceeded"
@@ -593,8 +585,11 @@
         deadlocks (when-not truncated?
                     (find-deadlocks lts config))
 
+        impossible (find-impossible-events lts config)
+
         ;; Build categorized result map - only include non-empty categories
         result (cond-> nil
+                 (seq impossible) (assoc :impossible impossible)
                  (seq livelocks) (assoc :livelocks livelocks)
                  (seq liveness-violations) (assoc :liveness-violations liveness-violations)
                  (seq safety-violations) (assoc :safety-violations safety-violations)

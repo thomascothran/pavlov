@@ -304,12 +304,9 @@
                     (b/bids [{:wait-on #{:b}}
                              {:request #{{:type :b-confirmed
                                           :terminal true}}}])}
-          liveness {:a-confirmed {:quantifier :existential
-                                  :eventually #{:a-confirmed}}
-                    :b-confirmed {:quantifier :existential
-                                  :eventually #{:b-confirmed}}}
           result (check/check {:bthreads bthreads
-                               :liveness liveness})]
+                               :possible #{:a-confirmed
+                                           :b-confirmed}})]
       (is (nil? result)))))
 
 (deftest map-bthreads-preserve-equal-priority-branching
@@ -350,22 +347,19 @@
                          {:request #{{:type :b-confirmed :terminal true}}
                           :block #{:a}}
                          {:block #{:a}}])]])]
-      (let [liveness {:a-confirmed {:quantifier :existential
-                                    :eventually #{:a-confirmed}}
-                      :b-confirmed {:quantifier :existential
-                                    :eventually #{:b-confirmed}}}
-            map-result (check/check {:bthreads (make-map-bthreads)
-                                     :liveness liveness
+      (let [map-result (check/check {:bthreads (make-map-bthreads)
+                                     :possible #{:a-confirmed
+                                                 :b-confirmed}
                                      :check-deadlock? false})
             ordered-result (check/check {:bthreads (make-ordered-bthreads)
-                                         :liveness liveness
+                                         :possible #{:a-confirmed
+                                                     :b-confirmed}
                                          :check-deadlock? false})]
         (is (nil? map-result)
             "Map input should keep :request-a and :request-b at equal priority, so both confirmations are reachable")
-        (is (= [{:property :b-confirmed
-                 :quantifier :existential}]
-               (:liveness-violations ordered-result))
-            "Ordered input should only follow :request-a first, leaving :b-confirmed unreachable")))))
+        (is ordered-result)
+        (is (= #{:b-confirmed}
+               (get ordered-result :impossible)))))))
 
 (deftest no-livelock-when-program-terminates
   (testing "Program that terminates normally should not be flagged as livelock"
@@ -522,13 +516,13 @@
     ;; A bthread that terminates immediately without doing anything else
     ;; The liveness property requires :payment to occur on ALL paths
     ;; Expected: liveness violation because no :payment event occurred
-     (let [result (check/check
+    (let [result (check/check
                   {:bthreads {:terminate-immediately
                               (b/bids [{:request #{{:type :done :terminal true}}}])}
                    :liveness
-                    {:payment-required
-                     {:quantifier :universal
-                      :eventually #{:payment}}}})]
+                   {:payment-required
+                    {:quantifier :universal
+                     :eventually #{:payment}}}})]
 
       ;; The test SHOULD fail because :liveness is not implemented yet
       ;; Either result will be nil (no violation detected) OR
@@ -557,14 +551,14 @@
     ;; A bthread that requests :payment first, then terminates
     ;; The liveness property requires :payment to occur on ALL paths
     ;; Expected: nil (no violation) because :payment occurred before termination
-     (let [result (check/check
+    (let [result (check/check
                   {:bthreads {:payment-then-terminate
                               (b/bids [{:request #{:payment}}
                                        {:request #{{:type :done :terminal true}}}])}
                    :liveness
-                    {:payment-required
-                     {:quantifier :universal
-                      :eventually #{:payment}}}})]
+                   {:payment-required
+                    {:quantifier :universal
+                     :eventually #{:payment}}}})]
 
       ;; Should return nil - no violation
       (is (nil? result)
@@ -679,9 +673,9 @@
           (is (= #{:payment :ack} (set (:cycle livelock)))
               "Cycle should contain :payment and :ack events"))))))
 
-(deftest existential-liveness-satisfied-one-path
-  (testing "Existential liveness property satisfied when ANY path satisfies it"
-    ;; This is Cycle 2.6: existential quantifier with one satisfying path
+(deftest possible-check-satisfied-one-path
+  (testing "Possible check is satisfied when ANY path contains the event"
+    ;; This is Cycle 2.6: possibility check with one satisfying path
     ;; Two branches:
     ;; - One branch requests :failure then terminates (no :payment)
     ;; - Other branch requests :payment then terminates
@@ -701,26 +695,14 @@
           result (check/check
                   {:bthreads {:failure-branch failure-path
                               :payment-branch payment-path}
-                   :liveness
-                   {:payment-possible
-                    {:quantifier :existential
-                     :eventually #{:payment}}}})]
+                   :possible #{:payment}})]
 
       ;; Should return nil - no violation because payment-branch satisfies the property
       (is (nil? result)
-          "Should return nil when existential liveness property is satisfied on at least one path"))))
+          "Should return nil when possible check is satisfied on at least one path"))))
 
-(deftest existential-liveness-violation-no-path-satisfies
-  (testing "Existential liveness violation when NO path satisfies the predicate"
-    ;; This is Cycle 2.7: existential quantifier with NO satisfying paths
-    ;; Two branches:
-    ;; - One branch requests :failure-a then terminates (no :payment)
-    ;; - Other branch requests :failure-b then terminates (no :payment)
-    ;; The liveness property requires :payment to occur on AT LEAST ONE path
-    ;; Expected: liveness-violation because neither path has :payment
-
-    ;; Strategy: Two bthreads that both offer events at the first sync point
-    ;; This creates branching that the model checker will explore
+(deftest possible-check-violation-no-path-satisfies
+  (testing "Possible check violation violation when NO path satisfies the predicate"
     (let [failure-path-a
           (b/bids [{:request #{:failure-a}}
                    {:request #{{:type :done-a :terminal true}}}])
@@ -732,21 +714,10 @@
           result (check/check
                   {:bthreads {:failure-branch-a failure-path-a
                               :failure-branch-b failure-path-b}
-                   :liveness
-                   {:payment-possible
-                    {:quantifier :existential
-                     :eventually #{:payment}}}})]
+                   :possible #{:payment}})]
 
-      ;; Should return liveness-violation because NO path satisfies the property
-      ;; New format: check for :liveness-violations vector
-      (is (seq (:liveness-violations result))
-          "Should detect liveness violation when no path satisfies existential property")
-
-      (when-let [violation (first (:liveness-violations result))]
-        (is (= :payment-possible (:property violation))
-            "Should identify which property was violated")
-        (is (= :existential (:quantifier violation))
-            "Should report the existential quantifier")))))
+      (is (= #{:payment} (:impossible result))
+          "Should detect impossible event when no path contains the requested event"))))
 
 (deftest multiple-liveness-properties-reports-first-violation
   (testing "Multiple liveness properties checked, reporting first violation found"
@@ -838,9 +809,9 @@
                                               {:request #{:pong}}])}
                    :check-livelock? false ;; Disable structural livelock to isolate liveness
                    :liveness
-                    {:payment-required
-                     {:quantifier :universal
-                      :eventually #{:payment}}}})]
+                   {:payment-required
+                    {:quantifier :universal
+                     :eventually #{:payment}}}})]
 
       ;; This test SHOULD fail with current implementation
       ;; because cycles are not checked yet
@@ -862,85 +833,32 @@
           (is (= #{:ping :pong} (set (:cycle violation)))
               "Cycle should show the ping-pong events that loop forever without payment"))))))
 
-(deftest existential-liveness-checks-cycles-with-eventually
-  (testing "Existential liveness with :eventually should check cycles for satisfaction"
-    ;; A bthread that loops forever on :payment/:ack (infinite cycle)
-    ;; Liveness property requires :payment to occur on SOME path
-    ;; Expected: nil (NO violation) because the cycle DOES contain :payment, satisfying the existential property
-    ;; Current buggy behavior: Returns {:type :liveness-violation ...} (BUG — cycles not checked, only terminating paths)
-    ;;
-    ;; We disable structural livelock checking to isolate liveness behavior
+(deftest possible-checks-cycles-with-eventually
+  (testing "Possible checks with :eventually should check cycles for satisfaction"
     (let [result (check/check
                   {:bthreads {:payment-loop
                               (b/round-robin [{:request #{:payment}}
                                               {:request #{:ack}}])}
                    :check-livelock? false ;; Disable structural livelock to isolate liveness
-                   :liveness
-                    {:payment-possible
-                     {:quantifier :existential
-                      :eventually #{:payment}}}})]
-
-      ;; This test SHOULD fail with current implementation
-      ;; because cycles are not checked yet — only terminating paths
-      ;; The bug causes a false positive: it reports a violation when there shouldn't be one
-      (is (nil? result)
-          "Should return nil when existential liveness property is satisfied in cycle"))))
-
-(deftest legacy-liveness-predicate-is-rejected
-  (testing "Legacy trace-based liveness :predicate is rejected with guidance toward supported event-local forms"
-    (is (thrown-with-msg?
-         Throwable
-         #"(?is).*liveness.*:predicate.*(event-local|:eventually|supported).*"
-         (check/check
-          {:bthreads {:terminate-immediately
-                      (b/bids [{:request #{{:type :done :terminal true}}}])}
-           :liveness
-           {:payment-required
-            {:quantifier :universal
-             :predicate (fn [trace]
-                          (some #(= :payment (tech.thomascothran.pavlov.event/type %)) trace))}}}))
-        "Should reject legacy trace-based :predicate and direct callers to supported event-local forms")))
-
-(deftest existential-liveness-event-predicate-satisfied
-  (testing "Existential liveness succeeds when some reachable event satisfies :event-predicate"
-    (let [result
-          (check/check
-           {:bthreads {::failure-branch
-                       (b/bids [{:request #{{:type ::progress
-                                             :branch :failure}}}
-                                {:request #{{:type ::done-failure
-                                             :terminal true}}}])
-
-                       ::success-branch
-                       (b/bids [{:request #{{:type ::progress
-                                             :branch :success
-                                             :edge-token ::match}}}
-                                {:request #{{:type ::done-success
-                                             :terminal true}}}])}
-            :liveness {::progress-possible
-                       {:quantifier :existential
-                        :event-predicate (fn [event]
-                                           (= ::match (:edge-token event)))}}
-            :check-deadlock? false
-            :check-livelock? false})]
+                   :possible #{:payment}})]
 
       (is (nil? result)
-          "Should return nil when a reachable event object satisfies :event-predicate"))))
+          "Should return nil when possible check is satisfied in cycle"))))
 
 (deftest universal-liveness-event-predicate-satisfied-on-terminating-path
   (testing "Universal liveness succeeds when every terminating path contains an event whose event object satisfies :event-predicate"
     (let [result
           (check/check
            {:bthreads {::payment-then-terminate
-                        (b/bids [{:request #{{:type ::progress
-                                              :stage :queued}}}
-                                 {:request #{{:type ::progress
-                                              :stage :paid
-                                              :invoice-id ::match}}}
-                                 {:request #{{:type ::done
-                                              :terminal true}}}])}
-             :liveness {::payment-required
-                        {:quantifier :universal
+                       (b/bids [{:request #{{:type ::progress
+                                             :stage :queued}}}
+                                {:request #{{:type ::progress
+                                             :stage :paid
+                                             :invoice-id ::match}}}
+                                {:request #{{:type ::done
+                                             :terminal true}}}])}
+            :liveness {::payment-required
+                       {:quantifier :universal
                         :event-predicate (fn [event]
                                            (= ::match (:invoice-id event)))}}
             :check-deadlock? false
@@ -969,8 +887,8 @@
       (is (nil? result)
           "Should return nil when every maximal execution in the reachable cycle contains an event object satisfying :event-predicate"))))
 
-(deftest existential-liveness-satisfied-via-spawned-environment-bthread
-  (testing "Existential liveness should see terminal paths reached through spawned environment bthreads"
+(deftest possible-satisfied-via-spawned-environment-bthread
+  (testing "Possible event check should see terminal paths reached through spawned environment bthreads"
     ;; Regression: the state-space search currently misses the :c -> ::done path when
     ;; an environment bthread spawns the bthread that requests :c.
     (let [control-result
@@ -983,9 +901,7 @@
                                    (b/bids [{:request #{:a}}
                                             {:request #{:b}}
                                             {:request #{:c}}])}
-            :liveness {::done-eventually
-                       {:quantifier :existential
-                        :eventually #{::done}}}
+            :possible #{::done}
             :check-deadlock? false})
 
           bug-result
@@ -1000,31 +916,28 @@
                                             {:bthreads
                                              {::create
                                               (b/bids [{:request #{:c}}])}}])}
-            :liveness {::done-eventually
-                       {:quantifier :existential
-                        :eventually #{::done}}}
+            :possible #{::done}
             :check-deadlock? false})]
 
       (is (nil? control-result)
-          "Sanity check: direct environment path to ::done should satisfy existential liveness")
+          "Sanity check: direct environment path to ::done should satisfy the possibility check")
       (is (nil? bug-result)
-          "Spawned environment path to ::done should also satisfy existential liveness"))))
+          "Spawned environment path to ::done should also satisfy the possibility check"))))
 
-(deftest existential-liveness-preserves-satisfying-branch-after-convergence
-  (testing "Existential liveness should succeed when one branch satisfies the property before paths converge"
+(deftest possibility-check-preserves-satisfying-branch-after-convergence
+  (testing "Possibility check should succeed when one branch satisfies the property before paths converge"
     (let [result
           (check/check
            {:bthreads {::brancher (b/bids [{:request #{:a :b}}])
                        ::finisher (b/bids [{:wait-on #{:a :b}}
                                            {:request #{{:type ::done
                                                         :terminal true}}}])}
-            :liveness {::a-possible {:quantifier :existential
-                                     :eventually #{:a}}}
+            :possible #{:a}
             :check-deadlock? false
             :check-livelock? false})]
 
       (is (nil? result)
-          "A trace :a -> ::done exists, so existential liveness for :a should pass"))))
+          "A trace :a -> ::done exists, so possibility check for :a should pass"))))
 
 (deftest universal-liveness-detects-nonmatching-branch-after-convergence
   (testing "Universal liveness should fail when one reachable branch misses the matching event before convergence"
@@ -1297,9 +1210,9 @@
                   {:bthreads {:terminate-immediately
                               (b/bids [{:request #{{:type :done :terminal true}}}])}
                    :liveness
-                    {:payment-required
-                     {:quantifier :universal
-                      :eventually #{:payment}}}})]
+                   {:payment-required
+                    {:quantifier :universal
+                     :eventually #{:payment}}}})]
 
       (is (some? result)
           "Should detect liveness violation")
