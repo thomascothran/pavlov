@@ -38,7 +38,7 @@
   ### Return Values
 
   Returns `nil` if no violations found. Otherwise returns a categorized map
-  with violation vectors (only non-empty categories are included):
+  with only non-empty categories:
 
   ```clojure
   {:livelocks [{:path [...] :cycle [...]}]
@@ -136,7 +136,7 @@
                                           :hot true}])}})
   ;; => {:liveness-violation {:node-id ...,
   ;;                          :path-edges [...],
-  ;;                          :state {...}}]
+  ;;                          :state {...}}
   ;;     :deadlocks [{:path [:start-order], :state {...}}]}
   ```
 
@@ -451,7 +451,7 @@
 
   Explores the state space once, checking for:
   - Livelocks (cycles with no path to terminal, unless :check-livelock? is false)
-  - Liveness violations (hot terminal, hot deadlock, or hot cycle). Returns at most 1
+  - Liveness violation (hot terminal, hot deadlock, or hot cycle). Returns at most 1
   - Safety violations (events with :invariant-violated true)
   - Deadlocks (unless :check-deadlock? is false)
 
@@ -467,7 +467,7 @@
 
   Returns:
   - nil if no violations found
-  - A map with violation categories (only non-empty categories included):
+  - A map with non-empty result categories:
     {:livelocks [{:path [...] :cycle [...]}]
      :liveness-violation {:node-id ... :path-edges [...] :state {...}} ;; at most 1
      :impossible #{:event-a :event-b} ;; impossible events
