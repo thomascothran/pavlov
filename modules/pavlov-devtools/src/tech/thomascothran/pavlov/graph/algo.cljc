@@ -1,5 +1,5 @@
 (ns tech.thomascothran.pavlov.graph.algo
-  (:import [clojure.lang PersistentQueue]))
+  (:import #?(:clj [clojure.lang PersistentQueue])))
 
 (defn distinct-by
   "Returns a stateful transducer that removes elements by calling f on each step as a uniqueness key.
@@ -36,10 +36,14 @@
    :path (conj path edge)})
 
 (defn find-path
+  "Find a path from the starting node to a node whose id satisfies
+  `target-node-id-pred`."
   [start-id succ-fn target-node-id-pred]
   (loop [seen #{start-id}
-         frontier (conj PersistentQueue/EMPTY {:node-id start-id
-                                               :path []})]
+         frontier (conj #?(:clj PersistentQueue/EMPTY
+                           :cljs #queue [])
+                        {:node-id start-id
+                         :path []})]
     (when-let [frontier-state (peek frontier)]
       (let [node-id (get frontier-state :node-id)
             path (get frontier-state :path)]

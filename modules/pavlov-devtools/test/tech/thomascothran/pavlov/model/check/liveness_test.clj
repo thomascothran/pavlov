@@ -51,25 +51,43 @@
 (deftest liveness-violation-detects-hot-terminal-path
   (testing "Hot terminal event reports the terminal event in the witness path"
     (let [lts (graph/->lts (hot-terminal-bthreads))
+          [terminal-edge] (:edges lts)
           violation (liveness/liveness-violation lts)]
-      (is (= [:done] (:path violation)))
-      (is (nil? (:cycle violation)))
+      (is (= (:to terminal-edge) (:node-id violation)))
+      (is (= [terminal-edge] (:path-edges violation)))
+      (is (= (get-in lts [:nodes (:to terminal-edge)])
+             (:state violation)))
+      (is (not (contains? violation :path)))
+      (is (not (contains? violation :cycle)))
+      (is (not (contains? violation :cycle-edges)))
       (is (liveness/hot? (:state violation))))))
 
 (deftest liveness-violation-detects-hot-deadlock
   (testing "Hot deadlock reports the path to the stuck hot node"
     (let [lts (graph/->lts (hot-deadlock-bthreads))
+          [setup-edge] (:edges lts)
           violation (liveness/liveness-violation lts)]
-      (is (= [:setup] (:path violation)))
-      (is (nil? (:cycle violation)))
+      (is (= (:to setup-edge) (:node-id violation)))
+      (is (= [setup-edge] (:path-edges violation)))
+      (is (= (get-in lts [:nodes (:to setup-edge)])
+             (:state violation)))
+      (is (not (contains? violation :path)))
+      (is (not (contains? violation :cycle)))
+      (is (not (contains? violation :cycle-edges)))
       (is (liveness/hot? (:state violation))))))
 
 (deftest liveness-violation-detects-hot-cycle-with-cold-prefix
   (testing "Hot cycle detection returns a cold-prefix path and a hot-only cycle witness"
     (let [lts (graph/->lts (hot-cycle-bthreads))
+          [setup-edge ping-edge pong-edge] (:edges lts)
           violation (liveness/liveness-violation lts)]
-      (is (= [:setup] (:path violation)))
-      (is (= [:ping :pong] (:cycle violation)))
+      (is (= (:to setup-edge) (:node-id violation)))
+      (is (= [setup-edge] (:path-edges violation)))
+      (is (= [ping-edge pong-edge] (:cycle-edges violation)))
+      (is (= (get-in lts [:nodes (:to setup-edge)])
+             (:state violation)))
+      (is (not (contains? violation :path)))
+      (is (not (contains? violation :cycle)))
       (is (liveness/hot? (:state violation))))))
 
 (deftest liveness-violation-ignores-cycles-that-leave-hot-region
@@ -94,10 +112,16 @@
                                                 :terminal true}}}])
                 :watcher (b/bids [{:wait-on #{:done}}
                                   {:hot true}])})
+          [terminal-edge] (:edges lts)
           violation (liveness/liveness-violation lts)]
       (is (some? violation))
-      (is (= [:done] (:path violation)))
-      (is (nil? (:cycle violation)))
+      (is (= (:to terminal-edge) (:node-id violation)))
+      (is (= [terminal-edge] (:path-edges violation)))
+      (is (= (get-in lts [:nodes (:to terminal-edge)])
+             (:state violation)))
+      (is (not (contains? violation :path)))
+      (is (not (contains? violation :cycle)))
+      (is (not (contains? violation :cycle-edges)))
       (is (liveness/hot? (:state violation))))))
 
 (deftest liveness-violation-handles-non-comparable-event-types

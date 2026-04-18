@@ -35,10 +35,6 @@
   (set/difference (leaf-node-ids lts)
                   (terminal-target-node-ids lts)))
 
-(defn edge-path->event-types
-  [edge-path]
-  (mapv (comp e/type :event) edge-path))
-
 (defn path-to-node
   ([lts node-id]
    (path-to-node lts (algo/lts->outgoing-index lts) node-id))
@@ -47,8 +43,13 @@
                    (algo/succ outgoing-index
                               (constantly true)
                               curr-node-id))]
-     (some->> (algo/find-path (:root lts) succ-fn #(= % node-id))
-              edge-path->event-types))))
+     (algo/find-path (:root lts) succ-fn #(= % node-id)))))
+
+(defn- witness-path-to-node
+  [lts outgoing-index node-id]
+  (if (= (:root lts) node-id)
+    []
+    (path-to-node lts outgoing-index node-id)))
 
 (defn- natural-node-order
   [lts]
@@ -80,20 +81,24 @@
                                      (hot? (get-in lts [:nodes (:to edge)])))
                             edge))
                         (:edges lts))]
-    {:node-id (:to edge)
-     :path (or (path-to-node lts outgoing-index (:to edge)) [])
-     :state (get-in lts [:nodes (:to edge)])}))
+    (when-let [prefix-path (witness-path-to-node lts outgoing-index (:from edge))]
+      {:node-id (:to edge)
+       :path-edges (conj prefix-path edge)
+       :state (get-in lts [:nodes (:to edge)])})))
 
 (defn- hot-deadlock-violation
   [lts outgoing-index]
   (let [deadlock-node-ids (deadlock-node-ids lts)]
-    (when-let [node-id (some (fn [node-id]
-                               (when (and (contains? deadlock-node-ids node-id)
-                                          (hot? (get-in lts [:nodes node-id])))
-                                 node-id))
-                             (natural-node-order lts))]
+    (when-let [{:keys [node-id path-edges]}
+               (some (fn [node-id]
+                       (when (and (contains? deadlock-node-ids node-id)
+                                  (hot? (get-in lts [:nodes node-id])))
+                         (when-let [path-edges (witness-path-to-node lts outgoing-index node-id)]
+                           {:node-id node-id
+                            :path-edges path-edges})))
+                     (natural-node-order lts))]
       {:node-id node-id
-       :path (or (path-to-node lts outgoing-index node-id) [])
+       :path-edges path-edges
        :state (get-in lts [:nodes node-id])})))
 
 (defn- hot-cycle
@@ -178,10 +183,11 @@
   ([lts]
    (liveness-violation lts (algo/lts->outgoing-index lts)))
   ([lts outgoing-index]
-   (or (hot-terminal-violation lts outgoing-index)
-       (hot-deadlock-violation lts outgoing-index)
-       (when-let [{:keys [entry-node-id cycle-edges]} (hot-cycle lts outgoing-index)]
-         {:node-id entry-node-id
-          :path (or (path-to-node lts outgoing-index entry-node-id) [])
-          :cycle (edge-path->event-types cycle-edges)
-          :state (get-in lts [:nodes entry-node-id])}))))
+   (when-not (:truncated lts)
+     (or (hot-terminal-violation lts outgoing-index)
+         (hot-deadlock-violation lts outgoing-index)
+         (when-let [{:keys [entry-node-id cycle-edges]} (hot-cycle lts outgoing-index)]
+           {:node-id entry-node-id
+            :path-edges (witness-path-to-node lts outgoing-index entry-node-id)
+            :cycle-edges cycle-edges
+            :state (get-in lts [:nodes entry-node-id])})))))
