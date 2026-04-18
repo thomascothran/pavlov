@@ -50,24 +50,35 @@
      (some->> (algo/find-path (:root lts) succ-fn #(= % node-id))
               edge-path->event-types))))
 
-(defn- ordered-node-ids
-  [lts outgoing-index node-ids]
-  (let [path-cache (into {}
-                         (map (fn [node-id]
-                                [node-id
-                                  (or (path-to-node lts outgoing-index node-id) [])]))
-                         node-ids)]
-    (sort-by (juxt #(count (get path-cache %))
-                   #(pr-str (get path-cache %))
-                   str)
-             node-ids)))
+(defn- natural-node-order
+  [lts]
+  (let [{:keys [seen order]}
+        (reduce (fn [{:keys [seen order]} {:keys [from to]}]
+                  (let [[seen order]
+                        (if (contains? seen from)
+                          [seen order]
+                          [(conj seen from) (conj order from)])
+                        [seen order]
+                        (if (contains? seen to)
+                          [seen order]
+                          [(conj seen to) (conj order to)])]
+                    {:seen seen
+                     :order order}))
+                {:seen (cond-> #{}
+                         (:root lts) (conj (:root lts)))
+                 :order (cond-> []
+                          (:root lts) (conj (:root lts)))}
+                (:edges lts))]
+    (into order
+          (remove seen)
+          (keys (:nodes lts)))))
 
 (defn- hot-terminal-violation
   [lts outgoing-index]
   (when-let [edge (some (fn [edge]
                           (when (and (e/terminal? (:event edge))
                                      (hot? (get-in lts [:nodes (:to edge)])))
-                             edge))
+                            edge))
                         (:edges lts))]
     {:node-id (:to edge)
      :path (or (path-to-node lts outgoing-index (:to edge)) [])
@@ -75,15 +86,15 @@
 
 (defn- hot-deadlock-violation
   [lts outgoing-index]
-  (when-let [node-id (some (fn [node-id]
-                             (when (hot? (get-in lts [:nodes node-id]))
-                               node-id))
-                           (ordered-node-ids lts
-                                             outgoing-index
-                                             (deadlock-node-ids lts)))]
-    {:node-id node-id
-     :path (or (path-to-node lts outgoing-index node-id) [])
-     :state (get-in lts [:nodes node-id])}))
+  (let [deadlock-node-ids (deadlock-node-ids lts)]
+    (when-let [node-id (some (fn [node-id]
+                               (when (and (contains? deadlock-node-ids node-id)
+                                          (hot? (get-in lts [:nodes node-id])))
+                                 node-id))
+                             (natural-node-order lts))]
+      {:node-id node-id
+       :path (or (path-to-node lts outgoing-index node-id) [])
+       :state (get-in lts [:nodes node-id])})))
 
 (defn- hot-cycle
   [lts outgoing-index]
@@ -94,8 +105,10 @@
                    (algo/succ outgoing-index
                               (comp hot-node-id? :to)
                               node-id))
-        ordered-hot-node-ids (ordered-node-ids lts outgoing-index hot-node-ids)]
-    (loop [state {:start-node-ids ordered-hot-node-ids
+        start-node-ids (into []
+                             (filter hot-node-id?)
+                             (natural-node-order lts))]
+    (loop [state {:start-node-ids start-node-ids
                   :gray #{}
                   :black #{}
                   :stack []
