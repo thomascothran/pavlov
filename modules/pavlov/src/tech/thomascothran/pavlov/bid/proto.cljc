@@ -9,4 +9,5 @@
   (request [this])
   (wait-on [this])
   (block [this])
-  (bthreads [this]))
+  (bthreads [this])
+  (hot [this]))

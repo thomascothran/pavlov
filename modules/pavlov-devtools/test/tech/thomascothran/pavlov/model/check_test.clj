@@ -446,28 +446,29 @@
 (deftest livelock-with-terminating-branch
   (testing "Livelock detected even when one branch terminates"
     ;; Create a scenario where:
-    ;; - Bthread 1 requests :terminate (terminal event)
-    ;; - Bthread 2 requests :loop-start, which leads to infinite ping-pong
+    ;; - One branch takes a terminal :terminate event
+    ;; - Another branch takes :loop-start, which leads to infinite ping-pong
     ;; At the first sync point, model checker explores both branches.
     ;; The :terminate branch leads to termination (OK).
     ;; The :loop-start branch leads to livelock (VIOLATION).
-    (let [terminating-branch
-          (b/bids [{:request #{{:type :terminate :terminal true}}}])
+    (let [chooser
+          (b/bids [{:request #{:loop-start
+                              {:type :terminate :terminal true}}}])
 
           looping-branch
           (b/step
-           (fn [state event]
-             (case (or state :waiting)
-               :waiting (if (= :loop-start event)
-                          [:ping {:request #{:ping}}]
-                          [:waiting {:request #{:loop-start}}])
-               :ping [:pong {:request #{:pong}}]
-               :pong [:ping {:request #{:ping}}])))
+            (fn [state event]
+              (case (or state :waiting)
+                :waiting (if (= :loop-start event)
+                           [:ping {:request #{:ping}}]
+                           [:waiting {:wait-on #{:loop-start}}])
+                :ping [:pong {:request #{:pong}}]
+                :pong [:ping {:request #{:ping}}])))
 
           result (check/check
-                  {:bthreads {:terminating terminating-branch
-                              :looping looping-branch}
-                   :check-livelock? true})]
+                  {:bthreads {:chooser chooser
+                               :looping looping-branch}
+                    :check-livelock? true})]
       (is (some? result)
           "Should detect a livelock even though one branch terminates")
       (when result
@@ -509,6 +510,30 @@
         ;; New format: :truncated is a boolean flag
         (is (true? (:truncated result))
             "Should have :truncated true when max-nodes exceeded")))))
+
+(deftest truncation-suppresses-liveness-violations
+  (testing "Should not report liveness violations from a truncated graph"
+    (let [worker (b/step
+                  (fn [state _event]
+                    (let [n (or state 0)]
+                      (if (< n 5)
+                        [(inc n) {:request #{(keyword (str "event-" n))}}]
+                        [(inc n) {:request #{:payment}}]))))
+          result (check/check
+                  {:bthreads {:worker worker}
+                   :liveness {:payment-required
+                              {:quantifier :universal
+                               :eventually #{:payment}}}
+                   :max-nodes 2})]
+      (is (some? result)
+          "Should still return a truncation result")
+      (when result
+        (is (true? (:truncated result))
+            "Should mark the result as truncated")
+        (is (nil? (:liveness-violations result))
+            "Should suppress liveness violations when exploration is truncated")
+        (is (nil? (:deadlocks result))
+            "Should suppress deadlocks when exploration is truncated")))))
 
 (deftest universal-liveness-violation-on-terminating-path
   (testing "Universal liveness property violated when path terminates without satisfying predicate"

@@ -1,6 +1,7 @@
 (ns tech.thomascothran.pavlov.search
   (:refer-clojure :exclude [ancestors])
   (:require [tech.thomascothran.pavlov.event.selection :as selection]
+            [tech.thomascothran.pavlov.event :as event]
             [tech.thomascothran.pavlov.bthread :as b]
             [tech.thomascothran.pavlov.bprogram.state :as state]
             [tech.thomascothran.pavlov.bid.proto :as bid]

@@ -2,6 +2,7 @@
   (:require [clojure.test :refer [deftest is testing]]
             [clojure.set]
             [tech.thomascothran.pavlov.graph :as graph]
+            [tech.thomascothran.pavlov.model.check.liveness :as liveness]
             [tech.thomascothran.pavlov.nav :as pnav]
             [tech.thomascothran.pavlov.bthread :as b]))
 

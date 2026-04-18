@@ -579,7 +579,9 @@
                       (throw (ex-info "livelock detection failed due to stack overflow. Possible circular node IDs."
                                       {:lts lts
                                        :config config}))))
-        liveness-violations (find-liveness-violations lts config)
+        ;; Don't report liveness violations if truncated (likely false positives)
+        liveness-violations (when-not truncated?
+                              (find-liveness-violations lts config))
         safety-violations (find-safety-violations lts)
         ;; Don't report deadlocks if truncated (likely false positives)
         deadlocks (when-not truncated?
