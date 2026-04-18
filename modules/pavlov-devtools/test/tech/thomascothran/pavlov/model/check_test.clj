@@ -1,7 +1,8 @@
 (ns tech.thomascothran.pavlov.model.check-test
   (:require [clojure.test :refer [deftest testing is]]
             [tech.thomascothran.pavlov.model.check :as check]
-            [tech.thomascothran.pavlov.bthread :as b]))
+            [tech.thomascothran.pavlov.bthread :as b]
+            [tech.thomascothran.pavlov.event :as e]))
 
 (deftest good-morning-evening-model-check
   (testing "Model checker should verify good-morning/good-evening alternation"
@@ -172,6 +173,39 @@
     (b/on ::thing-fetched-from-cms
           (fn [_]
             {:request #{{:type ::update-thing}}}))]])
+
+(defn edge-types
+  [edges]
+  (mapv (comp e/type :event) edges))
+
+(defn make-hot-terminal-bthreads
+  []
+  {:finisher (b/bids [{:request #{{:type :done
+                                   :terminal true}}}])
+   :watcher (b/bids [{:wait-on #{:done}}
+                     {:hot true}])})
+
+(defn make-hot-deadlock-bthreads
+  []
+  {:starter (b/bids [{:request #{:setup}}])
+   :obligation (b/bids [{:wait-on #{:setup}}
+                        {:hot true}])})
+
+(defn make-hot-cycle-bthreads
+  []
+  (let [looper (b/step
+                (fn [state event]
+                  (case (or state :waiting)
+                    :waiting (if (= :setup event)
+                               [:ping {:request #{:ping}
+                                       :hot true}]
+                               [:waiting {:wait-on #{:setup}}])
+                    :ping [:pong {:request #{:pong}
+                                  :hot true}]
+                    :pong [:ping {:request #{:ping}
+                                  :hot true}])))]
+    {:starter (b/bids [{:request #{:setup}}])
+     :looper looper}))
 
 (deftest test-complex-identifier-bug
   ;; Catches another case where the state of a bthread does not change
@@ -453,22 +487,22 @@
     ;; The :loop-start branch leads to livelock (VIOLATION).
     (let [chooser
           (b/bids [{:request #{:loop-start
-                              {:type :terminate :terminal true}}}])
+                               {:type :terminate :terminal true}}}])
 
           looping-branch
           (b/step
-            (fn [state event]
-              (case (or state :waiting)
-                :waiting (if (= :loop-start event)
-                           [:ping {:request #{:ping}}]
-                           [:waiting {:wait-on #{:loop-start}}])
-                :ping [:pong {:request #{:pong}}]
-                :pong [:ping {:request #{:ping}}])))
+           (fn [state event]
+             (case (or state :waiting)
+               :waiting (if (= :loop-start event)
+                          [:ping {:request #{:ping}}]
+                          [:waiting {:wait-on #{:loop-start}}])
+               :ping [:pong {:request #{:pong}}]
+               :pong [:ping {:request #{:ping}}])))
 
           result (check/check
                   {:bthreads {:chooser chooser
-                               :looping looping-branch}
-                    :check-livelock? true})]
+                              :looping looping-branch}
+                   :check-livelock? true})]
       (is (some? result)
           "Should detect a livelock even though one branch terminates")
       (when result
@@ -511,19 +545,16 @@
         (is (true? (:truncated result))
             "Should have :truncated true when max-nodes exceeded")))))
 
-(deftest truncation-suppresses-liveness-violations
-  (testing "Should not report liveness violations from a truncated graph"
-    (let [worker (b/step
-                  (fn [state _event]
-                    (let [n (or state 0)]
-                      (if (< n 5)
-                        [(inc n) {:request #{(keyword (str "event-" n))}}]
-                        [(inc n) {:request #{:payment}}]))))
-          result (check/check
-                  {:bthreads {:worker worker}
-                   :liveness {:payment-required
-                              {:quantifier :universal
-                               :eventually #{:payment}}}
+(deftest truncation-suppresses-hot-liveness-violations
+  (testing "Should not report hot-state liveness violations from a truncated graph"
+    (let [result (check/check
+                  {:bthreads
+                   {:worker (b/bids [{:request #{:event-0}}
+                                     {:request #{:event-1}}
+                                     {:request #{:event-2}}
+                                     {:request #{:event-3}}
+                                     {:request #{:event-4}}
+                                     {:hot true}])}
                    :max-nodes 2})]
       (is (some? result)
           "Should still return a truncation result")
@@ -535,168 +566,74 @@
         (is (nil? (:deadlocks result))
             "Should suppress deadlocks when exploration is truncated")))))
 
-(deftest universal-liveness-violation-on-terminating-path
-  (testing "Universal liveness property violated when path terminates without satisfying predicate"
-    ;; This is Cycle 2.1: simplest liveness check
-    ;; A bthread that terminates immediately without doing anything else
-    ;; The liveness property requires :payment to occur on ALL paths
-    ;; Expected: liveness violation because no :payment event occurred
+(deftest truncation-suppresses-impossible-events
+  (testing "Should not report impossible events from a truncated graph"
     (let [result (check/check
-                  {:bthreads {:terminate-immediately
-                              (b/bids [{:request #{{:type :done :terminal true}}}])}
-                   :liveness
-                   {:payment-required
-                    {:quantifier :universal
-                     :eventually #{:payment}}}})]
-
-      ;; The test SHOULD fail because :liveness is not implemented yet
-      ;; Either result will be nil (no violation detected) OR
-      ;; an error will be thrown about unknown option
+                  {:bthreads {:worker (b/bids [{:request #{:a}}
+                                               {:request #{:b}}
+                                               {:request #{:payment}}])}
+                   :possible #{:payment}
+                   :max-nodes 2})]
       (is (some? result)
-          "Should detect liveness violation")
-
+          "Should still return a truncation result")
       (when result
-        ;; New format: check for :liveness-violations vector
+        (is (true? (:truncated result))
+            "Should mark the result as truncated")
+        (is (nil? (:impossible result))
+            "Should suppress impossible events when exploration is truncated")))))
+
+(deftest hot-deadlock-reports-liveness-and-deadlock
+  (testing "Hot deadlocks appear under :liveness-violations and :deadlocks"
+    (let [result (check/check {:bthreads (make-hot-deadlock-bthreads)})]
+      (is (some? result)
+          "Should detect the hot deadlock")
+      (when result
         (is (seq (:liveness-violations result))
-            "Should have liveness violations in new format")
-
+            "Should report the hot deadlock as a liveness violation")
+        (is (seq (:deadlocks result))
+            "Should still report the structural deadlock")
         (when-let [violation (first (:liveness-violations result))]
-          (is (= :payment-required (:property violation))
-              "Should identify which property was violated")
-          (is (= :universal (:quantifier violation))
-              "Should report the quantifier used")
-          (is (vector? (:trace violation))
-              "Should include the trace that violated the property")
-          (is (= [:done] (:trace violation))
-              "Trace should show the path that terminated without payment"))))))
+          (is (some? (:node-id violation))
+              "Should report the violating node")
+          (is (= [:setup] (edge-types (:path-edges violation)))
+              "Path witness should include the edge into the hot deadlock")
+          (is (not (contains? violation :cycle-edges))
+              "Deadlock witness should not include a cycle")
+          (is (:hot (:state violation))
+              "Violation should report the hot node state")
+          (is (not (contains? violation :property)))
+          (is (not (contains? violation :quantifier)))
+          (is (not (contains? violation :trace))))))))
 
-(deftest universal-liveness-satisfied-on-terminating-path
-  (testing "Universal liveness property satisfied when payment occurs before termination"
-    ;; This is Cycle 2.2: liveness property is satisfied
-    ;; A bthread that requests :payment first, then terminates
-    ;; The liveness property requires :payment to occur on ALL paths
-    ;; Expected: nil (no violation) because :payment occurred before termination
-    (let [result (check/check
-                  {:bthreads {:payment-then-terminate
-                              (b/bids [{:request #{:payment}}
-                                       {:request #{{:type :done :terminal true}}}])}
-                   :liveness
-                   {:payment-required
-                    {:quantifier :universal
-                     :eventually #{:payment}}}})]
-
-      ;; Should return nil - no violation
-      (is (nil? result)
-          "Should return nil when liveness property is satisfied"))))
-
-(deftest universal-liveness-eventually-shorthand
-  (testing "Universal liveness using :eventually shorthand for common case"
-    ;; This is Cycle 2.3: syntactic sugar for event type checking
-    ;; Same as Cycle 2.1, but using :eventually #{:payment} instead of :predicate
-    ;; A bthread that terminates immediately without doing anything else
-    ;; The liveness property requires :payment to occur on ALL paths using the shorthand
-    ;; Expected: same liveness violation as Cycle 2.1
-    (let [result (check/check
-                  {:bthreads {:terminate-immediately
-                              (b/bids [{:request #{{:type :done :terminal true}}}])}
-                   :liveness
-                   {:payment-required
-                    {:quantifier :universal
-                     :eventually #{:payment}}}})]
-
-      ;; The test SHOULD fail because :eventually is not implemented yet
-      ;; Either result will be nil (no violation detected) OR
-      ;; an error will be thrown about unknown option
+(deftest hot-cycle-liveness-violation-reported-without-livelock-check
+  (testing "Hot cycles still report :liveness-violations when structural livelock checking is disabled"
+    (let [result (check/check {:bthreads (make-hot-cycle-bthreads)
+                               :check-livelock? false})]
       (is (some? result)
-          "Should detect liveness violation")
-
+          "Should detect the hot cycle")
       (when result
-        ;; New format: check for :liveness-violations vector
         (is (seq (:liveness-violations result))
-            "Should have liveness violations in new format")
-
+            "Should report the hot cycle as a liveness violation")
+        (is (nil? (:livelocks result))
+            "Should not report structural livelocks when disabled")
         (when-let [violation (first (:liveness-violations result))]
-          (is (= :payment-required (:property violation))
-              "Should identify which property was violated")
-          (is (= :universal (:quantifier violation))
-              "Should report the quantifier used")
-          (is (vector? (:trace violation))
-              "Should include the trace that violated the property")
-          (is (= [:done] (:trace violation))
-              "Trace should show the path that terminated without payment"))))))
+          (is (= [:setup] (edge-types (:path-edges violation)))
+              "Path witness should stop at the hot cycle entry")
+          (is (= [:ping :pong] (edge-types (:cycle-edges violation)))
+              "Cycle witness should contain the hot cycle edges")
+          (is (:hot (:state violation))
+              "Violation should report the hot entry state"))))))
 
-(deftest universal-liveness-violation-in-cycle
-  (testing "Universal liveness property violated when trapped in cycle without satisfying event"
-    ;; This is Cycle 2.4: liveness violation in a cycle
-    ;; A bthread that loops forever on :ping/:pong
-    ;; The liveness property requires :payment to occur on ALL paths
-    ;; Expected: liveness violation because the cycle never contains :payment
-    ;; Note: We disable structural livelock checking to isolate liveness behavior
-    (let [result (check/check
-                  {:bthreads {:ping-pong
-                              (b/round-robin [{:request #{:ping}}
-                                              {:request #{:pong}}])}
-                   :check-livelock? false ;; Disable structural livelock to isolate liveness
-                   :liveness
-                   {:payment-required
-                    {:quantifier :universal
-                     :eventually #{:payment}}}})]
-
-      ;; The test SHOULD fail because liveness checking in cycles is not implemented yet
+(deftest hot-cycle-still-reports-livelock
+  (testing "Hot cycles overlap with structural :livelocks"
+    (let [result (check/check {:bthreads (make-hot-cycle-bthreads)})]
       (is (some? result)
-          "Should detect liveness violation in cycle")
-
+          "Should detect the hot cycle")
       (when result
-        ;; New format: check for :liveness-violations vector
         (is (seq (:liveness-violations result))
-            "Should have liveness violations in new format (not :livelocks)")
-
-        (when-let [violation (first (:liveness-violations result))]
-          (is (= :payment-required (:property violation))
-              "Should identify which property was violated")
-          (is (= :universal (:quantifier violation))
-              "Should report the quantifier used")
-          (is (vector? (:cycle violation))
-              "Should include the cycle that violated the property")
-          (is (= #{:ping :pong} (set (:cycle violation)))
-              "Cycle should show the ping-pong events that loop forever without payment"))))))
-
-(deftest universal-liveness-satisfied-in-cycle-still-reports-livelock
-  (testing "Universal liveness satisfied in cycle, but structural livelock still reported"
-    ;; This is Cycle 2.5: liveness property IS satisfied within the cycle
-    ;; A bthread that loops forever on :payment/:ack/:payment...
-    ;; The liveness property requires :payment to occur on ALL paths
-    ;; Expected: structural livelock is reported because the program loops forever
-    ;;           BUT NOT a liveness violation because :payment does occur in the cycle
-    ;; Design decision: structural livelocks are always reported regardless of liveness properties
-    (let [result (check/check
-                  {:bthreads {:payment-loop
-                              (b/round-robin [{:request #{:payment}}
-                                              {:request #{:ack}}])}
-                   :check-livelock? true ;; Enable structural livelock checking (default)
-                   :liveness
-                   {:payment-required
-                    {:quantifier :universal
-                     :eventually #{:payment}}}})]
-
-      ;; Should detect structural livelock
-      (is (some? result)
-          "Should detect a structural livelock even though liveness is satisfied")
-
-      (when result
-        ;; New format: check for :livelocks vector (NOT :liveness-violations)
+            "Should report the hot cycle as a liveness violation")
         (is (seq (:livelocks result))
-            "Should have livelocks in new format (NOT :liveness-violations)")
-
-        (when-let [livelock (first (:livelocks result))]
-          (is (vector? (:cycle livelock))
-              "Should include the cycle")
-          ;; Verify that the cycle contains :payment, which satisfies the liveness property
-          (is (some #(= :payment %) (:cycle livelock))
-              "Cycle should contain :payment event, satisfying the liveness property")
-          ;; Verify the cycle is what we expect
-          (is (= #{:payment :ack} (set (:cycle livelock)))
-              "Cycle should contain :payment and :ack events"))))))
+            "Should still report the structural livelock")))))
 
 (deftest possible-check-satisfied-one-path
   (testing "Possible check is satisfied when ANY path contains the event"
@@ -744,122 +681,18 @@
       (is (= #{:payment} (:impossible result))
           "Should detect impossible event when no path contains the requested event"))))
 
-(deftest multiple-liveness-properties-reports-first-violation
-  (testing "Multiple liveness properties checked, reporting first violation found"
-    ;; This is Cycle 2.8: multiple liveness properties
-    ;; A bthread that requests :payment then terminates (no :shipment)
-    ;; Two liveness properties:
-    ;; - :payment-ok requires :payment on ALL paths — SATISFIED
-    ;; - :shipment-ok requires :shipment on ALL paths — VIOLATED
-    ;; Expected: violation for :shipment-ok (not :payment-ok)
-    (let [result (check/check
-                  {:bthreads {:payment-then-terminate
-                              (b/bids [{:request #{:payment}}
-                                       {:request #{{:type :done :terminal true}}}])}
-                   :liveness
-                   {:payment-ok
-                    {:quantifier :universal
-                     :eventually #{:payment}}
-                    :shipment-ok
-                    {:quantifier :universal
-                     :eventually #{:shipment}}}})]
+(deftest top-level-liveness-config-is-rejected
+  (testing "Top-level :liveness config is rejected in favor of :hot and :possible"
+    (is (thrown-with-msg?
+         clojure.lang.ExceptionInfo
+         #":liveness"
+         (check/check {:bthreads (make-hot-terminal-bthreads)
+                       :liveness {:payment-required
+                                  {:quantifier :universal
+                                   :eventually #{:payment}}}})))))
 
-      ;; Should detect liveness violation for :shipment-ok
-      (is (some? result)
-          "Should detect liveness violation")
-
-      (when result
-        ;; New format: check for :liveness-violations vector
-        (is (seq (:liveness-violations result))
-            "Should have liveness violations in new format")
-
-        (when-let [violation (first (:liveness-violations result))]
-          (is (= :shipment-ok (:property violation))
-              "Should identify :shipment-ok as the violated property (not :payment-ok)")
-          (is (= :universal (:quantifier violation))
-              "Should report the quantifier used")
-          (is (vector? (:trace violation))
-              "Should include the trace that violated the property")
-          ;; The trace should show :payment then :done
-          ;; :payment satisfies :payment-ok, but :shipment is never requested
-          (is (= #{:payment :done} (set (:trace violation)))
-              "Trace should contain :payment and :done events"))))))
-
-(deftest priority-livelock-before-liveness-violation
-  (testing "Structural livelock is reported before liveness violation"
-    ;; This is Cycle 2.9: priority order when both violations exist
-    ;; A bthread that loops forever on :ping/:pong (structural livelock)
-    ;; Liveness property requires :payment to occur on ALL paths
-    ;; Expected: :livelock violation (NOT :liveness-violation)
-    ;; Rationale: Structural livelock is more severe (pegs CPU at 100%)
-    ;;            User should know about the infinite loop first
-    (let [result (check/check
-                  {:bthreads {:ping-pong
-                              (b/round-robin [{:request #{:ping}}
-                                              {:request #{:pong}}])}
-                   :check-livelock? true ;; Enable structural livelock checking (default)
-                   :liveness
-                   {:payment-required
-                    {:quantifier :universal
-                     :eventually #{:payment}}}})]
-
-      ;; Should detect structural livelock (not liveness violation)
-      (is (some? result)
-          "Should detect a violation")
-
-      (when result
-        ;; New format: both :livelocks and :liveness-violations may be present
-        ;; but :livelocks should be present (structural livelock has priority in old format,
-        ;; in new format both are returned but livelocks should be there)
-        (is (seq (:livelocks result))
-            "Should have livelocks in new format (structural livelock has priority)")
-
-        (when-let [livelock (first (:livelocks result))]
-          (is (vector? (:cycle livelock))
-              "Should include the cycle")
-          (is (= #{:ping :pong} (set (:cycle livelock)))
-              "Cycle should contain the ping-pong events that loop forever"))))))
-
-(deftest universal-liveness-checks-cycles-with-eventually
-  (testing "Universal liveness with :eventually should check cycles for violations"
-    ;; A bthread that loops forever on :ping/:pong (infinite cycle)
-    ;; Liveness property requires :payment
-    ;; Expected: :liveness-violation because cycle doesn't contain :payment
-    ;; Current behavior: Returns nil (BUG — cycles not checked)
-    ;;
-    ;; We disable structural livelock checking to isolate liveness behavior
-    (let [result (check/check
-                  {:bthreads {:ping-pong
-                              (b/round-robin [{:request #{:ping}}
-                                              {:request #{:pong}}])}
-                   :check-livelock? false ;; Disable structural livelock to isolate liveness
-                   :liveness
-                   {:payment-required
-                    {:quantifier :universal
-                     :eventually #{:payment}}}})]
-
-      ;; This test SHOULD fail with current implementation
-      ;; because cycles are not checked yet
-      (is (some? result)
-          "Should detect liveness violation in cycle")
-
-      (when result
-        ;; New format: check for :liveness-violations vector (not :livelocks)
-        (is (seq (:liveness-violations result))
-            "Should have liveness violations in new format (not :livelocks)")
-
-        (when-let [violation (first (:liveness-violations result))]
-          (is (= :payment-required (:property violation))
-              "Should identify which property was violated")
-          (is (= :universal (:quantifier violation))
-              "Should report the quantifier used")
-          (is (vector? (:cycle violation))
-              "Should include the cycle that violated the property")
-          (is (= #{:ping :pong} (set (:cycle violation)))
-              "Cycle should show the ping-pong events that loop forever without payment"))))))
-
-(deftest possible-checks-cycles-with-eventually
-  (testing "Possible checks with :eventually should check cycles for satisfaction"
+(deftest possible-check-satisfied-in-cycle
+  (testing "Possible checks should still succeed when the event appears in a reachable cycle"
     (let [result (check/check
                   {:bthreads {:payment-loop
                               (b/round-robin [{:request #{:payment}}
@@ -869,48 +702,6 @@
 
       (is (nil? result)
           "Should return nil when possible check is satisfied in cycle"))))
-
-(deftest universal-liveness-event-predicate-satisfied-on-terminating-path
-  (testing "Universal liveness succeeds when every terminating path contains an event whose event object satisfies :event-predicate"
-    (let [result
-          (check/check
-           {:bthreads {::payment-then-terminate
-                       (b/bids [{:request #{{:type ::progress
-                                             :stage :queued}}}
-                                {:request #{{:type ::progress
-                                             :stage :paid
-                                             :invoice-id ::match}}}
-                                {:request #{{:type ::done
-                                             :terminal true}}}])}
-            :liveness {::payment-required
-                       {:quantifier :universal
-                        :event-predicate (fn [event]
-                                           (= ::match (:invoice-id event)))}}
-            :check-deadlock? false
-            :check-livelock? false})]
-
-      (is (nil? result)
-          "Should return nil when each maximal terminating execution contains an event object satisfying :event-predicate"))))
-
-(deftest universal-liveness-event-predicate-satisfied-in-cycle
-  (testing "Universal liveness should inspect full cycle event objects for :event-predicate satisfaction"
-    (let [result
-          (check/check
-           {:bthreads {::payment-loop
-                       (b/round-robin [{:request #{{:type ::progress
-                                                    :stage :queued}}}
-                                       {:request #{{:type ::progress
-                                                    :stage :paid
-                                                    :invoice-id ::match}}}])}
-            :liveness {::payment-required
-                       {:quantifier :universal
-                        :event-predicate (fn [event]
-                                           (= ::match (:invoice-id event)))}}
-            :check-deadlock? false
-            :check-livelock? false})]
-
-      (is (nil? result)
-          "Should return nil when every maximal execution in the reachable cycle contains an event object satisfying :event-predicate"))))
 
 (deftest possible-satisfied-via-spawned-environment-bthread
   (testing "Possible event check should see terminal paths reached through spawned environment bthreads"
@@ -963,131 +754,6 @@
 
       (is (nil? result)
           "A trace :a -> ::done exists, so possibility check for :a should pass"))))
-
-(deftest universal-liveness-detects-nonmatching-branch-after-convergence
-  (testing "Universal liveness should fail when one reachable branch misses the matching event before convergence"
-    (let [result
-          (check/check
-           {:bthreads {::brancher (b/bids [{:request #{::paid ::skipped}}])
-                       ::finisher (b/bids [{:wait-on #{::paid ::skipped}}
-                                           {:request #{{:type ::done
-                                                        :terminal true}}}])}
-            :liveness {::payment-required {:quantifier :universal
-                                           :eventually #{::paid}}}
-            :check-deadlock? false
-            :check-livelock? false})]
-
-      (is (some? result)
-          "Should report a universal liveness violation because the ::skipped -> ::done execution never contains ::paid")
-
-      (when result
-        (is (seq (:liveness-violations result))
-            "Should report at least one liveness violation")
-
-        (when-let [violation (first (:liveness-violations result))]
-          (is (= ::payment-required (:property violation))
-              "Should identify the violated universal liveness property")
-          (is (= :universal (:quantifier violation))
-              "Should report the violated quantifier")
-          (is (= [::skipped ::done] (:trace violation))
-              "Should report the bad maximal execution that reaches the merged terminal state without ::paid"))))))
-
-(deftest universal-liveness-event-predicate-detects-nonmatching-branch-after-convergence
-  (testing "Universal liveness with :event-predicate should fail when one branch lacks a matching event object before convergence"
-    (let [result
-          (check/check
-           {:bthreads {::brancher
-                       (b/bids [{:request #{{:type ::progress
-                                             :invoice-id ::match}
-                                            {:type ::progress
-                                             :invoice-id ::other}}}])
-                       ::finisher
-                       (b/bids [{:wait-on #{::progress}}
-                                {:request #{{:type ::done
-                                             :terminal true}}}])}
-            :liveness {::payment-required
-                       {:quantifier :universal
-                        :event-predicate (fn [event]
-                                           (= ::match (:invoice-id event)))}}
-            :check-deadlock? false
-            :check-livelock? false})]
-
-      (is (some? result)
-          "Should report a universal liveness violation because one reachable ::progress branch never emits a matching event object before convergence")
-
-      (when result
-        (is (seq (:liveness-violations result))
-            "Should report at least one liveness violation")
-
-        (when-let [violation (first (:liveness-violations result))]
-          (is (= ::payment-required (:property violation))
-              "Should identify the violated universal liveness property")
-          (is (= :universal (:quantifier violation))
-              "Should report the violated quantifier"))))))
-
-(deftest universal-liveness-checks-deadlock-paths
-  (testing "Universal liveness property should be checked on paths that end in deadlock"
-    ;; This is Cycle 3.3: Liveness on Deadlock Path
-    ;; A bthread that requests :process then deadlocks (no terminal event, no more bids)
-    ;; Liveness property requires :payment to occur on ALL paths
-    ;; Expected: :liveness-violation because the deadlock path doesn't have :payment
-    ;; Current behavior: Returns {:type :deadlock ...} (liveness not checked on deadlock paths)
-    ;;
-    ;; Key insight: Since liveness has higher priority than deadlock in our priority order,
-    ;; if we properly check liveness on deadlock paths, we should get a liveness violation,
-    ;; NOT a deadlock.
-    (let [result (check/check
-                  {:bthreads {:process-then-deadlock
-                              ;; Request :process then deadlock (no more bids, no terminal event)
-                              (b/bids [{:request #{:process}}])}
-                   :check-deadlock? true ;; Enable deadlock checking
-                   :liveness
-                   {:payment-required
-                    {:quantifier :universal
-                     :eventually #{:payment}}}})]
-
-      ;; This test SHOULD fail with current implementation
-      ;; Expected: {:type :liveness-violation ...}
-      ;; Actual: {:type :deadlock ...}
-      (is (some? result)
-          "Should detect a violation (either liveness or deadlock)")
-
-      (when result
-        ;; New format: both violations may be present
-        ;; In the new format, we return ALL violations, so we might have both
-        ;; :liveness-violations and :deadlocks
-        ;; But we should at least have :liveness-violations
-        (is (seq (:liveness-violations result))
-            "Should have liveness violations in new format (liveness has higher priority)")
-
-        (when-let [violation (first (:liveness-violations result))]
-          (is (= :payment-required (:property violation))
-              "Should identify which property was violated")
-          (is (= :universal (:quantifier violation))
-              "Should report the quantifier used")
-          (is (vector? (:trace violation))
-              "Should include the trace that violated the property")
-          (is (= [:process] (:trace violation))
-              "Trace should show the :process event before deadlock, without :payment"))))))
-
-(deftest invalid-quantifier-throws-error
-  (testing "Invalid quantifier (typo) throws clear error"
-    ;; User provides :univrsal (missing 'e') instead of :universal
-    ;; Current: Throws IllegalArgumentException: No matching clause: :univrsal
-    ;; Expected: Either a clear error message OR graceful handling
-    ;;
-    ;; For now, we document and test the current behavior (throwing an exception)
-    ;; We can improve the error message later if needed
-    (is (thrown-with-msg?
-         IllegalArgumentException
-         #"No matching clause"
-         (check/check
-          {:bthreads {:simple (b/bids [{:request #{{:type :done :terminal true}}}])}
-           :liveness
-           {:payment-required
-            {:quantifier :univrsal ;; TYPO - should be :universal
-             :eventually #{:payment}}}}))
-        "Should throw IllegalArgumentException for invalid quantifier")))
 
 (deftest empty-bthreads-returns-nil
   (testing "Empty bthreads returns deadlock (empty program has no events and cannot terminate)"
@@ -1230,14 +896,8 @@
               "Safety violation should have :state"))))))
 
 (deftest new-format-single-liveness-violation
-  (testing "Single liveness violation returns in new format {:liveness-violations [...]}"
-    (let [result (check/check
-                  {:bthreads {:terminate-immediately
-                              (b/bids [{:request #{{:type :done :terminal true}}}])}
-                   :liveness
-                   {:payment-required
-                    {:quantifier :universal
-                     :eventually #{:payment}}}})]
+  (testing "Single hot-state liveness violation returns the direct witness shape"
+    (let [result (check/check {:bthreads (make-hot-terminal-bthreads)})]
 
       (is (some? result)
           "Should detect liveness violation")
@@ -1259,17 +919,24 @@
           (is (nil? (:type violation))
               "Individual liveness violation should NOT have :type key")
 
-          (is (= :payment-required (:property violation))
-              "Liveness violation should have :property")
+          (is (some? (:node-id violation))
+              "Liveness violation should have :node-id")
 
-          (is (= :universal (:quantifier violation))
-              "Liveness violation should have :quantifier")
+          (is (= [:done] (edge-types (:path-edges violation)))
+              "Path edges should witness the hot terminal event")
 
-          (is (vector? (:trace violation))
-              "Liveness violation should have :trace")
+          (is (not (contains? violation :cycle-edges))
+              "Hot terminal violation should not include a cycle witness")
 
-          (is (= [:done] (:trace violation))
-              "Trace should show termination without payment"))))))
+          (is (map? (:state violation))
+              "Liveness violation should have :state")
+
+          (is (:hot (:state violation))
+              "Violating state should be hot")
+
+          (is (not (contains? violation :property)))
+          (is (not (contains? violation :quantifier)))
+          (is (not (contains? violation :trace))))))))
 
 (deftest new-format-no-violations
   (testing "No violations returns nil"

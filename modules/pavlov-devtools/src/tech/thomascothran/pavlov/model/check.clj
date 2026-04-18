@@ -32,7 +32,7 @@
   | `:environment-bthreads` | map/vec | nil | Bthreads simulating external inputs |
   | `:check-deadlock?` | bool | true | Whether to detect deadlocks |
   | `:check-livelock?` | bool | true | Whether to detect livelocks (infinite loops) |
-  | `:liveness` | map | nil | Liveness properties to verify (see below) |
+  | `:possible` | set | nil | Events that must be reachable on at least one path |
   | `:max-nodes` | int | nil | Limit state space exploration |
 
   ### Return Values
@@ -42,7 +42,7 @@
 
   ```clojure
   {:livelocks [{:path [...] :cycle [...]}]
-   :liveness-violations [{:property ... :quantifier ... :trace [...]}]
+   :liveness-violations [{:node-id ... :path-edges [...] :state {...}}]
    :impossible #{:event-a :event-b}
    :safety-violations [{:event {...} :path [...] :state {...}}]
    :deadlocks [{:path [...] :state {...}}]
@@ -50,8 +50,8 @@
   ```
 
   - `:livelocks` — Programs stuck in infinite loops
-  - `:liveness-violations` — Required events never occur
-  - `:impossible` — Requested possible events were not found in the explored LTS
+  - `:liveness-violations` — Hot-state obligations that can remain unmet
+  - `:impossible` — Requested possible events were not found in the fully explored LTS
   - `:safety-violations` — Invariants violated
   - `:deadlocks` — Programs stuck, no events possible
   - `:truncated` — Boolean flag when exploration hit `:max-nodes` limit
@@ -119,28 +119,24 @@
   ;; => {:safety-violations [{:event {:type :double-work-error, ...}, :path [...], :state {...}}]}
   ```
 
-  ### Liveness Properties
+  ### Hot-State Liveness
 
-  Liveness properties assert that \"something good eventually happens\"
-  by matching individual reachable events. Use the `:liveness` option to
-  specify properties.
-
-  #### Universal Quantifier (`:universal`)
-
-  The property must be satisfied on ALL execution paths.
+  Liveness is expressed behaviorally with `:hot true` on bids. A violation
+  exists when execution terminates while hot, deadlocks while hot, or can stay
+  in hot states forever.
 
   ```clojure
-  ;; Assert: payment MUST eventually occur on every path
+  ;; After :start-order, payment becomes a hot obligation.
+  ;; Because nothing can produce :payment here, the program deadlocks while hot.
   (check/check
-    {:bthreads {:flow (b/bids [{:request #{:process}}
-                               {:request #{{:type :done :terminal true}}}])}
-     :liveness
-     {:payment-required
-      {:quantifier :universal
-       :eventually #{:payment}}}})
-  ;; => {:liveness-violations [{:property :payment-required,
-  ;;                            :quantifier :universal,
-  ;;                            :trace [:process :done]}]}
+    {:bthreads {:order (b/bids [{:request #{:start-order}}])
+                :await-payment (b/bids [{:wait-on #{:start-order}}
+                                         {:wait-on #{:payment}
+                                          :hot true}])}})
+  ;; => {:liveness-violations [{:node-id ...,
+  ;;                            :path-edges [...],
+  ;;                            :state {...}}]
+  ;;     :deadlocks [{:path [:start-order], :state {...}}]}
   ```
 
   ### Possibility Checks
@@ -158,24 +154,6 @@
      :possible #{:payment}})
   ;; => nil (satisfied - path-a has payment)
   ```
-
-  #### Event Predicate Form
-
-  For more precise event-local matching, use `:event-predicate`:
-
-  ```clojure
-  (check/check
-    {:bthreads {...}
-     :liveness
-     {:order-complete
-       {:quantifier :universal
-        :event-predicate (fn [event]
-                           (contains? #{:payment :shipment}
-                                      (tech.thomascothran.pavlov.event/type event)))}}})
-  ```
-
-  Legacy trace-based `:predicate` is rejected because liveness is evaluated
-  on a state-merged LTS and must remain event-local.
 
   ## Environment Bthreads
 
@@ -200,7 +178,7 @@
   Fix violations in this recommended order (most severe first):
 
   1. **Livelocks** — Most severe (pegs CPU at 100%)
-  2. **Liveness violations** — Required properties never satisfied
+  2. **Liveness violations** — Hot-state obligations can remain unmet
   3. **Safety violations** — Bad states reached
   4. **Deadlocks** — Programs stuck
 
@@ -233,7 +211,7 @@
      in the execution graph and kicking things off
   3. Specify positive scenarios and validate they occur with possibility checks
   4. Specify safety properties as their own bthreads
-  5. Specify universal liveness properties
+  5. Specify hot-state obligations with `:hot true` where progress is required
 
   ### One branching request for all initiating events
 
@@ -246,11 +224,12 @@
   use `b/bid` with `:wait-on` events. `b/bid` can be used either with maps or functions.
 
   The final bid will `:request` an event unique to the scenario which will then be used
-  with liveness checks to guarantee the scenario reached completion.
+  with possibility checks to guarantee the scenario reached completion.
   "
   (:require [clojure.set :as set]
             [tech.thomascothran.pavlov.event :as e]
-            [tech.thomascothran.pavlov.graph :as graph])
+            [tech.thomascothran.pavlov.graph :as graph]
+            [tech.thomascothran.pavlov.model.check.liveness :as liveness])
   (:import [clojure.lang PersistentQueue]))
 
 ;; Internal implementation details below
@@ -449,46 +428,6 @@
               [{:path (or (find-path lts cycle-entry-node) [])
                 :cycle cycle-path}])))))))
 
-(defn- check-universal-liveness
-  "Check a universal event-local liveness property.
-   Returns violations for maximal reachable executions with no matching event."
-  [lts property-key {:keys [eventually event-predicate]} terminal-node-ids]
-  (let [event-ok? (or event-predicate
-                      (when eventually
-                        #(contains? eventually (e/type %))))
-        bad-edge-lts (when event-ok?
-                       (update lts :edges
-                               (fn [edges]
-                                 (filterv (fn [{:keys [event]}]
-                                            (not (event-ok? event)))
-                                          edges))))
-         ;; Collect all terminating path violations
-        terminating-violations
-        (vec (for [terminal-node-id terminal-node-ids
-                   :let [keyword-trace (if bad-edge-lts
-                                         (find-path bad-edge-lts terminal-node-id)
-                                         (find-path lts terminal-node-id))]
-                   :when (some? keyword-trace)]
-               {:property property-key
-                :quantifier :universal
-                :trace keyword-trace}))
-
-        ;; Check trapped cycles
-        cycle-violations
-        (when-let [can-reach (nodes-reaching-terminal lts)]
-          (let [all-nodes (set (keys (:nodes lts)))
-                trapped (set/difference all-nodes can-reach)]
-            (when (seq trapped)
-              (when-let [{:keys [cycle-path cycle-events]} (find-cycle-in-nodes lts trapped)]
-                (let [violation? (not (some event-ok? cycle-events))]
-                  (when violation?
-                    [{:property property-key
-                      :quantifier :universal
-                      :cycle cycle-path}]))))))]
-
-    ;; Combine all violations
-    (vec (concat terminating-violations cycle-violations))))
-
 (defn- find-impossible-events
   "Return the subset of `:possible` events that do not appear on any explored edge."
   [lts config]
@@ -507,39 +446,12 @@
                        {:request #{:c}}])})
       (find-impossible-events {:possible #{:d}})))
 
-(defn- find-liveness-violations
-  "Check liveness properties against the LTS graph.
-   Returns violations for maximal executions with no matching event.
-
-   Checks deadlock/terminal paths and trapped cycles using event-local semantics.
-
-   Supports :eventually shorthand and :event-predicate for event-local matching.
-
-   Returns a vector of all liveness violations (without :type key)."
-  [lts config]
-  (when-let [liveness-props (:liveness config)]
-    (let [terminal-node-ids (terminal-nodes lts)
-          ;; Also find deadlock nodes - these are leaf nodes that are not terminal
-          {:keys [edges nodes]} lts
-          nodes-with-outgoing (into #{} (map :from edges))
-          leaf-nodes (remove nodes-with-outgoing (keys nodes))
-          deadlock-node-ids (set (remove terminal-node-ids leaf-nodes))
-          ;; Combine terminal and deadlock nodes for liveness checking
-          nodes-to-check (into terminal-node-ids deadlock-node-ids)]
-       ;; Collect violations from all liveness properties
-      (vec (mapcat (fn [[property-key prop]]
-                     (let [{:keys [quantifier]} prop]
-                       (case quantifier
-                         :universal
-                         (check-universal-liveness lts property-key prop nodes-to-check))))
-                   liveness-props)))))
-
 (defn check
   "Model check a behavioral program for safety violations.
 
   Explores the state space once, checking for:
   - Livelocks (cycles with no path to terminal, unless :check-livelock? is false)
-  - Liveness violations (properties not satisfied on paths, when :liveness is provided)
+  - Liveness violations (hot terminal, hot deadlock, or hot cycle). Returns at most 1
   - Safety violations (events with :invariant-violated true)
   - Deadlocks (unless :check-deadlock? is false)
 
@@ -550,7 +462,6 @@
     :environment-bthreads - bthreads that generate events
     :check-livelock? - if true, detect livelocks (default: true)
     :check-deadlock? - if true, detect deadlocks (default: true)
-    :liveness - map of liveness properties to check (optional)
     :possible (optional) - a set of events that must be possible
     :max-nodes - maximum nodes to explore (optional)
 
@@ -558,7 +469,7 @@
   - nil if no violations found
   - A map with violation categories (only non-empty categories included):
     {:livelocks [{:path [...] :cycle [...]}]
-     :liveness-violations [{:property ... :quantifier ... :trace [...]}]
+     :liveness-violation {:node-id ... :path-edges [...] :state {...}} ;; at most 1
      :impossible #{:event-a :event-b} ;; impossible events
      :safety-violations [{:event ... :path [...] :state {...}}]
      :deadlocks [{:path [...] :state {...}}]
@@ -580,20 +491,22 @@
                                       {:lts lts
                                        :config config}))))
         ;; Don't report liveness violations if truncated (likely false positives)
-        liveness-violations (when-not truncated?
-                              (find-liveness-violations lts config))
+        liveness-violation  (when-not truncated?
+                              (liveness/liveness-violation lts))
         safety-violations (find-safety-violations lts)
         ;; Don't report deadlocks if truncated (likely false positives)
         deadlocks (when-not truncated?
                     (find-deadlocks lts config))
 
-        impossible (find-impossible-events lts config)
+        ;; Don't report impossible events if truncated (likely false negatives)
+        impossible (when-not truncated?
+                     (find-impossible-events lts config))
 
         ;; Build categorized result map - only include non-empty categories
         result (cond-> nil
                  (seq impossible) (assoc :impossible impossible)
                  (seq livelocks) (assoc :livelocks livelocks)
-                 (seq liveness-violations) (assoc :liveness-violations liveness-violations)
+                 (seq liveness-violation) (assoc :liveness-violation liveness-violation)
                  (seq safety-violations) (assoc :safety-violations safety-violations)
                  (seq deadlocks) (assoc :deadlocks deadlocks)
                  truncated? (assoc :truncated true))]
