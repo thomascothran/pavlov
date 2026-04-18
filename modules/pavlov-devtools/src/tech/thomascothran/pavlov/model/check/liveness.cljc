@@ -180,6 +180,22 @@
           (recur (:state next-step)))))))
 
 (defn liveness-violation
+  "Return the first hot-state liveness violation in the LTS, or nil.
+
+   A violation exists when:
+   - a terminal edge reaches a hot node
+   - a reachable non-terminal deadlock node is hot
+   - a reachable cycle through only hot nodes exists
+
+   Returns a map with:
+   - `:node-id` - the violating node or cycle-entry node
+   - `:path-edges` - a vector of edges from `:root` to `:node-id`
+   - `:cycle-edges` - a vector of cycle edges when the violation is cyclic
+   - `:state` - the node payload for `:node-id`
+
+   Does not return the legacy `:path` / `:cycle` keys.
+
+   Returns nil when no violation is found or when the LTS is truncated."
   ([lts]
    (liveness-violation lts (algo/lts->outgoing-index lts)))
   ([lts outgoing-index]
