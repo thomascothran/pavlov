@@ -561,7 +561,7 @@
       (when result
         (is (true? (:truncated result))
             "Should mark the result as truncated")
-        (is (nil? (:liveness-violations result))
+        (is (nil? (:liveness-violation result))
             "Should suppress liveness violations when exploration is truncated")
         (is (nil? (:deadlocks result))
             "Should suppress deadlocks when exploration is truncated")))))
@@ -583,16 +583,16 @@
             "Should suppress impossible events when exploration is truncated")))))
 
 (deftest hot-deadlock-reports-liveness-and-deadlock
-  (testing "Hot deadlocks appear under :liveness-violations and :deadlocks"
+  (testing "Hot deadlocks appear under :liveness-violation and :deadlocks"
     (let [result (check/check {:bthreads (make-hot-deadlock-bthreads)})]
       (is (some? result)
           "Should detect the hot deadlock")
       (when result
-        (is (seq (:liveness-violations result))
+        (is (map? (:liveness-violation result))
             "Should report the hot deadlock as a liveness violation")
         (is (seq (:deadlocks result))
             "Should still report the structural deadlock")
-        (when-let [violation (first (:liveness-violations result))]
+        (when-let [violation (:liveness-violation result)]
           (is (some? (:node-id violation))
               "Should report the violating node")
           (is (= [:setup] (edge-types (:path-edges violation)))
@@ -606,17 +606,17 @@
           (is (not (contains? violation :trace))))))))
 
 (deftest hot-cycle-liveness-violation-reported-without-livelock-check
-  (testing "Hot cycles still report :liveness-violations when structural livelock checking is disabled"
+  (testing "Hot cycles still report :liveness-violation when structural livelock checking is disabled"
     (let [result (check/check {:bthreads (make-hot-cycle-bthreads)
                                :check-livelock? false})]
       (is (some? result)
           "Should detect the hot cycle")
       (when result
-        (is (seq (:liveness-violations result))
+        (is (map? (:liveness-violation result))
             "Should report the hot cycle as a liveness violation")
         (is (nil? (:livelocks result))
             "Should not report structural livelocks when disabled")
-        (when-let [violation (first (:liveness-violations result))]
+        (when-let [violation (:liveness-violation result)]
           (is (= [:setup] (edge-types (:path-edges violation)))
               "Path witness should stop at the hot cycle entry")
           (is (= [:ping :pong] (edge-types (:cycle-edges violation)))
@@ -630,7 +630,7 @@
       (is (some? result)
           "Should detect the hot cycle")
       (when result
-        (is (seq (:liveness-violations result))
+        (is (map? (:liveness-violation result))
             "Should report the hot cycle as a liveness violation")
         (is (seq (:livelocks result))
             "Should still report the structural livelock")))))
@@ -681,15 +681,16 @@
       (is (= #{:payment} (:impossible result))
           "Should detect impossible event when no path contains the requested event"))))
 
-(deftest top-level-liveness-config-is-rejected
-  (testing "Top-level :liveness config is rejected in favor of :hot and :possible"
-    (is (thrown-with-msg?
-         clojure.lang.ExceptionInfo
-         #":liveness"
-         (check/check {:bthreads (make-hot-terminal-bthreads)
-                       :liveness {:payment-required
-                                  {:quantifier :universal
-                                   :eventually #{:payment}}}})))))
+(deftest top-level-liveness-config-is-ignored
+  (testing "Top-level :liveness config does not affect hot-state liveness reporting"
+    (let [result (check/check {:bthreads (make-hot-terminal-bthreads)
+                               :liveness {:payment-required
+                                          {:quantifier :universal
+                                           :eventually #{:payment}}}})]
+      (is (some? result)
+          "Should still report the hot-state liveness witness")
+      (is (map? (:liveness-violation result))
+          "Should report the singular liveness witness key"))))
 
 (deftest possible-check-satisfied-in-cycle
   (testing "Possible checks should still succeed when the event appears in a reachable cycle"
@@ -907,14 +908,11 @@
         (is (nil? (:type result))
             "Result should NOT have top-level :type key in new format")
 
-        ;; New format: :liveness-violations is a vector
-        (is (vector? (:liveness-violations result))
-            "Result should have :liveness-violations as a vector")
+        ;; New format: :liveness-violation is a single map
+        (is (map? (:liveness-violation result))
+            "Result should have :liveness-violation as a map")
 
-        (is (= 1 (count (:liveness-violations result)))
-            "Should have exactly one liveness violation")
-
-        (let [violation (first (:liveness-violations result))]
+        (let [violation (:liveness-violation result)]
           ;; Individual violation does NOT have :type key
           (is (nil? (:type violation))
               "Individual liveness violation should NOT have :type key")

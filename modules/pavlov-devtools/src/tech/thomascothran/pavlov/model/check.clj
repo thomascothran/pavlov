@@ -42,7 +42,7 @@
 
   ```clojure
   {:livelocks [{:path [...] :cycle [...]}]
-   :liveness-violations [{:node-id ... :path-edges [...] :state {...}}]
+   :liveness-violation {:node-id ... :path-edges [...] :state {...}}
    :impossible #{:event-a :event-b}
    :safety-violations [{:event {...} :path [...] :state {...}}]
    :deadlocks [{:path [...] :state {...}}]
@@ -50,7 +50,8 @@
   ```
 
   - `:livelocks` — Programs stuck in infinite loops
-  - `:liveness-violations` — Hot-state obligations that can remain unmet
+  - `:liveness-violation` — A hot state obligation that is not met. If there are
+    multiple unmet hot state obligations, only one is returned
   - `:impossible` — Requested possible events were not found in the fully explored LTS
   - `:safety-violations` — Invariants violated
   - `:deadlocks` — Programs stuck, no events possible
@@ -133,9 +134,9 @@
                 :await-payment (b/bids [{:wait-on #{:start-order}}
                                          {:wait-on #{:payment}
                                           :hot true}])}})
-  ;; => {:liveness-violations [{:node-id ...,
-  ;;                            :path-edges [...],
-  ;;                            :state {...}}]
+  ;; => {:liveness-violation {:node-id ...,
+  ;;                          :path-edges [...],
+  ;;                          :state {...}}]
   ;;     :deadlocks [{:path [:start-order], :state {...}}]}
   ```
 
@@ -174,11 +175,10 @@
 
   ## Multiple Violations
 
-  When multiple issues exist, ALL violations are returned in a single categorized map.
   Fix violations in this recommended order (most severe first):
 
   1. **Livelocks** — Most severe (pegs CPU at 100%)
-  2. **Liveness violations** — Hot-state obligations can remain unmet
+  2. **Liveness violation** — An unmet hot-state obligation
   3. **Safety violations** — Bad states reached
   4. **Deadlocks** — Programs stuck
 
