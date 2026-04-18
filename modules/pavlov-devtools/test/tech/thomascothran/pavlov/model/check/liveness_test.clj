@@ -60,7 +60,7 @@
       (is (not (contains? violation :path)))
       (is (not (contains? violation :cycle)))
       (is (not (contains? violation :cycle-edges)))
-      (is (liveness/hot? (:state violation))))))
+      (is (:hot (:state violation))))))
 
 (deftest liveness-violation-detects-hot-deadlock
   (testing "Hot deadlock reports the path to the stuck hot node"
@@ -74,7 +74,7 @@
       (is (not (contains? violation :path)))
       (is (not (contains? violation :cycle)))
       (is (not (contains? violation :cycle-edges)))
-      (is (liveness/hot? (:state violation))))))
+      (is (:hot (:state violation))))))
 
 (deftest liveness-violation-detects-hot-cycle-with-cold-prefix
   (testing "Hot cycle detection returns a cold-prefix path and a hot-only cycle witness"
@@ -88,7 +88,7 @@
              (:state violation)))
       (is (not (contains? violation :path)))
       (is (not (contains? violation :cycle)))
-      (is (liveness/hot? (:state violation))))))
+      (is (:hot (:state violation))))))
 
 (deftest liveness-violation-ignores-cycles-that-leave-hot-region
   (testing "A cycle that passes through a cold node is not a hot liveness violation"
@@ -122,7 +122,7 @@
       (is (not (contains? violation :path)))
       (is (not (contains? violation :cycle)))
       (is (not (contains? violation :cycle-edges)))
-      (is (liveness/hot? (:state violation))))))
+      (is (:hot (:state violation))))))
 
 (deftest liveness-violation-handles-non-comparable-event-types
   (testing "Liveness checking should not crash when witness paths contain non-comparable event types"

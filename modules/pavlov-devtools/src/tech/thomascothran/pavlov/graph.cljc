@@ -60,7 +60,8 @@
 
   Second, the eligible requested events from the eligible bid will be selected.
   These will then be aggregated together into the total branching events. "
-  (:require [tech.thomascothran.pavlov.search :as search]))
+  (:require [tech.thomascothran.pavlov.bid.proto :as bid]
+            [tech.thomascothran.pavlov.search :as search]))
 
 (defn- ->node-value
   "Extract minimal node data from wrapped state.
@@ -69,13 +70,17 @@
   fields like :path, :last-event, :next-event, and non-serializable
   fields like :name->bthread."
   [wrapped]
-  (let [bp-state (:bprogram/state wrapped)]
-    {:bthread->bid (:bthread->bid bp-state)
+  (let [bp-state (:bprogram/state wrapped)
+        bthread->bid (:bthread->bid bp-state)]
+    {:bthread->bid bthread->bid
      :bthreads-by-priority (:bthreads-by-priority bp-state)
      :saved-bthread-states (:saved-bthread-states wrapped)
      :requests (:requests bp-state)
      :waits (:waits bp-state)
-     :blocks (:blocks bp-state)}))
+     :blocks (:blocks bp-state)
+     :hot (boolean
+           (some bid/hot
+                 (vals bthread->bid)))}))
 
 (defn ->lts
   "Return a Labeled Transition System (LTS) for the supplied bthreads.
@@ -97,6 +102,7 @@
     :requests            - Map of event -> requesting bthreads
     :waits               - Map of event -> waiting bthreads
     :blocks              - Map of event -> blocking bthreads
+    :hot                 - True when any active bthread is hot
 
   Options:
     :max-nodes - Maximum nodes to explore before stopping (default: 1,000)

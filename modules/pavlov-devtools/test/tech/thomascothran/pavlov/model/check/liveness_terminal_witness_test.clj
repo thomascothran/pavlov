@@ -12,9 +12,12 @@
 (deftest liveness-violation-terminal-witness-uses-violating-edge-when-target-has-another-incoming-path
   (testing "The reported witness should include the terminal event that established the violation"
     (let [lts {:root :r
-               :nodes {:r {:bthread->bid {:t {}}}
-                       :y {:bthread->bid {:t {}}}
-                       :x {:bthread->bid {:t {:hot true}}}}
+               :nodes {:r {:bthread->bid {:t {}}
+                           :hot false}
+                       :y {:bthread->bid {:t {}}
+                           :hot false}
+                       :x {:bthread->bid {:t {:hot true}}
+                           :hot true}}
                :edges [{:from :r :to :x :event :a}
                        {:from :r :to :y :event :b}
                        {:from :y :to :x :event (terminal-event :done)}]}
@@ -31,10 +34,14 @@
 (deftest liveness-violation-terminal-witness-uses-the-scanned-terminal-edge-when-multiple-terminal-edges-hit-the-same-target
   (testing "The witness should preserve which terminal edge was selected as the violation witness"
     (let [lts {:root :r
-               :nodes {:r {:bthread->bid {:t {}}}
-                       :a {:bthread->bid {:t {}}}
-                       :b {:bthread->bid {:t {}}}
-                       :x {:bthread->bid {:t {:hot true}}}}
+               :nodes {:r {:bthread->bid {:t {}}
+                           :hot false}
+                       :a {:bthread->bid {:t {}}
+                           :hot false}
+                       :b {:bthread->bid {:t {}}
+                           :hot false}
+                       :x {:bthread->bid {:t {:hot true}}
+                           :hot true}}
                :edges [{:from :r :to :a :event :a}
                        {:from :r :to :b :event :b}
                        {:from :b :to :x :event (terminal-event :done-b)}

@@ -7,11 +7,13 @@
 
 (defn- hot-node
   []
-  {:bthread->bid {:watcher {:hot true}}})
+  {:bthread->bid {:watcher {:hot true}}
+   :hot true})
 
 (defn- cold-node
   []
-  {:bthread->bid {:watcher {}}})
+  {:bthread->bid {:watcher {}}
+   :hot false})
 
 (defn- outgoing-edges
   [lts node-id event-type]
@@ -97,7 +99,7 @@
         (let [cycle-trace (trace-edges lts (:node-id violation) cycle-edges)]
           (is (= (:node-id violation) (:node-id cycle-trace)))
           (is (every? (fn [node-id]
-                        (liveness/hot? (get-in lts [:nodes node-id])))
+                        (:hot (get-in lts [:nodes node-id])))
                       (:nodes cycle-trace))))))))
 
 (deftest liveness-violation-path-and-cycle-compose-into-a-coherent-witness
@@ -112,8 +114,8 @@
                  (contains? violation :cycle-edges))
         (let [path-trace (trace-edges lts (:root lts) (:path-edges violation))
               cycle-trace (trace-edges lts (:node-id path-trace) (:cycle-edges violation))]
-          (is (= (:node-id violation) (:node-id path-trace)))
-          (is (= (:node-id violation) (:node-id cycle-trace)))
-          (is (every? (fn [node-id]
-                        (liveness/hot? (get-in lts [:nodes node-id])))
+           (is (= (:node-id violation) (:node-id path-trace)))
+           (is (= (:node-id violation) (:node-id cycle-trace)))
+           (is (every? (fn [node-id]
+                        (:hot (get-in lts [:nodes node-id])))
                       (rest (:nodes cycle-trace)))))))))

@@ -1,19 +1,12 @@
 (ns tech.thomascothran.pavlov.model.check.liveness
   (:require [clojure.set :as set]
-            [tech.thomascothran.pavlov.bid.proto :as bid]
             [tech.thomascothran.pavlov.event :as e]
             [tech.thomascothran.pavlov.graph.algo :as algo]))
-
-(defn hot?
-  [node]
-  (boolean
-   (some bid/hot
-         (vals (:bthread->bid node)))))
 
 (defn hot-node-ids
   [lts]
   (into #{}
-        (comp (filter (comp hot? second))
+        (comp (filter (comp :hot second))
               (map first))
         (:nodes lts)))
 
@@ -78,8 +71,8 @@
   [lts outgoing-index]
   (when-let [edge (some (fn [edge]
                           (when (and (e/terminal? (:event edge))
-                                     (hot? (get-in lts [:nodes (:to edge)])))
-                            edge))
+                                     (:hot (get-in lts [:nodes (:to edge)])))
+                             edge))
                         (:edges lts))]
     (when-let [prefix-path (witness-path-to-node lts outgoing-index (:from edge))]
       {:node-id (:to edge)
@@ -92,10 +85,10 @@
     (when-let [{:keys [node-id path-edges]}
                (some (fn [node-id]
                        (when (and (contains? deadlock-node-ids node-id)
-                                  (hot? (get-in lts [:nodes node-id])))
-                         (when-let [path-edges (witness-path-to-node lts outgoing-index node-id)]
-                           {:node-id node-id
-                            :path-edges path-edges})))
+                                  (:hot (get-in lts [:nodes node-id])))
+                          (when-let [path-edges (witness-path-to-node lts outgoing-index node-id)]
+                            {:node-id node-id
+                             :path-edges path-edges})))
                      (natural-node-order lts))]
       {:node-id node-id
        :path-edges path-edges

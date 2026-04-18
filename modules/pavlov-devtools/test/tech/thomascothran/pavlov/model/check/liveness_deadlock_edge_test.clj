@@ -26,10 +26,14 @@
 
 (def converged-hot-deadlock-lts
   {:root :root
-   :nodes {:root {:bthread->bid {:chooser {:request #{:a :b}}}}
-           :left {:bthread->bid {:step {:request #{:merge-left}}}}
-           :right {:bthread->bid {:step {:request #{:merge-right}}}}
-           :merged {:bthread->bid {:hotter {:hot true}}}}
+   :nodes {:root {:bthread->bid {:chooser {:request #{:a :b}}}
+                  :hot false}
+           :left {:bthread->bid {:step {:request #{:merge-left}}}
+                  :hot false}
+           :right {:bthread->bid {:step {:request #{:merge-right}}}
+                   :hot false}
+           :merged {:bthread->bid {:hotter {:hot true}}
+                    :hot true}}
    :edges [{:from :root :to :left :event :a}
            {:from :root :to :right :event :b}
            {:from :left :to :merged :event :merge-left}
@@ -38,7 +42,8 @@
 (deftest liveness-violation-root-hot-deadlock-uses-empty-path-witness
   (testing "A hot deadlock at the root reports an empty root-to-node witness"
     (let [lts {:root :root
-               :nodes {:root {:bthread->bid {:watcher {:hot true}}}}
+               :nodes {:root {:bthread->bid {:watcher {:hot true}}
+                              :hot true}}
                :edges []}
           violation (liveness/liveness-violation lts)]
       (is (= :root (:node-id violation)))
@@ -66,7 +71,7 @@
              (path-edge-destination converged-hot-deadlock-lts (:path-edges violation))))
       (is (contains? (liveness/deadlock-node-ids converged-hot-deadlock-lts)
                      (:node-id violation)))
-      (is (liveness/hot? (:state violation)))
+      (is (:hot (:state violation)))
       (is (not (contains? violation :cycle-edges)))
       (is (not (contains? violation :path)))
       (is (not (contains? violation :cycle))))))
@@ -74,9 +79,12 @@
 (deftest liveness-violation-deadlock-witness-does-not-use-empty-path-for-non-root-node
   (testing "A reported deadlock witness must reach its node, and an empty path is only valid at the root"
     (let [lts {:root :root
-               :nodes {:root {:bthread->bid {}}
-                       :reachable {:bthread->bid {}}
-                       :unreachable-hot {:bthread->bid {:watcher {:hot true}}}}
+               :nodes {:root {:bthread->bid {}
+                              :hot false}
+                       :reachable {:bthread->bid {}
+                                   :hot false}
+                       :unreachable-hot {:bthread->bid {:watcher {:hot true}}
+                                         :hot true}}
                :edges [{:from :root :to :reachable :event :go}]}
           violation (liveness/liveness-violation lts)]
       (is (or (nil? violation)
@@ -84,4 +92,4 @@
                  (path-edge-destination lts (:path-edges violation)))))
       (is (or (nil? violation)
               (not (and (empty? (:path-edges violation))
-                         (not= (:root lts) (:node-id violation)))))))))
+                        (not= (:root lts) (:node-id violation)))))))))

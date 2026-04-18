@@ -170,12 +170,15 @@
       (is (contains? node-value :waits)
           "Node should contain :waits key (derived map)")
 
-      (is (contains? node-value :blocks)
-          "Node should contain :blocks key (derived map)")
+       (is (contains? node-value :blocks)
+           "Node should contain :blocks key (derived map)")
 
-      ;; Verify unwanted keys are NOT present (flattened structure)
-      (is (not (contains? node-value :path))
-          "Node should NOT contain :path key (multiple paths can lead to same node)")
+       (is (contains? node-value :hot)
+           "Node should contain :hot key")
+
+       ;; Verify unwanted keys are NOT present (flattened structure)
+       (is (not (contains? node-value :path))
+           "Node should NOT contain :path key (multiple paths can lead to same node)")
 
       (is (not (contains? node-value :last-event))
           "Node should NOT contain :last-event key")

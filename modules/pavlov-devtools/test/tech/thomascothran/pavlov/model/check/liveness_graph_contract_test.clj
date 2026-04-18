@@ -87,7 +87,7 @@
               "Witness path should reach the reported cycle entry node")
           (is (= (:node-id violation) (:node-id cycle-trace))
               "Witness cycle should close back on the reported cycle entry node")
-          (is (every? #(liveness/hot? (get-in lts [:nodes %]))
+          (is (every? #(:hot (get-in lts [:nodes %]))
                       (cons (:node-id violation) (:visited-node-ids cycle-trace)))
               "Witness cycle should stay within the hot region"))))))
 
@@ -113,8 +113,8 @@
                   cycle-trace (trace-edges candidate-lts (:node-id violation) (:cycle-edges violation))]
               (is (= (:node-id violation) (:node-id path-trace))
                   (str label " path witness should still reach the reported node"))
-              (is (= (:node-id violation) (:node-id cycle-trace))
-                  (str label " cycle witness should still close after edge reordering"))
-              (is (every? #(liveness/hot? (get-in candidate-lts [:nodes %]))
-                          (cons (:node-id violation) (:visited-node-ids cycle-trace)))
-                  (str label " cycle witness should remain entirely hot")))))))))
+               (is (= (:node-id violation) (:node-id cycle-trace))
+                   (str label " cycle witness should still close after edge reordering"))
+               (is (every? #(:hot (get-in candidate-lts [:nodes %]))
+                           (cons (:node-id violation) (:visited-node-ids cycle-trace)))
+                   (str label " cycle witness should remain entirely hot")))))))))
