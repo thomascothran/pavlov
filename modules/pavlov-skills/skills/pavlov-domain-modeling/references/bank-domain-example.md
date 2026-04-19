@@ -182,21 +182,61 @@ The `:invariant-violated` property tells our model checker that this specific ev
 
 If the `:ofac-clear` event occurs, then this bthread will no longer request the account-opened event with an invariant violation. Another bthread may request the `account-opened` event, but (so long as that event does not have `:invariant-violated` set to true) the model checker will accept it as valid.
 
+### Scenario and progress bthreads
+
+Safety is only part of the story. We usually also want to prove two positive properties:
+
+- some desired outcome is reachable on at least one path
+- once the application is in flight, it eventually resolves
+
+We model those with a scenario bthread plus a hot-state progress obligation:
+
+```clojure
+(ns bank.scenarios
+  (:require [tech.thomascothran.pavlov.bthread :as b]))
+
+(defn make-account-opened-scenario
+  []
+  (b/bids [{:wait-on #{:account-opened}}
+           {:request #{{:type :scenario/account-opened
+                        :terminal true}}}]))
+
+(defn make-application-must-resolve
+  []
+  (b/bids [{:wait-on #{:application-submitted}}
+           {:wait-on #{:account-opened :application-declined}
+            :hot true}]))
+
+(defn make-bthreads
+  []
+  {::account-opened-scenario (make-account-opened-scenario)
+   ::application-must-resolve (make-application-must-resolve)})
+```
+
+The scenario bthread gives us a concrete completion event that we can assert with `:possible`. The hot-state bthread says that once the application starts, we should not be able to deadlock, terminate, or loop forever before reaching either `:account-opened` or `:application-declined`.
+
 ### Model Checking
 
-We're going to wrap our bthreads into function calls to construct the domain, environment, and safety bthreads. Each namespace should define a `make-bthreads` function.
+We're going to wrap our bthreads into function calls to construct the domain, scenario, environment, and safety bthreads. Each namespace should define a `make-bthreads` function.
 
-Now, let's see what our model checker has to say. If it returns `nil`, then no violation was found.
+Now, let's see what our model checker has to say. If it returns `nil`, then no safety, reachability, deadlock, livelock, or hot-state liveness violation was found.
 
 ```clojure
 (defn run-model
   []
-  (-> {:bthreads (rules/make-bthreads) ;
-       :environment-bthreads (environment/make-bthreads)
-       :safety-bthreads (safety/make-bthreads)
-       :check-deadlock? false}
-     (check/check)))
+  (-> {:bthreads (merge (rules/make-bthreads)
+                        (scenarios/make-bthreads))
+        :environment-bthreads (environment/make-bthreads)
+        :safety-bthreads (safety/make-bthreads)
+        :possible #{:scenario/account-opened}
+        :check-deadlock? false}
+      (check/check)))
 ```
+
+In this setup:
+
+- `:possible #{:scenario/account-opened}` proves that at least one path reaches a successful account-opening outcome
+- `:hot true` on the progress bthread checks that an in-flight application cannot get stuck or spin forever without resolving
 
 On a failure, the model checker provides not only the path, but the state of the bthreads, which is very useful for debugging. (LLMs work great with this as well.)
 

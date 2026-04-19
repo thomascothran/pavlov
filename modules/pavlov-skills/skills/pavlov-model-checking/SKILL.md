@@ -36,7 +36,7 @@ A livelock means the model cycles forever without reaching a terminal event. Liv
 
 - Building or updating a model? See ./references/designing-models.md
 - Need API details or config options? Use docstrings.
-- Need concrete model-checking examples? Read the tests.
+- Need concrete model-checking examples? Start with the `tech.thomascothran.pavlov.model.check/check` docstring, then use the tests for edge cases.
 - Need help designing models and properties? Use the modeling reference.
 - Need to understand results? Use the interpretation reference.
 
@@ -47,6 +47,7 @@ A livelock means the model cycles forever without reaching a terminal event. Liv
    - safety bthreads that emit `:invariant-violated true`
    - hot-state obligations with `:hot true` on bids
    - reachability checks with `:possible`
+   - do not use legacy top-level `:liveness`; express progress with `:hot true`
 3. Run `tech.thomascothran.pavlov.model.check/check` with your config map.
 4. Interpret the result using `references/interpret-results.md` (resource `skills/pavlov-model-checking/references/interpret-results.md`).
 5. Iterate on model and properties before implementation details.
@@ -62,8 +63,9 @@ For the detailed workflow, read the Best practices section in the `tech.thomasco
 ## Where to look
 
 - Docstrings: `clojure.repl/doc` on `tech.thomascothran.pavlov.model.check/check`.
-- Tests (canonical examples): resource `tech/thomascothran/pavlov/model/check_test.clj`.
+- Tests (edge cases and regression coverage): resource `tech/thomascothran/pavlov/model/check_test.clj`.
 - Repo path: `modules/pavlov-devtools/test/tech/thomascothran/pavlov/model/check_test.clj`.
+- Direct hot-state liveness coverage: resource `tech/thomascothran/pavlov/model/check/liveness_test.clj`.
 - Modeling guidance: resource `skills/pavlov-model-checking/references/designing-models.md`.
 - Result interpretation: resource `skills/pavlov-model-checking/references/interpret-results.md`.
 - REPL setup: resource `skills/pavlov-model-checking/references/model-checker-repl.md`.

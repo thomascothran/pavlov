@@ -681,16 +681,22 @@
       (is (= #{:payment} (:impossible result))
           "Should detect impossible event when no path contains the requested event"))))
 
-(deftest top-level-liveness-config-is-ignored
-  (testing "Top-level :liveness config does not affect hot-state liveness reporting"
-    (let [result (check/check {:bthreads (make-hot-terminal-bthreads)
-                               :liveness {:payment-required
-                                          {:quantifier :universal
-                                           :eventually #{:payment}}}})]
+(deftest possible-and-hot-liveness-report-separately
+  (testing "Reachability checks via :possible stay separate from hot-state liveness"
+    (let [result (check/check
+                  {:bthreads {:order (b/bids [{:request #{:start-order}}])
+                              :await-payment (b/bids [{:wait-on #{:start-order}}
+                                                      {:wait-on #{:payment}
+                                                       :hot true}])}
+                   :possible #{:payment}})]
       (is (some? result)
-          "Should still report the hot-state liveness witness")
+          "Should report violations when payment is unreachable and the model stays hot")
+      (is (= #{:payment} (:impossible result))
+          "Should report the unreachable scenario via :impossible")
       (is (map? (:liveness-violation result))
-          "Should report the singular liveness witness key"))))
+          "Should report the hot-state witness separately under :liveness-violation")
+      (is (seq (:deadlocks result))
+          "Should still report the structural deadlock"))))
 
 (deftest possible-check-satisfied-in-cycle
   (testing "Possible checks should still succeed when the event appears in a reachable cycle"
