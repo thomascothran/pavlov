@@ -8,7 +8,8 @@
           (wait-on [this] (-> (get this :wait-on #{})
                               (set/difference (get this :request #{}))))
           (block [this] (get this :block #{}))
-          (bthreads [this] (get this :bthreads)))
+          (bthreads [this] (get this :bthreads))
+          (hot [this] (get this :hot)))
 
    :squint (extend-protocol proto/Bid
              object
@@ -16,7 +17,8 @@
              (wait-on [this] (-> (get this :wait-on #{})
                                  (set/difference (get this :request #{}))))
              (block [this] (get this :block #{}))
-             (bthreads [this] (get this :bthreads)))
+             (bthreads [this] (get this :bthreads))
+             (hot [this] (get this :hot)))
 
    :cljs (extend-protocol proto/Bid
 
@@ -26,17 +28,20 @@
                                (set/difference (get this :request #{}))))
            (block [this] (get this :block #{}))
            (bthreads [this] (get this :bthreads))
+           (hot [this] (get this :hot))
 
            cljs.core.PersistentHashMap
            (request [this] (get this :request #{}))
            (wait-on [this] (-> (get this :wait-on #{})
                                (set/difference (get this :request #{}))))
            (block [this] (get this :block #{}))
-           (bthreads [this] (get this :bthreads))))
+           (bthreads [this] (get this :bthreads))
+           (hot [this] (get this :hot))))
 
 (extend-protocol proto/Bid
   nil
   (request [_])
   (wait-on [_])
   (block [_])
-  (bthreads [_]))
+  (bthreads [_])
+  (hot [_]))

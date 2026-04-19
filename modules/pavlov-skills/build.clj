@@ -5,7 +5,7 @@
 
 (def lib 'tech.thomascothran/pavlov-skills)
 ;; alternatively, use MAJOR.MINOR.COMMITS:
-(def version (format "3.0.%s" (b/git-count-revs nil)))
+(def version (format "4.0.%s" (b/git-count-revs nil)))
 (def class-dir "target/classes")
 (def doc-dir (str class-dir "/tech/thomascothran/pavlov-skills/doc"))
 (def skills-dir (str class-dir "/skills"))

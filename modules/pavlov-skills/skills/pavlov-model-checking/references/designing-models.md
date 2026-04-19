@@ -2,7 +2,7 @@
 
 This guide focuses on model-first development: define the behavior and properties in a small model, check it, then iterate on implementation.
 
-The model checker will take *all* the positive scenarios (what the application should do), *all* your safety and liveness properties, and examine all the execution paths to check the properties of your program.
+The model checker will take *all* the positive scenarios (what the application should do), *all* your safety and progress constraints, and examine all the execution paths to check the properties of your program.
 
 Generally, there should be one model for your entire feature.
 
@@ -12,12 +12,16 @@ Generally, there should be one model for your entire feature.
 
 Safety properties say "something bad never happens." In Pavlov, safety checks are defined as *safety bthreads* and passed under `:safety-bthreads`. They monitor the trace and emit an event with `:invariant-violated true` when the rule is broken.
 
-### Liveness properties
+### Hot-state liveness
 
-Liveness properties say "something good eventually happens." In Pavlov, liveness checks are expressed alongside the model (conceptually like bthreads that inspect traces) using the `:liveness` map passed to `check/check`.
+Hot-state liveness says that once the model reaches certain bids, progress is required. In Pavlov, express that directly on bids with `:hot true`.
 
-- **Universal** (`:quantifier :universal`) means the event or predicate must hold on *every* path.
-- **Existential** (`:quantifier :existential`) means the event or predicate must hold on *at least one* path.
+- A hot-state violation happens when execution terminates while hot, deadlocks while hot, or can remain hot forever.
+- `check/check` returns at most one hot-state witness under `:liveness-violation`.
+
+### Possibility checks
+
+Use `:possible` to assert that an event can occur on at least one reachable path.
 
 ### Deadlocks
 
@@ -69,27 +73,26 @@ Note that you normally will want a namespaced event that only exists in your tes
 
 The function approach lets you add a bit more logic. However, these should still be linear.
 
-### 2) Turn scenario completion into liveness goals
+### 2) Turn scenario completion into possibility checks
 
-For each scenario, use the final event name as an **existential** liveness property. This asserts the scenario is *possible at least once*.
-
-```clojure
-{:liveness
- {:order-completes
-  {:quantifier :existential
-   :eventually #{::order-done-scenario-complete}}}}
-```
-
-You can also add a **universal** liveness property to ensure every path eventually resolves to a done or cancelled order.
+For each scenario, use the final event name in `:possible`. This asserts the scenario is reachable on at least one path.
 
 ```clojure
-{:liveness
- {:order-always-resolves
-  {:quantifier :universal
-   :eventually #{:order/done :order/cancelled}}}}
+{:possible #{::order-done-scenario-complete}}
 ```
 
-Add all your liveness properties.
+Use hot-state liveness when some in-progress state must eventually be resolved on every path.
+
+```clojure
+{:bthreads
+ {:order (b/bids [{:request #{:order/placed}}])
+  :await-resolution
+  (b/bids [{:wait-on #{:order/placed}}
+           {:wait-on #{:order/done :order/cancelled}
+            :hot true}])}}
+```
+
+Add all your scenario completion events to `:possible`, and use `:hot true` where progress is required.
 
 ### 3) Add safety bthreads
 

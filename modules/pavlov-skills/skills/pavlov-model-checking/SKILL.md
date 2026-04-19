@@ -5,7 +5,7 @@ description: Model checking for Pavlov behavioral programs. Use when testing Pav
 
 # Pavlov model checking
 
-Pavlov model checking explores all reachable event traces for a set of bthreads, reporting deadlocks, livelocks, safety violations, and liveness violations. It is designed for model-first development: specify the behavior and properties, run the checker, then iterate on implementation.
+Pavlov model checking explores all reachable event traces for a set of bthreads, reporting deadlocks, livelocks, safety violations, hot-state liveness violations, and impossible events. It is designed for model-first development: specify the behavior and properties, run the checker, then iterate on implementation.
 
 ## Terminology
 
@@ -13,12 +13,16 @@ Pavlov model checking explores all reachable event traces for a set of bthreads,
 
 Safety properties say "something bad never happens." In Pavlov, safety checks are defined as *safety bthreads* and passed under `:safety-bthreads`. They monitor the trace and emit an event with `:invariant-violated true` when the rule is broken.
 
-### Liveness properties
+### Hot-state liveness
 
-Liveness properties say "something good eventually happens." In Pavlov, liveness checks are expressed alongside the model (conceptually like bthreads that inspect traces) using the `:liveness` map passed to `check/check`.
+Hot-state liveness says that once the model enters certain states, progress is required. In Pavlov, liveness is expressed directly on bids with `:hot true`.
 
-- **Universal** (`:quantifier :universal`) means the event or predicate must hold on *every* path (aka the trace).
-- **Existential** (`:quantifier :existential`) means the event or predicate must hold on *at least one* path (aka the trace).
+- A hot-state violation happens when execution terminates while hot, deadlocks while hot, or can remain hot forever.
+- `check/check` reports at most one hot-state witness under `:liveness-violation`.
+
+### Possibility checks
+
+Use `:possible` when you want to prove that an event is reachable on at least one path.
 
 ### Deadlocks
 
@@ -32,7 +36,7 @@ A livelock means the model cycles forever without reaching a terminal event. Liv
 
 - Building or updating a model? See ./references/designing-models.md
 - Need API details or config options? Use docstrings.
-- Need concrete model-checking examples? Read the tests.
+- Need concrete model-checking examples? Start with the `tech.thomascothran.pavlov.model.check/check` docstring, then use the tests for edge cases.
 - Need help designing models and properties? Use the modeling reference.
 - Need to understand results? Use the interpretation reference.
 
@@ -41,7 +45,9 @@ A livelock means the model cycles forever without reaching a terminal event. Liv
 1. Define bthread factories that return fresh instances per run.
 2. Specify properties:
    - safety bthreads that emit `:invariant-violated true`
-   - liveness properties via the `:liveness` map
+   - hot-state obligations with `:hot true` on bids
+   - reachability checks with `:possible`
+   - do not use legacy top-level `:liveness`; express progress with `:hot true`
 3. Run `tech.thomascothran.pavlov.model.check/check` with your config map.
 4. Interpret the result using `references/interpret-results.md` (resource `skills/pavlov-model-checking/references/interpret-results.md`).
 5. Iterate on model and properties before implementation details.
@@ -50,15 +56,16 @@ A livelock means the model cycles forever without reaching a terminal event. Liv
 
 - Use a single `check/check` call per bthread group to cover all scenarios.
 - Create one initiating bthread whose first bid requests a *set* of starting events to form the top-level branch.
-- Model each positive scenario as its own bthread and assert its completion event with an existential liveness property.
+- Model each positive scenario as its own bthread and assert its completion event with `:possible`.
 
 For the detailed workflow, read the Best practices section in the `tech.thomascothran.pavlov.model.check` docstring.
 
 ## Where to look
 
 - Docstrings: `clojure.repl/doc` on `tech.thomascothran.pavlov.model.check/check`.
-- Tests (canonical examples): resource `tech/thomascothran/pavlov/model/check_test.clj`.
+- Tests (edge cases and regression coverage): resource `tech/thomascothran/pavlov/model/check_test.clj`.
 - Repo path: `modules/pavlov-devtools/test/tech/thomascothran/pavlov/model/check_test.clj`.
+- Direct hot-state liveness coverage: resource `tech/thomascothran/pavlov/model/check/liveness_test.clj`.
 - Modeling guidance: resource `skills/pavlov-model-checking/references/designing-models.md`.
 - Result interpretation: resource `skills/pavlov-model-checking/references/interpret-results.md`.
 - REPL setup: resource `skills/pavlov-model-checking/references/model-checker-repl.md`.

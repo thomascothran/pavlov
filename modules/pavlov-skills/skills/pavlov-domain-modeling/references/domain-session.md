@@ -42,12 +42,19 @@ These go in the `scenarios.clj` file
 
 These go in `rules.clj`.
 
-### Universal properties
+### Reachability goals
 
-- What must eventually happen on every path?
-- Are there terminal or resolution events required on all outcomes?
+- Which positive outcomes should be reachable on at least one path?
+- What completion events should be checked with `:possible`?
 
-These go in `rules.clj`
+These shape `scenarios.clj` and the `:possible` set in `check.clj`.
+
+### Progress obligations
+
+- Once the model enters an in-progress state, what must eventually be resolved?
+- Which bids should stay hot until some resolution happens?
+
+These go in `rules.clj`, typically by marking bids `:hot true`.
 
 ### Visualization goals
 

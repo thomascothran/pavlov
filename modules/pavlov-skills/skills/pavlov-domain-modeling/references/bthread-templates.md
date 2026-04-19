@@ -85,15 +85,10 @@
             [your.domain.environment :as environment]
             [your.domain.scenarios :as scenarios]))
 
-(defn make-liveness
+(defn make-possible
   []
-  {:red-foo-scenario-success
-   {:quantifier :existential
-    :eventually #{::scenarios/red-foo-scenario-success}}
-
-   :purple-foo-found-success
-   {:quantifier :existential
-    :eventually #{::scenarios/purple-foo-scenario-success}}})
+  #{::scenarios/red-foo-scenario-success
+    ::scenarios/purple-foo-scenario-success})
 
 (defn make-config [start-events]
   ;; Keep :bthreads as a map for equal-priority branching.
@@ -102,7 +97,7 @@
     {:bthreads bthreads
      :safety-bthreads (safety/make-bthreads)
      :environment-bthreads (environment/make-bthreads)
-     :liveness (make-liveness)}))
+     :possible (make-possible)}))
 
 (defn run-check [start-events]
   (check/check (make-config start-events)))

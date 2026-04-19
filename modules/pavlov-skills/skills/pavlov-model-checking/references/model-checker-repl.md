@@ -11,8 +11,12 @@
 
 ## Pull examples from tests
 
-- The canonical examples live in `tech/thomascothran/pavlov/model/check_test.clj`.
-- Copy a `check/check` invocation from the tests into the REPL and iterate.
+- Start with `(clojure.repl/doc tech.thomascothran.pavlov.model.check/check)` for the current public API and example shapes.
+- For executable examples, prefer hot-state liveness and `:possible` cases from:
+  - `tech/thomascothran/pavlov/model/check_test.clj`
+  - `tech/thomascothran/pavlov/model/check/liveness_test.clj`
+- In the REPL, express universal progress with `:hot true` on bids and existential reachability with `:possible`.
+- Do not use legacy top-level `:liveness` forms when writing new checks.
 
 ```clojure
 (slurp (io/resource "tech/thomascothran/pavlov/model/check_test.clj"))
