@@ -152,6 +152,127 @@
             (is (some cell-update-event? client-a-events)
                 "the outbound update should target the toggled shared-board cell")))))))
 
+(deftest handler-removes-stale-client-after-send-failure-while-healthy-clients-continue
+  (let [handler-fn websocket/handler
+        request (test-request)
+        websocket-a {:websocket/id "client-a"}
+        websocket-b {:websocket/id "client-b"}
+        !fail-client-a? (atom false)
+        !send-attempts (atom [])
+        !sent-payloads (atom [])]
+    (with-redefs [ring.websocket/send (fn [websocket payload]
+                                        (swap! !send-attempts conj [websocket payload])
+                                        (if (and @!fail-client-a? (= websocket websocket-a))
+                                          (throw (ex-info "stale websocket" {:websocket websocket}))
+                                          (swap! !sent-payloads conj [websocket payload])))]
+      (let [listener-a (connect-listener handler-fn request websocket-a)
+            listener-b (connect-listener handler-fn request websocket-b)]
+        (is (wait-for #(seq (sent-events-for @!sent-payloads websocket-a)))
+            "opening client a should eventually emit its initial snapshot before failures begin")
+        (is (wait-for #(seq (sent-events-for @!sent-payloads websocket-b)))
+            "opening client b should eventually emit its initial snapshot before failures begin")
+        (reset! !fail-client-a? true)
+        (let [attempts-before-first-update (count @!send-attempts)
+              successful-sends-before-first-update (count @!sent-payloads)]
+          ((:on-message listener-b) websocket-b toggle-cell-payload)
+          (is (wait-for #(seq (sent-events-for (drop successful-sends-before-first-update
+                                                     @!sent-payloads)
+                                               websocket-b)))
+              "client b should still receive the broadcast that detects client a is stale")
+          (let [first-update-attempts (vec (drop attempts-before-first-update @!send-attempts))]
+            (is (some (fn [[websocket _payload]] (= websocket websocket-a))
+                      first-update-attempts)
+                "the first update should attempt client a and discover its stale websocket")
+            (is (some (fn [[websocket _payload]] (= websocket websocket-b))
+                      first-update-attempts)
+                "the first update should still target healthy client b"))
+          (let [attempts-before-second-update (count @!send-attempts)
+                successful-sends-before-second-update (count @!sent-payloads)]
+            ((:on-message listener-b) websocket-b toggle-cell-payload)
+            (is (wait-for #(seq (sent-events-for (drop successful-sends-before-second-update
+                                                       @!sent-payloads)
+                                                 websocket-b)))
+                "client b should continue receiving future broadcasts after client a fails")
+            (let [second-update-attempts (vec (drop attempts-before-second-update @!send-attempts))]
+              (is (seq second-update-attempts)
+                  "the second update should produce outbound send attempts")
+              (is (not-any? (fn [[websocket _payload]] (= websocket websocket-a))
+                            second-update-attempts)
+                  "client a should be removed after its send failure and not targeted again")
+              (is (some (fn [[websocket _payload]] (= websocket websocket-b))
+                        second-update-attempts)
+                  "healthy client b should remain targeted after client a is removed"))))
+        (reset! !fail-client-a? false)
+        ((:on-close listener-a) websocket-a 1000 "test closed")
+        ((:on-close listener-b) websocket-b 1000 "test closed")))))
+
+(deftest handler-sends-current-snapshot-to-replacement-client-after-stale-send-failure
+  (let [handler-fn websocket/handler
+        request (test-request)
+        websocket-a {:websocket/id "client-a"}
+        websocket-b {:websocket/id "client-b"}
+        websocket-a-replacement {:websocket/id "client-a-replacement"}
+        second-live-cell ["3" "4"]
+        expected-current-board (expected-board-state #{[target-row target-col]
+                                                       second-live-cell})
+        !fail-client-a? (atom false)
+        !send-attempts (atom [])
+        !sent-payloads (atom [])]
+    (with-redefs [ring.websocket/send (fn [websocket payload]
+                                        (swap! !send-attempts conj [websocket payload])
+                                        (if (and @!fail-client-a? (= websocket websocket-a))
+                                          (throw (ex-info "stale websocket" {:websocket websocket}))
+                                          (swap! !sent-payloads conj [websocket payload])))]
+      (let [listener-a (connect-listener handler-fn request websocket-a)
+            listener-b (connect-listener handler-fn request websocket-b)]
+        (is (wait-for #(seq (sent-events-for @!sent-payloads websocket-a)))
+            "opening client a should eventually emit its initial snapshot before failures begin")
+        (is (wait-for #(seq (sent-events-for @!sent-payloads websocket-b)))
+            "opening client b should eventually emit its initial snapshot before failures begin")
+        (click-cell! listener-b websocket-b [target-row target-col])
+        (is (wait-for #(= (expected-board-state #{[target-row target-col]})
+                          (board-state-from-events (sent-events-for @!sent-payloads websocket-b))))
+            "the first board change should be visible to the healthy client before stale failure")
+        (reset! !fail-client-a? true)
+        (let [send-attempts-before-stale-detection (count @!send-attempts)
+              successful-sends-before-stale-detection (count @!sent-payloads)]
+          (click-cell! listener-b websocket-b second-live-cell)
+          (is (wait-for #(= expected-current-board
+                            (board-state-from-events (sent-events-for @!sent-payloads websocket-b))))
+              "healthy client b should receive the update that detects and removes stale client a")
+          (let [stale-detection-attempts (vec (drop send-attempts-before-stale-detection @!send-attempts))
+                healthy-client-events (vec (sent-events-for (drop successful-sends-before-stale-detection
+                                                                  @!sent-payloads)
+                                                            websocket-b))]
+            (testing "the stale send failure is isolated while healthy client b remains live"
+              (is (some (fn [[websocket _payload]] (= websocket websocket-a))
+                        stale-detection-attempts)
+                  "the update should attempt client a and discover its stale websocket")
+              (is (some (fn [[websocket _payload]] (= websocket websocket-b))
+                        stale-detection-attempts)
+                  "the same update should still target healthy client b")
+              (is (= expected-current-board
+                     (board-state-from-events (expected-board-state #{[target-row target-col]})
+                                              healthy-client-events))
+                  "healthy client b should continue receiving board updates after client a fails")))
+          (reset! !fail-client-a? false)
+          (let [sends-before-replacement-open (count @!sent-payloads)]
+            (connect-listener handler-fn request websocket-a-replacement)
+            (is (wait-for #(> (count @!sent-payloads) sends-before-replacement-open))
+                "opening a replacement client should eventually emit a current snapshot")
+            (let [replacement-events (vec (sent-events-for (drop sends-before-replacement-open
+                                                                 @!sent-payloads)
+                                                           websocket-a-replacement))]
+              (testing "a replacement connection after stale-client cleanup receives current status and board"
+                (is (seq replacement-events)
+                    "opening a replacement client should push an initial snapshot")
+                (is (some (fn [event]
+                            (some status-op? (dom-ops event)))
+                          replacement-events)
+                    "the replacement snapshot should include the current visible status")
+                (is (= expected-current-board (board-state-from-events replacement-events))
+                    "the replacement snapshot should reflect the current shared board after stale-client cleanup")))))))))
+
 (deftest handler-sends-current-board-snapshot-to-late-joining-client
   (let [handler-fn websocket/handler
         request (test-request)
@@ -256,8 +377,16 @@
         (let [sends-before-start (count @!sent-payloads)]
           ((:on-message listener-a) websocket-a start-payload)
           ((:on-message listener-a) websocket-a tick-payload)
-          (is (wait-for #(> (count @!sent-payloads) sends-before-start))
-              "start and one tick should eventually emit outbound updates")
+          (is (wait-for #(let [new-sends (drop sends-before-start @!sent-payloads)]
+                           (and (= expected-board
+                                   (board-state-from-events
+                                    seed-board
+                                    (sent-events-for new-sends websocket-a)))
+                                (= expected-board
+                                   (board-state-from-events
+                                    seed-board
+                                    (sent-events-for new-sends websocket-b))))))
+              "start and one tick should eventually emit the evolved board update to both clients")
           (let [new-sends (drop sends-before-start @!sent-payloads)
                 client-a-events (vec (sent-events-for new-sends websocket-a))
                 client-b-events (vec (sent-events-for new-sends websocket-b))]

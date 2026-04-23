@@ -5,7 +5,8 @@
 
 (defn init! []
   (runtime/init! {:ws-path "/game-of-life/ws/"
-                  :make-program (fn [{:keys [query-selector submit! transport]}]
+                   :heartbeat-interval-ms 20000
+                   :make-program (fn [{:keys [query-selector submit! transport]}]
                    (runtime/make-bridged-program!
                                     {:query-selector query-selector
                                      :submit! submit!

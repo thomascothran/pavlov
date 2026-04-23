@@ -1,4 +1,5 @@
-(ns tech.thomascothran.pavlov.web.server.ring-websocket)
+(ns tech.thomascothran.pavlov.web.server.ring-websocket
+  (:require [tech.thomascothran.pavlov.web.server :as server]))
 
 (def ^:private shared-bridge-opt-keys
   [:connect! :send! :close! :encode :decode :!websocket])
@@ -34,9 +35,11 @@
     {:listener {:on-open (fn [websocket]
                            (reset! !websocket websocket)
                            (submit-event! {:type :pavlov.web.server/connected}))
-                :on-message (fn [_websocket raw-payload]
-                              (submit-event! {:type :pavlov.web.server/event-received
-                                              :event (decode raw-payload)}))
+                 :on-message (fn [_websocket raw-payload]
+                               (let [event (decode raw-payload)]
+                                 (when-not (= server/heartbeat-type (:type event))
+                                   (submit-event! {:type :pavlov.web.server/event-received
+                                                   :event event}))))
                 :on-close (fn [_websocket _status-code _reason]
                             (reset! !websocket nil)
                             (submit-event! {:type :pavlov.web.server/disconnected}))

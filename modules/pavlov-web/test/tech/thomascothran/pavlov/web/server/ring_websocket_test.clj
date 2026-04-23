@@ -104,9 +104,29 @@
     ((get-in adapter [:listener :on-message]) fake-websocket-handle raw-payload)
     (is (= [raw-payload]
            @!decoded-payloads))
-    (is (= [{:type :pavlov.web.server/event-received
-             :event decoded-event}]
-           @!submitted-events))))
+     (is (= [{:type :pavlov.web.server/event-received
+              :event decoded-event}]
+            @!submitted-events))))
+
+(deftest make-ring-websocket-adapter-on-message-filters-transport-heartbeat
+  (let [fake-websocket-handle {:websocket/id "fake-ws"}
+        raw-payload {:wire/event {:type :pavlov.web.server/heartbeat}}
+        heartbeat-event {:type :pavlov.web.server/heartbeat}
+        !decoded-payloads (atom [])
+        !submitted-events (atom [])
+        adapter (ring-websocket/make-ring-websocket-adapter
+                 {:submit-event! (fn [event]
+                                   (swap! !submitted-events conj event))
+                  :send-websocket! (constantly :ok)
+                  :decode (fn [payload]
+                            (swap! !decoded-payloads conj payload)
+                            heartbeat-event)})]
+    ((get-in adapter [:listener :on-message]) fake-websocket-handle raw-payload)
+    (is (= [raw-payload]
+           @!decoded-payloads))
+    (is (= []
+           @!submitted-events)
+        "transport heartbeats should be consumed below app-level event semantics")))
 
 (deftest make-ring-websocket-adapter-on-close-submits-disconnected-and-clears-captured-websocket
   (let [fake-websocket-handle {:websocket/id "fake-ws"}

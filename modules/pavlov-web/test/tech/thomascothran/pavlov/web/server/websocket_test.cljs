@@ -61,9 +61,104 @@
     ((:connect! transport))
     (when-let [onopen (.-onopen fake-socket)]
      (onopen))
-     ((:send! transport) "outbound payload")
-     (is (= ["outbound payload"]
-            @!sent-payloads))))
+      ((:send! transport) "outbound payload")
+      (is (= ["outbound payload"]
+             @!sent-payloads))))
+
+(deftest make-browser-websocket-transport-close!-closes-current-socket-once
+  (let [fake-socket (js-obj)
+        !websocket (atom nil)
+        !close-calls (atom 0)
+        _ (set! (.-readyState fake-socket) 1)
+        _ (aset fake-socket "close"
+                (fn []
+                  (swap! !close-calls inc)))
+        transport (websocket/make-browser-websocket-transport
+                   {:url "wss://example.test/ws"
+                    :!websocket !websocket
+                    :submit-event! (fn [_event] nil)
+                    :websocket-factory (fn [_url]
+                                         fake-socket)})]
+    ((:connect! transport))
+    (when-let [onopen (.-onopen fake-socket)]
+      (onopen))
+    (is (identical? fake-socket @!websocket))
+    ((:close! transport))
+    ((:close! transport))
+    (is (= 1 @!close-calls))
+    (is (nil? @!websocket))))
+
+(deftest make-browser-websocket-transport-send!-detects-non-open-current-socket
+  (let [fake-socket (js-obj)
+        !sent-payloads (atom [])
+        _ (set! (.-readyState fake-socket) 3)
+        _ (aset fake-socket "send"
+                (fn [payload]
+                  (swap! !sent-payloads conj payload)))
+        transport (websocket/make-browser-websocket-transport
+                   {:url "wss://example.test/ws"
+                    :websocket fake-socket
+                    :submit-event! (fn [_event] nil)})]
+    (is (thrown? js/Error
+                 ((:send! transport) "outbound payload")))
+    (is (= [] @!sent-payloads))))
+
+(deftest make-browser-websocket-transport-onmessage-filters-transport-heartbeat
+  (let [raw-payload "heartbeat wire payload"
+        heartbeat-event {:type :pavlov.web.server/heartbeat}
+        fake-socket (js-obj)
+        !decoded-payloads (atom [])
+        !submitted-events (atom [])
+        transport (websocket/make-browser-websocket-transport
+                   {:url "wss://example.test/ws"
+                    :submit-event! (fn [event]
+                                     (swap! !submitted-events conj event))
+                    :websocket-factory (fn [_url]
+                                         fake-socket)
+                    :decode (fn [payload]
+                              (swap! !decoded-payloads conj payload)
+                              heartbeat-event)})]
+    ((:connect! transport))
+    (when-let [onopen (.-onopen fake-socket)]
+      (onopen))
+    (reset! !submitted-events [])
+    (when-let [onmessage (.-onmessage fake-socket)]
+      (onmessage #js {:data raw-payload}))
+    (is (= [raw-payload]
+           @!decoded-payloads))
+    (is (= []
+           @!submitted-events)
+        "transport heartbeats should be consumed below app-level event semantics")))
+
+(deftest make-browser-websocket-transport-ignores-stale-close-after-replacement-socket
+  (let [first-socket (js-obj)
+        second-socket (js-obj)
+        !websocket (atom nil)
+        !factory-calls (atom 0)
+        !submitted-events (atom [])
+        transport (websocket/make-browser-websocket-transport
+                   {:url "wss://example.test/ws"
+                    :!websocket !websocket
+                    :submit-event! (fn [event]
+                                     (swap! !submitted-events conj event))
+                    :websocket-factory (fn [_url]
+                                         (if (= 1 (swap! !factory-calls inc))
+                                           first-socket
+                                           second-socket))})]
+    ((:connect! transport))
+    (when-let [onopen (.-onopen first-socket)]
+      (onopen))
+    ((:connect! transport))
+    (when-let [onopen (.-onopen second-socket)]
+      (onopen))
+    (when-let [onclose (.-onclose first-socket)]
+      (onclose #js {:code 1006
+                    :reason "stale close"
+                    :wasClean false}))
+    (is (identical? second-socket @!websocket))
+    (is (= [{:type :pavlov.web.server/connected}
+            {:type :pavlov.web.server/connected}]
+           @!submitted-events))))
 
 (deftest make-browser-websocket-transport-connect-internally-translates-browser-lifecycle-into-bridge-events
   (let [url "wss://example.test/ws"
