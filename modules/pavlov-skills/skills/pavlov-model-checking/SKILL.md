@@ -42,15 +42,7 @@ A livelock means the model cycles forever without reaching a terminal event. Liv
 
 ## Model-first workflow
 
-1. Define bthread factories that return fresh instances per run.
-2. Specify properties:
-   - safety bthreads that emit `:invariant-violated true`
-   - hot-state obligations with `:hot true` on bids
-   - reachability checks with `:possible`
-   - do not use legacy top-level `:liveness`; express progress with `:hot true`
-3. Run `tech.thomascothran.pavlov.model.check/check` with your config map.
-4. Interpret the result using `references/interpret-results.md` (resource `skills/pavlov-model-checking/references/interpret-results.md`).
-5. Iterate on model and properties before implementation details.
+See ./references/workflow.md
 
 ## Default scenario branching
 

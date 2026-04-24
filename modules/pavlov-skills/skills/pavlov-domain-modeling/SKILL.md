@@ -7,30 +7,6 @@ description: Facilitate iterative domain modeling with Pavlov bthreads. Use only
 
 Use this skill to guide a domain expert through a structured modeling session and emit the bthread scaffolding as Clojure files. The outcome will be the domain model captured in Clojure source code and written using the pavlov library.
 
-## Workflow (iterative).
-
-1. Facilitate a domain interview to capture the event catalog, initiating events, positive scenarios, safety properties, and progress obligations.
-2. Clarify which events are environment inputs vs domain-driven outcomes, including payload shapes and terminal/completion events.
-3. Draft bthreads, review with the domain expert, and iterate on the model until the scenarios and properties feel right.
-4. Generate the Clojure deliverables and update them as the domain knowledge evolves.
-5. Provide visualization helpers so stakeholders can explore branches via nav or Portal.
-
-## Deliverables
-
-The deliverables are source code, by default:
-
-- `rules.clj`: domain rules bthreads; define `make-bthreads` returning a map of bthread name -> bthread.
-  + Put any hot-state progress obligations directly on bids with `:hot true`.
-- `environment.clj`: simulated environment inputs; define `make-bthreads` returning a map;
-  + RULE: keep all *initiating events* (typically bthreads that make a `:request` in their first bid instead of a `:wait-on`) in *one* bthread that returns *one* bid where the requests are a set. Call this bthread `::init-events` (namespaced).
-- `safety.clj`: safety bthreads
-- `scenarios.clj`: positive scenarios; define `make-bthreads` returning a map; each scenario ends with a unique completion event so `check.clj` can assert it with `:possible`
-- `check.clj`: model-check setup; assemble `:bthreads`, `:safety-bthreads`, and optionally `:possible` (keep `:bthreads` as a map when start events come from environment bthreads).
-  + `:possible` should include the scenario completion events you want to prove reachable
-- `viz.clj`: visualization helpers; define functions for nav exploration, Portal click-through, and graph export.
-
-The user may specify a directory or suggest alternative names.
-
 ## Guidelines
 
 ALWAYS evaluate clojure source code to verify your understanding.
@@ -45,17 +21,34 @@ DO NOT JUST READ CODE AND SAY WHAT YOU *THINK* IT DOES, EXECUTE AND **VERIFY** I
 
 ## Modeling rules
 
-- Keep environment inputs isolated in `environment.clj`; avoid mixing them with domain rules.
-- Keep scenarios linear (`b/bids` with `:wait-on`) and let branching happen in the init/environment layers.
-- Use namespaced completion events for scenarios so `:possible` checks stay explicit.
-- Put invariants in `:safety-bthreads` and progress requirements on bids with `:hot true`.
-- Use one `check/check` call for the whole model. Define `:possible` checks for each scenario you want to prove reachable.
+- Keep the following things in separate namespaces:
+  + Business rules and processes
+  + Side-effecting bthreads, such as database interactions or HTTP calls
+    * Keep the bthreads that perform side effects separate from the bthreads that simulate those side effects.
+  + Safety property bthreads
+    * Safety properties can also live in other bthreads (including production bthreads) when that keeps the invariant close to the relevant behavior.
+  + Progress requirements
+    * To assert that a bthread *must* progress, a bthread can return a `:hot` bid.
+  + Test code
+- Model business rules as linear scenarios with `b/bids` where possible.
+  + Avoid branching inside a scenario bthread. Prefer multiple scenario bthreads per feature.
+  + Use `:block` to add constraints without rewriting an existing scenario.
+- In test scenarios, use namespaced completion events.
+- Model checks are not like traditional unit tests that test one scenario. They test a whole slice of the program, or even a whole feature.
+  + Prefer fewer model-check tests, ideally one per feature.
+- Pass a set of `:possible` event types to ensure the model checker verifies that event is possible.
+  + This should be used with the concluding, namespaced, unique event that ends *every* test scenario, and can be asserted quite broadly of almost all event types.
 
-## References
+## Choose references
 
-- Use `references/domain-session.md` for facilitation prompts and file templates.
-- Use `references/bthread-templates.md` for example templates of the clojure files to output
+- Use `references/business-scenarios.md` when writing the main scenario namespace for a feature.
+- Use `references/safety-and-policy-bthreads.md` when adding safety invariants or additive blocking rules.
+- Use `references/state-and-environment-bthreads.md` when modeling external systems, user actions, or stateful test doubles.
+- Use `references/check-clj-template.md` when assembling the model checker config
+- Use `references/viz-template.md` when building a navigation or graph visualization namespace.
+
+## Related guidance
+
 - Use the model-checking guidance, refer to the `pavlov-model-checking` skill and the docstring for
   - The `tech.thomascothran.pavlov.model.check` namespace, and
   - The `tech.thomascothran.pavlov.model.check/check` function
-- For a blog-style tutorial, read references/bank-domain-example.md.
