@@ -1,4 +1,17 @@
-(ns tech.thomascothran.pavlov.web.server.websocket)
+(ns tech.thomascothran.pavlov.web.server.websocket
+  (:require [tech.thomascothran.pavlov.web.server :as server]))
+
+(defn- log
+  [& args]
+  (.log js/console (apply str "[pavlov.web.websocket] " args)))
+
+(defn- warn
+  [& args]
+  (.warn js/console (apply str "[pavlov.web.websocket] " args)))
+
+(defn- error
+  [& args]
+  (.error js/console (apply str "[pavlov.web.websocket] " args)))
 
 (defn- submit-connected! [submit-event!]
   (submit-event! {:type :pavlov.web.server/connected}))
@@ -7,8 +20,10 @@
   (submit-event! {:type :pavlov.web.server/disconnected}))
 
 (defn- submit-received! [submit-event! decode raw-payload]
-  (submit-event! {:type :pavlov.web.server/event-received
-                  :event (decode raw-payload)}))
+  (let [event (decode raw-payload)]
+    (when-not (= server/heartbeat-type (:type event))
+      (submit-event! {:type :pavlov.web.server/event-received
+                      :event event}))))
 
 (defn- default-websocket-factory
   ([url]
@@ -49,36 +64,93 @@
       :encode js/JSON.stringify
       :decode js/JSON.parse})`"
   [{:keys [url protocols websocket !websocket submit-event! websocket-factory encode decode]
-      :or {encode identity
-           decode identity
-           submit-event! (fn [_] nil)
-           websocket-factory default-websocket-factory}}]
-  (let [!socket (or !websocket (atom websocket))]
+       :or {encode identity
+            decode identity
+            submit-event! (fn [_] nil)
+            websocket-factory default-websocket-factory}}]
+  (let [!socket (or !websocket (atom websocket))
+        !last-closed-socket (atom nil)
+        !generation (atom 0)
+        open-ready-state 1
+        socket-open? (fn [socket]
+                        (or (nil? (.-readyState socket))
+                            (= open-ready-state (.-readyState socket))))
+        disconnect-current! (fn [socket]
+                              (when (and socket (identical? socket @!socket))
+                                (reset! !socket nil)
+                                (submit-disconnected! submit-event!)))]
     {:connect! (fn []
-                  (let [socket (if (some? protocols)
-                                 (websocket-factory url protocols)
-                                 (try
-                                   (websocket-factory url)
-                                   (catch :default _
+                  (log "connect! url=" url
+                       (when (some? protocols)
+                         (str " protocols=" protocols)))
+                  (let [generation (swap! !generation inc)
+                        current-generation? #(= generation @!generation)
+                        socket (if (some? protocols)
+                                  (websocket-factory url protocols)
+                                  (try
+                                    (websocket-factory url)
+                                    (catch :default _
                                      (websocket-factory url protocols))))]
-                    (set! (.-onopen socket)
-                          (fn [& _]
-                            (reset! !socket socket)
-                            (submit-connected! submit-event!)))
-                    (set! (.-onmessage socket)
-                          (fn [event]
-                            (submit-received! submit-event! decode (.-data event))))
-                    (set! (.-onclose socket)
-                          (fn [& _]
-                            (reset! !socket nil)
-                            (submit-disconnected! submit-event!)))
-                    socket))
-      :send! (fn
-               ([payload]
-                (.send @!socket payload))
-               ([socket payload]
-                (.send socket payload)))
-      :close! (fn [] nil)
-     :encode encode
-      :!websocket !socket
+                      (set! (.-onopen socket)
+                            (fn [& _]
+                              (log "onopen readyState=" (.-readyState socket))
+                              (when (current-generation?)
+                                (reset! !socket socket)
+                                (submit-connected! submit-event!))))
+                      (set! (.-onmessage socket)
+                            (fn [event]
+                              (when (current-generation?)
+                                (let [payload (.-data event)]
+                                  (log "onmessage raw=" (pr-str payload))
+                                  (submit-received! submit-event! decode payload)))))
+                      (set! (.-onerror socket)
+                            (fn [event]
+                              (when (current-generation?)
+                                (error "onerror readyState=" (.-readyState socket)
+                                       " event=" (pr-str event))
+                                (disconnect-current! socket))))
+                      (set! (.-onclose socket)
+                            (fn [event]
+                              (when (and (current-generation?)
+                                         (identical? socket @!socket))
+                                 (warn "onclose readyState=" (.-readyState socket)
+                                       " code=" (some-> event .-code)
+                                       " reason=" (pr-str (some-> event .-reason))
+                                       " wasClean=" (some-> event .-wasClean))
+                                 (reset! !last-closed-socket socket)
+                                 (reset! !socket nil)
+                                 (submit-disconnected! submit-event!))))
+                      socket))
+       :send! (fn
+                 ([payload]
+                  (log "send! readyState=" (some-> @!socket .-readyState)
+                       " payload=" (pr-str payload))
+                  (let [socket @!socket]
+                    (when-not (and socket (socket-open? socket))
+                      (disconnect-current! socket)
+                      (throw (js/Error. "Cannot send websocket payload: socket is not open")))
+                    (try
+                      (.send socket payload)
+                      (catch :default error
+                        (disconnect-current! socket)
+                        (throw error)))))
+                 ([socket payload]
+                  (log "send! explicit-socket readyState=" (.-readyState socket)
+                       " payload=" (pr-str payload))
+                  (when-not (and socket (socket-open? socket))
+                    (disconnect-current! socket)
+                    (throw (js/Error. "Cannot send websocket payload: socket is not open")))
+                  (try
+                    (.send socket payload)
+                    (catch :default error
+                      (disconnect-current! socket)
+                      (throw error)))))
+        :close! (fn []
+                  (when-let [socket (or @!socket @!last-closed-socket)]
+                    (swap! !generation inc)
+                    (reset! !socket nil)
+                    (reset! !last-closed-socket nil)
+                    (.close socket)))
+       :encode encode
+       :!websocket !socket
       :decode decode}))

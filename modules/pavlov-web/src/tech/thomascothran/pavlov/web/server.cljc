@@ -2,6 +2,13 @@
   (:require [tech.thomascothran.pavlov.bthread :as b]
             [tech.thomascothran.pavlov.event :as event]))
 
+(def heartbeat-type :pavlov.web.server/heartbeat)
+
+(defn heartbeat?
+  [event]
+  (= heartbeat-type (or (:type event)
+                        (some-> event event/type))))
+
 (def ^:private disconnected-bid
   {:wait-on #{:pavlov.web.server/connected}
    :block #{:pavlov.web.server/send-event}})
