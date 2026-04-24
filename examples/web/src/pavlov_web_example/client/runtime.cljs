@@ -4,40 +4,47 @@
             [tech.thomascothran.pavlov.bthread :as b]
             [cljs.reader :as reader]
             [tech.thomascothran.pavlov.web.dom :as dom]
-            [tech.thomascothran.pavlov.web.server :as server]
-            [tech.thomascothran.pavlov.web.server.websocket :as websocket]))
+            [tech.thomascothran.pavlov.web.client.websocket-connection :as websocket-connection]))
 
 (defn- log
   [& args]
   (.log js/console (apply str "[pavlov-web-example.client] " args)))
 
-(defn websocket-url
-  [ws-path]
-  (let [location (.-location js/window)
-        protocol (if (= "https:" (.-protocol location))
-                   "wss:"
-                   "ws:")]
-    (str protocol "//" (.-host location) ws-path)))
-
 (defn decode-event
+  "Decode the example runtime's EDN websocket payloads.
+
+  String payloads are read as EDN; already-decoded values pass through unchanged
+  so tests and alternate transports can inject domain events directly."
   [payload]
   (if (string? payload)
     (reader/read-string payload)
     payload))
 
-(defn make-browser-transport
-  [{:keys [ws-path submit! encode decode]
-    :or {encode pr-str
-         decode decode-event}}]
-  (when (exists? js/WebSocket)
-    (websocket/make-browser-websocket-transport
-     {:url (websocket-url ws-path)
-      :submit-event! submit!
-      :encode (or encode pr-str)
-      :decode (or decode decode-event)})))
+(def ^:private manager-lifecycle-option-keys
+  [:reconnect-delays-ms
+   :set-timeout!
+   :clear-timeout!
+   :heartbeat-interval-ms
+   :set-interval!
+   :clear-interval!
+   :add-pagehide-listener!])
+
+(defn- with-supplied-manager-lifecycle-options
+  [connection-opts runtime-opts]
+  (reduce (fn [opts k]
+            (if (contains? runtime-opts k)
+              (assoc opts k (get runtime-opts k))
+              opts))
+          connection-opts
+          manager-lifecycle-option-keys))
 
 (defn make-bridged-program!
-  [{:keys [query-selector submit! transport page-bthreads forwarded-events forwarded-event->server-event]
+  "Compose the example browser program from app, DOM, and manager bridge bthreads.
+
+  The runtime owns app/page composition and example forwarded-event policy. The
+  websocket connection manager supplies `:bridge-bthread`; when omitted, no bridge
+  bthread is installed here."
+  [{:keys [query-selector bridge-bthread page-bthreads forwarded-events forwarded-event->server-event]
     :or {forwarded-event->server-event (fn [event]
                                          {:type (:type event)})}}]
   (let [forwarded-event->server-event (or forwarded-event->server-event
@@ -62,112 +69,44 @@
                                      " payload=" (pr-str (forwarded-event->server-event event)))
                                 {:request #{{:type :pavlov.web.server/send-event
                                              :event (forwarded-event->server-event event)}}}))])
-             transport
-             (conj [:browser-websocket-bridge
-                    (server/make-server-bridge-bthread submit! transport)]))
+             bridge-bthread
+             (conj [:browser-websocket-bridge bridge-bthread]))
            page-bthreads))))
 
 (defn init!
-  [{:keys [make-program root query-selector ws-path encode decode
-           reconnect-delays-ms set-timeout! clear-timeout!
-           heartbeat-interval-ms set-interval! clear-interval!
+  "Initialize the example browser runtime.
+
+  Builds the app program, delegates websocket lifecycle/bridge wiring to
+  `:make-connection`, starts that connection, attaches DOM events, and returns
+  the manager cleanup handle. Encoding/decoding defaults remain example
+  serialization policy; lifecycle defaults remain with the connection manager."
+  [{:keys [make-program make-connection root query-selector ws-path encode decode
            page-bthreads forwarded-events forwarded-event->server-event]
+    :as opts
     :or {root js/document
          query-selector #(.querySelectorAll js/document %)
-         reconnect-delays-ms [250 1000 5000 10000]
-         set-timeout! js/setTimeout
-         clear-timeout! js/clearTimeout
-         set-interval! js/setInterval
-         clear-interval! js/clearInterval}}]
+         make-connection websocket-connection/make-browser-websocket-connection!}}]
   (log "init! ws-path=" ws-path)
   (let [!program (atom nil)
-        !transport (atom nil)
-        !closed? (atom false)
-        !reconnect-timeout (atom nil)
-        !reconnect-attempt (atom 0)
-        !heartbeat-interval (atom nil)
-        clear-reconnect! (fn []
-                           (when-let [timeout @!reconnect-timeout]
-                             (clear-timeout! timeout)
-                             (reset! !reconnect-timeout nil)))
-        clear-heartbeat! (fn []
-                           (when-let [interval @!heartbeat-interval]
-                             (clear-interval! interval)
-                             (reset! !heartbeat-interval nil)))
-        start-heartbeat! (fn []
-                           (when (and heartbeat-interval-ms
-                                      @!transport
-                                      (nil? @!heartbeat-interval))
-                             (reset! !heartbeat-interval
-                                     (set-interval!
-                                      (fn []
-                                        (when-let [transport @!transport]
-                                          (try
-                                            ((:send! transport)
-                                             ((:encode transport)
-                                              {:type server/heartbeat-type}))
-                                            (catch :default error
-                                              (log "heartbeat send failed: " (.-message error))))))
-                                      heartbeat-interval-ms))))
-        connect! (fn []
-                   (when-let [transport @!transport]
-                     (when-not @!closed?
-                       (log "connecting transport")
-                       ((:connect! transport)))))
-        schedule-reconnect! (fn []
-                              (when (and @!transport
-                                         (not @!closed?)
-                                         (nil? @!reconnect-timeout))
-                                (let [attempt @!reconnect-attempt
-                                      delay (or (nth reconnect-delays-ms attempt nil)
-                                                (last reconnect-delays-ms)
-                                                0)]
-                                  (swap! !reconnect-attempt inc)
-                                  (reset! !reconnect-timeout
-                                          (set-timeout!
-                                           (fn []
-                                             (reset! !reconnect-timeout nil)
-                                             (connect!))
-                                           delay)))))
         submit! #(when-let [program @!program]
-                   (case (:type %)
-                     :pavlov.web.server/connected
-                     (do
-                       (reset! !reconnect-attempt 0)
-                       (clear-reconnect!)
-                       (start-heartbeat!))
-
-                     :pavlov.web.server/disconnected
-                     (do
-                       (clear-heartbeat!)
-                       (schedule-reconnect!))
-
-                     nil)
                    (bp/submit-event! program %))
-        transport (make-browser-transport {:ws-path ws-path
-                                           :submit! submit!
-                                           :encode encode
-                                           :decode decode})
+        connection (make-connection (with-supplied-manager-lifecycle-options
+                                      {:ws-path ws-path
+                                       :submit! submit!
+                                       :encode (or encode pr-str)
+                                       :decode (or decode decode-event)}
+                                      opts))
         program (make-program {:query-selector query-selector
                                :submit! submit!
-                               :transport transport
+                               :transport (:transport connection)
+                               :bridge-bthread (:bridge-bthread connection)
                                :page-bthreads page-bthreads
                                :forwarded-events forwarded-events
                                :forwarded-event->server-event forwarded-event->server-event})]
     (reset! !program program)
-    (reset! !transport transport)
-    (when transport
-      (connect!))
+    (when-let [start! (:start! connection)]
+      (start!))
     (log "attaching DOM events")
     (dom/attach-dom-events! {:root root
                              :submit! submit!})
-    (let [cleanup! (fn []
-                     (reset! !closed? true)
-                     (clear-reconnect!)
-                     (clear-heartbeat!)
-                     (when-let [transport @!transport]
-                       ((:close! transport))))]
-      (when (and (exists? js/window)
-                 (.-addEventListener js/window))
-        (.addEventListener js/window "pagehide" cleanup!))
-      {:cleanup! cleanup!})))
+    {:cleanup! (:cleanup! connection)}))
