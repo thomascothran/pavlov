@@ -49,6 +49,7 @@
    | `bids`        | Finite sequence of scripted bids (supports dynamic fns) |
    | `on`          | React to exactly one event type             |
    | `after-all`   | Coordinate multiple prerequisites           |
+   | `request-each`| Request remaining events until all selected |
    | `repeat`      | Repeat a bid n times or forever             |
    | `round-robin` | Cycle through bthreads in order             |
    | `thread`      | Declarative branching on event types (macro)|
@@ -485,6 +486,63 @@
               (if (= event-types seen-event-types)
                 [(assoc new-state :done true) (f new-events)]
                 [new-state default-bid]))))))
+
+(defn- request-each-bid
+  [remaining]
+  {:request remaining
+   :wait-on (into #{} (map event-proto/type) remaining)})
+
+(defn request-each
+  "Create a bthread that requests each event in `events` until all have
+  been selected, then emits the bid returned by `f`.
+
+  On initialization, requests all events. Whenever one of the remaining
+  events is selected, removes it from the remaining set and requests the
+  rest. When none remain, calls `(f selected-events)`, where
+  `selected-events` is a vector in selection order.
+
+  Events are matched by equality. For map events, this means the selected
+  event must equal the requested event to be removed. The bid waits on the
+  remaining event types, so the bthread can observe matching events even
+  when another bthread requested them.
+
+  The final function is optional. When omitted, the bthread terminates after
+  all events have been selected.
+
+  Example:
+  ```clojure
+  (defn make-request-all-bt
+    []
+    (b/request-each #{:a :b :c}
+                    (fn [events]
+                      {:request #{{:type :done
+                                   :selected-events events}}})))
+  ```"
+  ([events]
+   (request-each events (constantly nil)))
+  ([events f]
+   (assert (set? events))
+   (step (fn [prev-state event]
+           (let [initialized? (contains? prev-state :remaining)
+                 remaining (if initialized?
+                             (:remaining prev-state)
+                             events)
+                 selected-events (get prev-state :selected-events [])
+                 final-emitted? (:final-emitted? prev-state)]
+             (when-not final-emitted?
+               (let [selected? (and event (contains? remaining event))
+                     remaining' (if selected?
+                                  (disj remaining event)
+                                  remaining)
+                     selected-events' (if selected?
+                                        (conj selected-events event)
+                                        selected-events)
+                     state' {:remaining remaining'
+                             :selected-events selected-events'
+                             :final-emitted? (empty? remaining')}]
+                 (if (empty? remaining')
+                   [state' (f selected-events')]
+                   [state' (request-each-bid remaining')]))))))))
 
 (defn round-robin
   "Create a bthread that cycles through sub-bthreads in order.

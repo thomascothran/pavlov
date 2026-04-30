@@ -298,6 +298,36 @@
            results))
     (is (nil? last-bid))))
 
+(deftest test-request-each
+  (testing "requests the remaining events until each has been selected, then emits a final bid"
+    (let [bthread (b/request-each #{:a :b :c}
+                                  (fn [selected-events]
+                                    {:request #{{:type :done
+                                                 :selected-events selected-events}}}))]
+      (is (= {:request #{:a :b :c}
+              :wait-on #{:a :b :c}}
+             (b/notify! bthread nil)))
+      (is (= {:request #{:b :c}
+              :wait-on #{:b :c}}
+             (b/notify! bthread :a)))
+      (is (= {:request #{:b}
+              :wait-on #{:b}}
+             (b/notify! bthread :c)))
+      (is (= {:request #{{:type :done
+                          :selected-events [:a :c :b]}}}
+             (b/notify! bthread :b)))
+      (is (nil? (b/notify! bthread {:type :done})))))
+
+  (testing "the final bid function is optional"
+    (let [bthread (b/request-each #{:a :b})]
+      (is (= {:request #{:a :b}
+              :wait-on #{:a :b}}
+             (b/notify! bthread nil)))
+      (is (= {:request #{:b}
+              :wait-on #{:b}}
+             (b/notify! bthread :a)))
+      (is (nil? (b/notify! bthread :b))))))
+
 (deftest simple-thread-test
   (let [bthread
         (b/thread [prev-state _event]
