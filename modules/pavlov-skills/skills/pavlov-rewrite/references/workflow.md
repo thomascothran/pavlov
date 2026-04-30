@@ -1,6 +1,6 @@
 # Pavlov rewrite workflow
 
-Use this workflow for rewriting an existing non-Pavlov system by first extracting Pavlov domain models. The primary boundary is the **bounded context**. Each bounded context should have one main Pavlov domain model.
+Use this workflow for rewriting an existing non-Pavlov system by first extracting Pavlov domain models. Default to **bounded contexts** as the primary model boundary. When boundaries are unclear, start from observable workflows and vocabulary clusters, then refine into bounded contexts as evidence accumulates. Each credible bounded context should have one main Pavlov domain model.
 
 Within a bounded-context model, organize behavior around workflows, scenario families, lifecycle behaviors, and cross-cutting policies. Use smaller model-checking projections when needed for tractable verification, but keep them tied back to the one main bounded-context model.
 
@@ -17,7 +17,7 @@ Capture:
 - privacy/security constraints
 - acceptance threshold for beginning implementation
 
-Avoid starting with the whole application. Pick a bounded context with clear business value and observable behavior, then choose an initial workflow/scenario family or model-checking projection inside it.
+Avoid starting with the whole application. Delemit a bounded context. If the context is not yet credible, pick a workflow or vocabulary cluster as a discovery seed, then refine the boundary as evidence accumulates.
 
 ## 1. Inventory the legacy system
 
@@ -35,9 +35,9 @@ Use stack-specific playbooks and static heuristics for this phase.
 
 ## 2. Partition into bounded contexts, then behavioral projections
 
-First identify bounded contexts: boundaries within which vocabulary, rules, event meanings, and state concepts are internally consistent.
+First identify bounded contexts when possible: boundaries within which vocabulary, rules, event meanings, and state concepts are internally consistent. When the legacy system lacks clear boundaries, begin with observable workflows and vocabulary clusters; promote them to bounded contexts only after evidence supports a coherent boundary.
 
-For each bounded context, maintain one main Pavlov domain model.
+For each credible bounded context, maintain one main Pavlov domain model.
 
 Then organize that model behaviorally by:
 
@@ -74,7 +74,9 @@ Cluster behavior by:
 - integration boundary
 - likely model-check tractability
 
-Each projection should fit in a reviewable/model-checkable subset of the bounded-context model. Large applications may contain multiple bounded contexts; each bounded context should have one main model and may have multiple verification projections.
+Each projection should fit in a reviewable/model-checkable subset of the bounded-context model. Large applications may contain multiple bounded contexts; each credible bounded context should have one main model and may have multiple verification projections.
+
+For scenario selection and splitting rules, use `references/scenario-identification.md`.
 
 ## 3. Extract candidate artifacts
 
@@ -127,17 +129,11 @@ Prepare a handoff for `pavlov-domain-modeling`:
 
 ## 6. Build Pavlov fragments
 
-Use `pavlov-domain-modeling` and `pavlov-model-checking`.
+Use `pavlov-domain-modeling` to turn accepted catalogs into Pavlov artifacts. Use `pavlov-model-checking` to configure possibility, safety, progress, deadlock, and livelock checks.
 
-Expected shape per bounded-context model:
+See the other skills for what is authoritative for namespace shape, bthread structure, model-check configuration, and verification iteration.
 
-- `events` namespace with Malli schemas
-- `scenarios` namespace with mostly linear `b/bids`
-- `safety` namespace with invariant violation bthreads
-- `progress` namespace with hot bids for progress obligations
-- `environment` / state-stub namespaces for users, DB, queues, time, APIs
-- `check` namespace with `:possible`, `:safety-bthreads`, and `:environment-bthreads`
-- optional visualization namespace
+This rewrite workflow remains responsible for preserving the rewrite-specific handoff: evidence IDs, source citations, legacy names, abstraction decisions, accepted/rejected/deferred status, and unresolved questions.
 
 ## 7. Review and verify
 

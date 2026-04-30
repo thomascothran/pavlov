@@ -5,7 +5,7 @@ description: Plan and execute Pavlov-first rewrites of existing non-Pavlov or le
 
 # Pavlov rewrite
 
-Use this skill to convert an existing system into evidence-backed Pavlov domain models before implementation rewrite work begins. Treat **bounded contexts** as the primary model boundaries: each bounded context should have one main Pavlov domain model with its own coherent vocabulary, scenarios, safety properties, liveness/progress properties, and environment contracts.
+Use this skill to convert an existing system into evidence-backed Pavlov domain models before implementation rewrite work begins. Default to **bounded contexts** as the primary model boundaries. When boundaries are unclear, start with observable workflows and vocabulary clusters, then refine into bounded contexts as evidence accumulates. Each bounded context should have one main Pavlov domain model with its own coherent vocabulary, scenarios, safety properties, liveness/progress properties, and environment contracts.
 
 The goal is not to port code line-by-line. The goal is to discover the behavior that should survive the rewrite, express it as Pavlov events/scenarios/properties, verify the model, and only then use that model to guide implementation.
 
@@ -20,8 +20,8 @@ The goal is not to port code line-by-line. The goal is to discover the behavior 
   - accepted requirement
   - rejected legacy bug
   - unresolved assumption
-- Partition large systems into bounded contexts first.
-- Maintain one main Pavlov domain model per bounded context.
+- Partition large systems into bounded contexts when boundaries are evident; otherwise start from observable workflows and vocabulary clusters, then refine.
+- Maintain one main Pavlov domain model per bounded context once the context boundary is credible.
 - Organize each bounded-context model behaviorally around workflows, scenario families, lifecycle behaviors, and cross-cutting policies.
 - Use aggregates/entities as supporting state abstractions for invariants and consistency boundaries, not as the primary behavioral decomposition.
 - Use model-checking projections only to keep verification tractable; do not treat them as competing domain models.
@@ -35,11 +35,11 @@ Read `references/workflow.md` first. Then load only the references needed for th
 
 - `references/evidence-ledger.md` — durable multi-session claim tracking.
 - `references/artifact-templates.md` — event/scenario/safety/liveness catalog templates.
+- `references/scenario-identification.md` — principles for finding and splitting scenarios.
 - `references/agent-roles.md` — subagent division of labor and task packets.
 - `references/model-readiness.md` — gates before implementation rewrite begins.
 - `references/static-extraction-heuristics.md` — source/schema/API/test mining heuristics.
 - `references/dynamic-trace-mining.md` — logs, traces, process mining, characterization tests.
-- `references/state-of-art.md` — background on current research and tool families.
 
 For common stacks, load the relevant playbook under `references/stack-playbooks/`:
 
