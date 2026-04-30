@@ -43,12 +43,11 @@ Read `references/workflow.md` first. Then load only the references needed for th
 
 For common stacks, load the relevant playbook under `references/stack-playbooks/`:
 
-- `rails.md`
-- `django.md`
 - `spring.md`
 - `node-express-nest.md`
 - `dotnet.md`
 - `go.md`
+- `salesforce.md`
 
 ## Required outputs
 
