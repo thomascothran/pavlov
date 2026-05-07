@@ -68,19 +68,6 @@ Classify the candidate as:
 - external-side-effect invariant
 - security/privacy invariant
 
-## Tests to scenarios and properties
-
-Map:
-
-- test names to scenario names
-- fixtures/factories to initial state
-- action under test to event sequence
-- assertions to outcomes or safety properties
-- negative tests to forbidden behavior
-- snapshots to characterization candidates
-
-Beware tests that encode implementation detail. Keep source names in notes, but translate to domain language.
-
 ## Side effects to environment modeling
 
 Identify:
@@ -98,15 +85,3 @@ Decide whether each side effect is:
 - an event that matters to the domain model
 - an environment response to simulate
 - a compatibility concern covered by characterization tests only
-
-## Abstraction rules
-
-Keep models tractable:
-
-- replace large IDs with symbolic IDs such as `:order/a`, `:user/b`
-- collapse unimportant strings into categories
-- bound quantities to representative values: zero, one, max, over-max
-- model only statuses relevant to the bounded context or current projection
-- represent external systems by result events: success, not-found, denied, timeout, retryable-failure
-
-Record every abstraction decision.

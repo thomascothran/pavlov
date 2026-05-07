@@ -4,6 +4,8 @@ Use this workflow for rewriting an existing non-Pavlov system by first extractin
 
 Within a bounded-context model, organize behavior around workflows, scenario families, lifecycle behaviors, and cross-cutting policies. Use smaller model-checking projections when needed for tractable verification, but keep them tied back to the one main bounded-context model.
 
+The canonical model should become executable quickly. Use markdown to discover, review, and report; use Clojure/EDN Pavlov artifacts as the durable specification once a workflow slice is selected.
+
 ## 0. Charter the rewrite
 
 Capture:
@@ -11,13 +13,14 @@ Capture:
 - source repository, stack, and runtime entry points
 - rewrite objective and non-goals
 - first bounded context
-- initial workflow/scenario family or model-checking projection inside that context
+- initial workflow/scenario family inside that context
+- primary happy-path business goal, if known
 - critical risks
 - available evidence: docs, tests, logs, traces, schemas, API specs, SMEs
 - privacy/security constraints
 - acceptance threshold for beginning implementation
 
-Avoid starting with the whole application. Delemit a bounded context. If the context is not yet credible, pick a workflow or vocabulary cluster as a discovery seed, then refine the boundary as evidence accumulates.
+Avoid starting with the whole application. Delimit a bounded context. If the context is not yet credible, pick a workflow or vocabulary cluster as a discovery seed, then refine the boundary as evidence accumulates.
 
 ## 1. Inventory the legacy system
 
@@ -50,7 +53,7 @@ Then organize that model behaviorally by:
 
 Use aggregates/entities as supporting state abstractions inside the bounded context. They help identify invariants and consistency boundaries, but they are not the primary behavioral decomposition.
 
-Create model-checking projections only when the whole bounded-context model is too large to check at once.
+Create model-checking projections only when the whole bounded-context model is too large to check at once, and only after the bounded context's primary happy-path spine has been named. Do not let the first model become a tiny endpoint, approval, validation, or persistence projection just because it is easy to check.
 
 Good examples:
 
@@ -78,15 +81,32 @@ Each projection should fit in a reviewable/model-checkable subset of the bounded
 
 For scenario selection and splitting rules, use `references/scenario-identification.md`.
 
-## 3. Extract candidate artifacts
+## 3. Select the happy-path spine and extract candidate artifacts
 
-For each bounded context and selected projection, extract candidates into catalogs:
+For each bounded context, identify one primary end-to-end happy-path event spine before trying to model the whole context. Prefer a spine with observable happy-path evidence from tests, traces, routes, flows, handlers, trigger paths, or SME review. The spine must reach the named business success outcome for the bounded context or selected scenario family.
 
-- domain events and commands
-- positive scenarios
-- safety properties / invariants
-- liveness or progress properties
-- external collaborators and environment events
+Model the first happy path as end-to-end but initially coarse: include all known major lifecycle stages as domain events, while deferring internal detail inside those stages. Intermediate approvals, validations, CRUD operations, persistence writes, and task status changes can be steps inside the happy path, but they are usually not the whole happy path. If the full happy path is large, keep later stages abstract with coarse domain events instead of truncating the scenario at an intermediate milestone.
+
+Validation rules and guards are excellent safety and policy evidence, but do not let them replace the positive behavioral spine. Extract them after the main success path is named, unless they are needed to understand the happy path's event vocabulary.
+
+For the selected spine, record:
+
+- business goal
+- initiating event
+- terminal success event
+- ordered domain events needed to tell the success story
+- known stage, task, or subprocess boundaries
+- evidence for each event where available
+- deferred internals and open questions
+
+For each selected spine or scenario family, extract candidates into executable artifacts first when practical, using markdown only as a worksheet:
+
+- domain events and commands in an event registry namespace or EDN data, starting with the happy-path spine events
+- event payload schemas, preferably Malli when available
+- positive scenarios as mostly linear Pavlov scenario bthreads, starting with one end-to-end happy path that reaches the named business outcome
+- safety properties / invariants as safety bthreads or additive policy bthreads
+- liveness or progress properties as hot-state progress bthreads where appropriate
+- external collaborators and environment events as environment/state bthreads
 - state variables and abstractions
 
 Use these evidence priorities:
@@ -115,25 +135,29 @@ Keep both names when useful:
 - legacy name: `POST /api/v1/orders/:id/capture`
 - Pavlov event: `:payment/capture-requested`
 
-## 5. Draft the model handoff
+## 5. Build the first executable model slice
 
-Prepare a handoff for `pavlov-domain-modeling`:
+Prepare the handoff for `pavlov-domain-modeling` as Clojure/EDN artifacts, not only markdown. The first executable slice should normally be the selected happy-path spine. If only an intermediate subflow can be executed first, label it explicitly as intermediate and do not present it as bounded-context completion.
 
-- event catalog with schemas and example payloads
-- scenario table with completion events
-- safety table with forbidden states or traces
-- liveness table with trigger, eventual outcome, terminal exceptions
-- environment collaborator table
+- event registry with schemas, example payloads if useful, legacy names, evidence IDs, confidence, and status
+- scenario namespace with completion events and mostly linear bthreads, including the main happy-path completion event
+- rule/policy namespace for additive blocking or redirecting behavior
+- safety namespace with forbidden states/traces and violation events
+- liveness/progress namespace with trigger, eventual outcome, terminal exceptions, and hot-state semantics
+- environment namespace/table for users, time, DB responses, queues, external APIs, files, and other collaborators
+- model-check namespace/config with `:possible` completion events and included safety/progress checks
 - abstraction decisions and bounded values
 - unresolved questions
 
-## 6. Build Pavlov fragments
+If markdown catalogs are required for review, generate or update them from the executable metadata whenever possible.
 
-Use `pavlov-domain-modeling` to turn accepted catalogs into Pavlov artifacts. Use `pavlov-model-checking` to configure possibility, safety, progress, deadlock, and livelock checks.
+## 6. Expand and normalize Pavlov fragments
+
+Use `pavlov-domain-modeling` to refine the executable artifacts. Use `pavlov-model-checking` to configure possibility, safety, progress, deadlock, and livelock checks.
 
 See the other skills for what is authoritative for namespace shape, bthread structure, model-check configuration, and verification iteration.
 
-This rewrite workflow remains responsible for preserving the rewrite-specific handoff: evidence IDs, source citations, legacy names, abstraction decisions, accepted/rejected/deferred status, and unresolved questions.
+This rewrite workflow remains responsible for preserving rewrite-specific metadata inside or alongside the executable model: evidence IDs, source citations, legacy names, abstraction decisions, accepted/rejected/deferred status, and unresolved questions. Avoid creating a second hand-maintained specification language in markdown after executable artifacts exist.
 
 ## 7. Review and verify
 

@@ -75,12 +75,13 @@ Output:
 
 ### Model drafter
 
-Translate accepted catalogs into a handoff for `pavlov-domain-modeling`.
+Translate selected workflow-slice candidates into executable artifacts for `pavlov-domain-modeling`. Use markdown catalogs only as review views or discovery worksheets.
 
 Output:
 
-- event schemas
-- linear scenario plan
+- event registry namespace/EDN with schemas, evidence, confidence, status, and legacy/source names
+- mostly linear scenario bthreads with completion events
+- rule/policy bthread plan for additive blocking or redirecting constraints
 - safety/liveness bthread plan
 - environment/state abstraction plan
 - model-check configuration sketch
