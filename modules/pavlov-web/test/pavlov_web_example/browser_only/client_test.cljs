@@ -14,7 +14,7 @@
 (defn- with-browser-only-dom
   [f]
   (let [dom (JSDOM. (str "<nav>"
-                         "  <button id=\"browser-only-initialize-button\" type=\"button\">INITIALIZE</button>"
+                         "  <button id=\"browser-only-initialize-button\" pavlov-on-click=\":browser-only/initialize-clicked\" type=\"button\">INITIALIZE</button>"
                          "</nav>"
                          "<main id=\"browser-only-root\">"
                          "  <form id=\"simple-web-page-form\" pavlov-on-reset=\":browser-only/reset\">"

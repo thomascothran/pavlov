@@ -30,6 +30,9 @@ DO NOT JUST READ CODE AND SAY WHAT YOU *THINK* IT DOES, EXECUTE AND **VERIFY** I
   + Progress requirements
     * To assert that a bthread *must* progress, a bthread can return a `:hot` bid.
   + Test code
+- Model event vocabulary as data when helpful: an event registry namespace or EDN value may hold event kind, payload schema, evidence IDs, confidence, status, and legacy/source names.
+  + Use Malli schemas for payload shape when available and useful.
+  + Do not introduce local event-constructor helpers when the project already has one.
 - Model business rules as linear scenarios with `b/bids` where possible.
   + Avoid branching inside a scenario bthread. Prefer multiple scenario bthreads per feature.
   + Use `:block` to add constraints without rewriting an existing scenario.

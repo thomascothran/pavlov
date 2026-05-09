@@ -58,7 +58,8 @@
     (is (= {:wait-on #{:pavlov.web.fetch/request}
             :request #{{:type :task-form/submit-pending
                         :request/id request-id}}
-            :block #{}}
+            :block #{}
+            :bthreads nil}
            bid))
     (is (= [] @!submitted-events))))
 
@@ -86,11 +87,12 @@
                bid (b/notify! bthread request-event)]
            (is (= {:wait-on #{:pavlov.web.fetch/request}}
                   init-bid))
-            (is (= {:wait-on #{:pavlov.web.fetch/request}
-                    :request #{{:type :task-form/submit-pending
-                                :request/id request-id}}
-                    :block #{}}
-                   bid))
+           (is (= {:wait-on #{:pavlov.web.fetch/request}
+                   :request #{{:type :task-form/submit-pending
+                               :request/id request-id}}
+                   :block #{}
+                   :bthreads nil}
+                  bid))
            (flush-async!
             (fn []
               (is (= [{:type :task-form/submit-response
@@ -127,11 +129,12 @@
                bid (b/notify! bthread request-event)]
            (is (= {:wait-on #{:pavlov.web.fetch/request}}
                   init-bid))
-            (is (= {:wait-on #{:pavlov.web.fetch/request}
-                    :request #{{:type :task-form/submit-pending
-                                :request/id request-id}}
-                    :block #{}}
-                   bid))
+           (is (= {:wait-on #{:pavlov.web.fetch/request}
+                   :request #{{:type :task-form/submit-pending
+                               :request/id request-id}}
+                   :block #{}
+                   :bthreads nil}
+                  bid))
            (flush-async!
             (fn []
               (is (= [{:type :task-form/submit-response
@@ -165,11 +168,12 @@
            (.once js/process "unhandledRejection" (fn [_ _] nil))
            (is (= {:wait-on #{:pavlov.web.fetch/request}}
                   init-bid))
-            (is (= {:wait-on #{:pavlov.web.fetch/request}
-                    :request #{{:type :task-form/submit-pending
-                                :request/id request-id}}
-                    :block #{}}
-                   bid))
+           (is (= {:wait-on #{:pavlov.web.fetch/request}
+                   :request #{{:type :task-form/submit-pending
+                               :request/id request-id}}
+                   :block #{}
+                   :bthreads nil}
+                  bid))
            (flush-async!
             (fn []
               (is (= [{:type :task-form/submit-error
