@@ -45,6 +45,46 @@
              bid))
       (is (= :awaiting-llm (:phase (b/state bthread)))))))
 
+(deftest agent-llm-opts-are-passed-through-to-llm-call
+  (testing "constructor and invocation LLM options are shallow-merged and passed through"
+    (let [bthread (agent/make-agent-bthread
+                   {:id :assistant
+                    :system "You are a helpful assistant."
+                    :llm-opts {:provider :openai
+                               :model "gpt-5"
+                               :reasoning-effort :medium}})
+          _ (b/notify! bthread nil)
+          bid (b/notify! bthread {:type [:pavlov.ai.agent/invoke :assistant]
+                                  :conversation-id :conversation-1
+                                  :message {:role :user
+                                            :content "Hello"}
+                                  :llm-opts {:reasoning-effort :high
+                                             :temperature 0.2}})
+          expected-request {:type [:pavlov.ai.llm/call :assistant]
+                            :agent-id :assistant
+                            :conversation-id :conversation-1
+                            :call-id [:assistant :conversation-1 1]
+                            :system "You are a helpful assistant."
+                            :messages [{:role :user
+                                        :content "Hello"}]
+                            :tools []
+                            :llm-opts {:provider :openai
+                                       :model "gpt-5"
+                                       :reasoning-effort :high
+                                       :temperature 0.2}
+                            :success-event-type [:pavlov.ai.llm/response-received :assistant]
+                            :failure-event-type [:pavlov.ai.llm/response-failed :assistant]}]
+      (is (= {:wait-on #{[:pavlov.ai.agent/invoke :assistant]
+                         [:pavlov.ai.agent/cancel :assistant]
+                         [:pavlov.ai.tool/registered :assistant]
+                         [:pavlov.ai.tool/deregistered :assistant]
+                         [:pavlov.ai.skill/registered :assistant]
+                         [:pavlov.ai.skill/deregistered :assistant]
+                         [:pavlov.ai.llm/response-received :assistant]
+                         [:pavlov.ai.llm/response-failed :assistant]}
+              :request #{expected-request}}
+             bid)))))
+
 (deftest skill-config-requires-id-and-description
   (testing "initial skills and registered skills must declare a skill id and description"
     (is (thrown-with-msg?

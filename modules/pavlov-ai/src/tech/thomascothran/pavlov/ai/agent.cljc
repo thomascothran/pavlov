@@ -253,11 +253,12 @@
                                         (addressed-event-type default-tool-invocation-event-type tool-name))))))
 
 (defn- initial-state
-  [{:keys [id system initial-tools initial-skills] :as opts}]
+  [{:keys [id system initial-tools initial-skills llm-opts] :as opts}]
   (let [event-types (event-types opts)]
     {:phase :idle
      :id id
      :system system
+     :llm-opts llm-opts
      :event-types event-types
      :agent-tool (normalize-agent-tool id (:tool opts))
      :messages []
@@ -299,6 +300,10 @@
        vals
        (sort-by (comp str :tool-name))
        vec))
+
+(defn- merged-llm-opts
+  [state invocation]
+  (merge (:llm-opts state) (:llm-opts invocation)))
 
 (defn- tool-call-id
   [tool-call]
@@ -373,15 +378,17 @@
         success-event-type (get-in state [:event-types :llm-success])
         failure-event-type (get-in state [:event-types :llm-failure])
         messages (into (:messages state) (invocation-messages invocation))
-        call-request {:type (get-in state [:event-types :llm-call])
-                      :agent-id (:id state)
-                      :conversation-id conversation-id'
-                      :call-id call-id
-                      :system (:system state)
-                      :messages messages
-                      :tools (llm-tools state)
-                      :success-event-type success-event-type
-                      :failure-event-type failure-event-type}
+        llm-opts (merged-llm-opts state invocation)
+        call-request (cond-> {:type (get-in state [:event-types :llm-call])
+                              :agent-id (:id state)
+                              :conversation-id conversation-id'
+                              :call-id call-id
+                              :system (:system state)
+                              :messages messages
+                              :tools (llm-tools state)
+                              :success-event-type success-event-type
+                              :failure-event-type failure-event-type}
+                       llm-opts (assoc :llm-opts llm-opts))
         state' (-> state
                    (assoc :phase :awaiting-llm
                           :messages messages
@@ -389,7 +396,8 @@
                                         :conversation-id conversation-id'
                                         :call-id call-id
                                         :success-event-type success-event-type
-                                        :failure-event-type failure-event-type})
+                                        :failure-event-type failure-event-type
+                                        :llm-opts llm-opts})
                    (update :call-seq inc))]
     [state' (assoc (bid-for-state state') :request #{call-request})]))
 
@@ -404,6 +412,8 @@
            :tools (llm-tools state)
            :success-event-type (get-in state [:event-types :llm-success])
            :failure-event-type (get-in state [:event-types :llm-failure])}
+    (:llm-opts pending-invocation)
+    (assoc :llm-opts (:llm-opts pending-invocation))
     (= :tool (:origin pending-invocation))
     (assoc :output-schema (get-in state [:agent-tool :output-schema]))))
 
@@ -415,6 +425,7 @@
         success-event-type (get-in state [:event-types :llm-success])
         failure-event-type (get-in state [:event-types :llm-failure])
         messages (into (:messages state) (tool-invocation-messages tool invocation))
+        llm-opts (merged-llm-opts state invocation)
         call-request (cond-> {:type (get-in state [:event-types :llm-call])
                               :agent-id (:id state)
                               :conversation-id conversation-id'
@@ -425,7 +436,9 @@
                               :success-event-type success-event-type
                               :failure-event-type failure-event-type}
                        (:output-schema tool)
-                       (assoc :output-schema (:output-schema tool)))
+                       (assoc :output-schema (:output-schema tool))
+                       llm-opts
+                       (assoc :llm-opts llm-opts))
         state' (-> state
                    (assoc :phase :awaiting-llm
                           :messages messages
@@ -436,6 +449,7 @@
                                         :failure-event-type failure-event-type
                                         :tool-name (:tool-name tool)
                                         :tool-call-id (:tool-call-id invocation)
+                                        :llm-opts llm-opts
                                         :tool-success-event-type (:success-event-type invocation)
                                         :tool-failure-event-type (:failure-event-type invocation)})
                    (update :call-seq inc))]
