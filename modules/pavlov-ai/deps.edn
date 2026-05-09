@@ -1,0 +1,6 @@
+{:paths ["src" "resources"]
+ :deps {tech.thomascothran/pavlov {:local/root "../pavlov"}}
+ :aliases
+ {:build {:deps {io.github.clojure/tools.build {:mvn/version "0.9.6"}
+                 slipset/deps-deploy {:mvn/version "0.2.0"}}
+          :ns-default build}}}
