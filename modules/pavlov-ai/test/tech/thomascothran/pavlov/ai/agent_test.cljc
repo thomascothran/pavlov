@@ -251,16 +251,65 @@
                            :tool-name :delegate/code
                            :tool-call-id "call_123"
                            :result output}]
-      (is (= {:wait-on #{[:pavlov.ai.agent/invoke :code-agent]
-                         [:pavlov.ai.agent/cancel :code-agent]
-                         [:pavlov.ai.tool/registered :code-agent]
-                         [:pavlov.ai.tool/deregistered :code-agent]
-                         [:pavlov.ai.skill/registered :code-agent]
-                         [:pavlov.ai.skill/deregistered :code-agent]
-                         [:pavlov.ai.tool/invocation :delegate/code]}
-              :request #{expected-result}}
+      (is (= {:request #{expected-result}}
              bid))
-      (is (= :idle (:phase (b/state bthread)))))))
+      (is (= :closing (:phase (b/state bthread)))))))
+
+(deftest on-complete-defaults-to-close-and-terminates-after-final-response
+  (testing "by default an agent emits its final response and then closes when that response event is selected"
+    (let [bthread (agent/make-agent-bthread
+                   {:id :assistant
+                    :system "You are a helpful assistant."})
+          _ (b/notify! bthread nil)
+          _ (b/notify! bthread {:type [:pavlov.ai.agent/invoke :assistant]
+                                :conversation-id :conversation-1
+                                :message {:role :user
+                                          :content "Hello"}})
+          assistant-message {:role :assistant
+                             :content "Hello back"}
+          final-bid (b/notify! bthread {:type [:pavlov.ai.llm/response-received :assistant]
+                                        :conversation-id :conversation-1
+                                        :call-id [:assistant :conversation-1 1]
+                                        :response {:message assistant-message}})
+          expected-response {:type [:pavlov.ai.agent/responded :assistant]
+                             :agent-id :assistant
+                             :conversation-id :conversation-1
+                             :call-id [:assistant :conversation-1 1]
+                             :message assistant-message
+                             :response {:message assistant-message}}]
+      (is (= #{expected-response}
+             (:request final-bid)))
+      (is (= :closing (:phase (b/state bthread))))
+      (is (nil? (b/notify! bthread expected-response))))))
+
+(deftest on-complete-idle-preserves-current-idle-behavior
+  (testing "an idle-on-complete agent emits its final response and remains idle with accumulated messages"
+    (let [bthread (agent/make-agent-bthread
+                   {:id :assistant
+                    :system "You are a helpful assistant."
+                    :on-complete :idle})
+          _ (b/notify! bthread nil)
+          _ (b/notify! bthread {:type [:pavlov.ai.agent/invoke :assistant]
+                                :conversation-id :conversation-1
+                                :message {:role :user
+                                          :content "Hello"}})
+          assistant-message {:role :assistant
+                             :content "Hello back"}
+          final-bid (b/notify! bthread {:type [:pavlov.ai.llm/response-received :assistant]
+                                        :conversation-id :conversation-1
+                                        :call-id [:assistant :conversation-1 1]
+                                        :response {:message assistant-message}})]
+      (is (= #{[:pavlov.ai.agent/invoke :assistant]
+               [:pavlov.ai.agent/cancel :assistant]
+               [:pavlov.ai.tool/registered :assistant]
+               [:pavlov.ai.tool/deregistered :assistant]
+               [:pavlov.ai.skill/registered :assistant]
+               [:pavlov.ai.skill/deregistered :assistant]}
+             (:wait-on final-bid)))
+      (is (= :idle (:phase (b/state bthread))))
+      (is (= [{:role :user :content "Hello"}
+              assistant-message]
+             (:messages (b/state bthread)))))))
 
 (deftest llm-tool-call-requests-registered-tool-invocation
   (testing "an LLM response with tool calls requests the matching registered tool and waits for its result"

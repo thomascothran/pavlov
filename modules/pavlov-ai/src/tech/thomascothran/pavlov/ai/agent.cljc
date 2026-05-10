@@ -252,7 +252,7 @@
                                         (addressed-event-type default-tool-invocation-event-type tool-name))))))
 
 (defn- initial-state
-  [{:keys [id system initial-tools initial-skills llm-opts max-tool-rounds] :as opts}]
+  [{:keys [id system initial-tools initial-skills llm-opts max-tool-rounds on-complete] :as opts}]
   (let [event-types (event-types opts)]
     {:phase :idle
      :id id
@@ -260,6 +260,7 @@
      :llm-opts llm-opts
      :event-types event-types
      :agent-tool (normalize-agent-tool id (:tool opts))
+     :on-complete (or on-complete :close)
      :messages []
      :tools (into {} (map (juxt :tool-name identity)) initial-tools)
      :skills (into {} (map (juxt :skill-id identity)) initial-skills)
@@ -366,6 +367,16 @@
 (defn- bid-for-state
   [state]
   {:wait-on (wait-on-for-state state)})
+
+(defn- complete-with-request
+  [state response-event]
+  (case (:on-complete state)
+    :close
+    (let [state' (assoc state :phase :closing)]
+      [state' {:request #{response-event}}])
+
+    :idle
+    [state (assoc (bid-for-state state) :request #{response-event})]))
 
 (defn- register-tool
   [state event]
@@ -660,7 +671,7 @@
                         :phase :idle
                         :messages messages
                         :pending-llm nil)]
-      [state' (assoc (bid-for-state state') :request #{response-event})])))
+      (complete-with-request state' response-event))))
 
 (defn- complete-llm-failure
   [state event]
@@ -681,10 +692,16 @@
         state' (assoc state
                       :phase :idle
                       :pending-llm nil)]
-    [state' (assoc (bid-for-state state') :request #{failed-event})]))
+    (complete-with-request state' failed-event)))
 
 (defn- validate-options
   [opts]
+  (when (and (:on-complete opts)
+             (not (#{:close :idle} (:on-complete opts))))
+    (throw (ex-info "Agent :on-complete must be either :close or :idle"
+                    {:reason :invalid-on-complete
+                     :agent-id (:id opts)
+                     :on-complete (:on-complete opts)})))
   (doseq [skill (:initial-skills opts)]
     (when-not (:skill-id skill)
       (throw (ex-info "Agent :initial-skills entries require :skill-id"
@@ -739,6 +756,10 @@
     registrations must include `:skill-id` and `:description`; invalid
     registrations are ignored.
   - `:skill-deregistered-event-type` - event type for skill deregistration
+  - `:on-complete` - lifecycle behavior after emitting a final response/failure:
+    `:idle` keeps the bthread alive with accumulated messages; `:close` keeps
+    the final response/failure requested and terminates when that event is selected.
+    Defaults to `:close`.
 
   Event type options default to addressed vector event types derived from `:id`,
   for example `[:pavlov.ai.agent/invoke :assistant]`.
@@ -762,6 +783,9 @@
              event-types (:event-types state)
              type' (event/type incoming-event)]
          (cond
+           (= :closing (:phase state))
+           nil
+
            (nil? incoming-event)
            [state (bid-for-state state)]
 
