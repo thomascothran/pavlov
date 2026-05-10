@@ -167,15 +167,14 @@
 (def default-tool-deregistered-event-type
   :pavlov.ai.tool/deregistered)
 
+(def default-max-tool-rounds
+  20)
+
 (def default-skill-registered-event-type
   :pavlov.ai.skill/registered)
 
 (def default-skill-deregistered-event-type
   :pavlov.ai.skill/deregistered)
-
-(defn- event-type
-  [event]
-  (event/type event))
 
 (defn- addressed-event-type
   [base-event-type agent-id]
@@ -253,7 +252,7 @@
                                         (addressed-event-type default-tool-invocation-event-type tool-name))))))
 
 (defn- initial-state
-  [{:keys [id system initial-tools initial-skills llm-opts] :as opts}]
+  [{:keys [id system initial-tools initial-skills llm-opts max-tool-rounds] :as opts}]
   (let [event-types (event-types opts)]
     {:phase :idle
      :id id
@@ -265,6 +264,8 @@
      :tools (into {} (map (juxt :tool-name identity)) initial-tools)
      :skills (into {} (map (juxt :skill-id identity)) initial-skills)
      :call-seq 0
+     :max-tool-rounds (or max-tool-rounds default-max-tool-rounds)
+     :tool-rounds 0
      :pending-llm nil
      :pending-invocation nil
      :pending-tools nil}))
@@ -301,6 +302,31 @@
        (sort-by (comp str :tool-name))
        vec))
 
+(defn- skill-summaries
+  [state]
+  (->> (:skills state)
+       vals
+       (map #(select-keys % [:skill-id :description]))
+       (sort-by (comp str :skill-id))
+       vec))
+
+(defn- system-with-skills
+  [system skills]
+  (if (seq skills)
+    (str system
+         "\n\nAvailable skills:\n"
+         (apply str
+                (map (fn [{:keys [skill-id description]}]
+                       (str "- " skill-id " - " description "\n"))
+                     skills)))
+    system))
+
+(defn- add-skills-to-llm-request
+  [request state]
+  (let [skills (skill-summaries state)]
+    (cond-> (assoc request :system (system-with-skills (:system request) skills))
+      (seq skills) (assoc :skills skills))))
+
 (defn- merged-llm-opts
   [state invocation]
   (merge (:llm-opts state) (:llm-opts invocation)))
@@ -317,8 +343,7 @@
 
 (defn- response-tool-calls
   [event]
-  (or (get-in event [:response :message :tool-calls])
-      (get-in event [:response :tool-calls])))
+  (get-in event [:response :message :tool-calls]))
 
 (defn- tool-invocation-event-type
   [tool tool-name]
@@ -379,16 +404,18 @@
         failure-event-type (get-in state [:event-types :llm-failure])
         messages (into (:messages state) (invocation-messages invocation))
         llm-opts (merged-llm-opts state invocation)
-        call-request (cond-> {:type (get-in state [:event-types :llm-call])
-                              :agent-id (:id state)
-                              :conversation-id conversation-id'
-                              :call-id call-id
-                              :system (:system state)
-                              :messages messages
-                              :tools (llm-tools state)
-                              :success-event-type success-event-type
-                              :failure-event-type failure-event-type}
-                       llm-opts (assoc :llm-opts llm-opts))
+        call-request (add-skills-to-llm-request
+                      (cond-> {:type (get-in state [:event-types :llm-call])
+                               :agent-id (:id state)
+                               :conversation-id conversation-id'
+                               :call-id call-id
+                               :system (:system state)
+                               :messages messages
+                               :tools (llm-tools state)
+                               :success-event-type success-event-type
+                               :failure-event-type failure-event-type}
+                        llm-opts (assoc :llm-opts llm-opts))
+                      state)
         state' (-> state
                    (assoc :phase :awaiting-llm
                           :messages messages
@@ -403,19 +430,21 @@
 
 (defn- next-llm-call-request
   [state conversation-id' call-id messages pending-invocation]
-  (cond-> {:type (get-in state [:event-types :llm-call])
-           :agent-id (:id state)
-           :conversation-id conversation-id'
-           :call-id call-id
-           :system (:system state)
-           :messages messages
-           :tools (llm-tools state)
-           :success-event-type (get-in state [:event-types :llm-success])
-           :failure-event-type (get-in state [:event-types :llm-failure])}
-    (:llm-opts pending-invocation)
-    (assoc :llm-opts (:llm-opts pending-invocation))
-    (= :tool (:origin pending-invocation))
-    (assoc :output-schema (get-in state [:agent-tool :output-schema]))))
+  (add-skills-to-llm-request
+   (cond-> {:type (get-in state [:event-types :llm-call])
+            :agent-id (:id state)
+            :conversation-id conversation-id'
+            :call-id call-id
+            :system (:system state)
+            :messages messages
+            :tools (llm-tools state)
+            :success-event-type (get-in state [:event-types :llm-success])
+            :failure-event-type (get-in state [:event-types :llm-failure])}
+     (:llm-opts pending-invocation)
+     (assoc :llm-opts (:llm-opts pending-invocation))
+     (= :tool (:origin pending-invocation))
+     (assoc :output-schema (get-in state [:agent-tool :output-schema])))
+   state))
 
 (defn- invoke-agent-tool
   [state invocation]
@@ -426,19 +455,21 @@
         failure-event-type (get-in state [:event-types :llm-failure])
         messages (into (:messages state) (tool-invocation-messages tool invocation))
         llm-opts (merged-llm-opts state invocation)
-        call-request (cond-> {:type (get-in state [:event-types :llm-call])
-                              :agent-id (:id state)
-                              :conversation-id conversation-id'
-                              :call-id call-id
-                              :system (:system state)
-                              :messages messages
-                              :tools (llm-tools state)
-                              :success-event-type success-event-type
-                              :failure-event-type failure-event-type}
-                       (:output-schema tool)
-                       (assoc :output-schema (:output-schema tool))
-                       llm-opts
-                       (assoc :llm-opts llm-opts))
+        call-request (add-skills-to-llm-request
+                      (cond-> {:type (get-in state [:event-types :llm-call])
+                               :agent-id (:id state)
+                               :conversation-id conversation-id'
+                               :call-id call-id
+                               :system (:system state)
+                               :messages messages
+                               :tools (llm-tools state)
+                               :success-event-type success-event-type
+                               :failure-event-type failure-event-type}
+                        (:output-schema tool)
+                        (assoc :output-schema (:output-schema tool))
+                        llm-opts
+                        (assoc :llm-opts llm-opts))
+                      state)
         state' (-> state
                    (assoc :phase :awaiting-llm
                           :messages messages
@@ -478,17 +509,19 @@
                                      :failure-event-type failure-event-type})))
                            set)
         pending-tools (into {}
-                            (map (fn [tool-call]
-                                   [(tool-call-id tool-call)
-                                    {:tool-name (tool-call-name tool-call)
-                                     :arguments (:arguments tool-call)}]))
+                            (map-indexed (fn [idx tool-call]
+                                           [(tool-call-id tool-call)
+                                            {:tool-name (tool-call-name tool-call)
+                                             :arguments (:arguments tool-call)
+                                             :index idx}]))
                             tool-calls)
         state' (assoc state
                       :phase :awaiting-tools
                       :messages messages
                       :pending-llm nil
                       :pending-invocation pending-invocation
-                      :pending-tools pending-tools)]
+                      :pending-tools pending-tools
+                      :tool-rounds (inc (:tool-rounds state)))]
     [state' (assoc (bid-for-state state') :request tool-requests)]))
 
 (defn- tool-result-message
@@ -498,26 +531,35 @@
    :name (:tool-name event)
    :content (pr-str (:result event))})
 
+(defn- tool-error-message
+  [event]
+  {:role :tool
+   :tool-call-id (:tool-call-id event)
+   :name (:tool-name event)
+   :content (pr-str {:error (:error event)})})
+
 (defn- pending-tool-response?
   [state event success-or-failure]
   (let [expected-event-type (get-in state [:event-types success-or-failure])]
     (and (= :awaiting-tools (:phase state))
-         (= expected-event-type (event-type event))
+         (= expected-event-type (event/type event))
          (= (get-in state [:pending-invocation :conversation-id])
             (conversation-id event))
          (contains? (:pending-tools state) (:tool-call-id event)))))
 
-(defn- complete-tool-success
-  [state event]
-  (let [messages (conj (:messages state) (tool-result-message event))
-        pending-tools (dissoc (:pending-tools state) (:tool-call-id event))
+(defn- complete-tool-result
+  [state event message]
+  (let [pending-tools (assoc-in (:pending-tools state)
+                                [(:tool-call-id event) :message]
+                                message)
         pending-invocation (:pending-invocation state)]
-    (if (seq pending-tools)
-      (let [state' (assoc state
-                          :messages messages
-                          :pending-tools pending-tools)]
+    (if-not (every? :message (vals pending-tools))
+      (let [state' (assoc state :pending-tools pending-tools)]
         [state' (bid-for-state state')])
-      (let [call-id [(:id state)
+      (let [messages (into (:messages state)
+                           (map :message)
+                           (sort-by :index (vals pending-tools)))
+            call-id [(:id state)
                      (:conversation-id pending-invocation)
                      (inc (:call-seq state))]
             pending-llm (assoc pending-invocation
@@ -538,20 +580,62 @@
                        (update :call-seq inc))]
         [state' (assoc (bid-for-state state') :request #{call-request})]))))
 
+(defn- complete-tool-success
+  [state event]
+  (complete-tool-result state event (tool-result-message event)))
+
+(defn- complete-tool-failure
+  [state event]
+  (complete-tool-result state event (tool-error-message event)))
+
 (defn- pending-response?
   [state event success-or-failure]
   (let [expected-event-type (get-in state [:pending-llm success-or-failure])]
     (and expected-event-type
-         (= expected-event-type (event-type event))
+         (= expected-event-type (event/type event))
          (= (get-in state [:pending-llm :conversation-id])
             (conversation-id event))
          (= (get-in state [:pending-llm :call-id])
             (:call-id event)))))
 
+(defn- tool-round-limit-message
+  [state]
+  {:role :user
+   :content (str "The tool call limit of " (:max-tool-rounds state)
+                 " tool rounds has been reached. Do not call any more tools; return a final answer now using the information already available.")})
+
+(defn- request-final-answer-after-tool-limit
+  [state event]
+  (let [pending-invocation (:pending-llm state)
+        assistant-message (get-in event [:response :message])
+        messages (cond-> (:messages state)
+                   assistant-message (conj assistant-message)
+                   true (conj (tool-round-limit-message state)))
+        call-id [(:id state)
+                 (:conversation-id pending-invocation)
+                 (inc (:call-seq state))]
+        pending-llm (assoc pending-invocation
+                           :call-id call-id
+                           :success-event-type (get-in state [:event-types :llm-success])
+                           :failure-event-type (get-in state [:event-types :llm-failure]))
+        call-request (next-llm-call-request state
+                                            (:conversation-id pending-invocation)
+                                            call-id
+                                            messages
+                                            pending-llm)
+        state' (-> state
+                   (assoc :phase :awaiting-llm
+                          :messages messages
+                          :pending-llm pending-llm)
+                   (update :call-seq inc))]
+    [state' (assoc (bid-for-state state') :request #{call-request})]))
+
 (defn- complete-llm-success
   [state event]
   (if (seq (response-tool-calls event))
-    (begin-tool-round state event)
+    (if (>= (:tool-rounds state) (:max-tool-rounds state))
+      (request-final-answer-after-tool-limit state event)
+      (begin-tool-round state event))
     (let [pending (:pending-llm state)
           message (get-in event [:response :message])
           messages (cond-> (:messages state)
@@ -676,7 +760,7 @@
      (fn [state incoming-event]
        (let [state (or state (initial-state opts))
              event-types (:event-types state)
-             type' (event-type incoming-event)]
+             type' (event/type incoming-event)]
          (cond
            (nil? incoming-event)
            [state (bid-for-state state)]
@@ -715,6 +799,9 @@
 
            (pending-tool-response? state incoming-event :tool-success)
            (complete-tool-success state incoming-event)
+
+           (pending-tool-response? state incoming-event :tool-failure)
+           (complete-tool-failure state incoming-event)
 
            :else
            [state (bid-for-state state)]))))))

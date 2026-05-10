@@ -109,6 +109,32 @@
              bid))
       (is (empty? (:skills (b/state bthread)))))))
 
+(deftest llm-call-includes-initial-and-registered-skill-summaries
+  (testing "skill names and descriptions are exposed in structured data and rendered into the system prompt"
+    (let [bthread (agent/make-agent-bthread
+                   {:id :assistant
+                    :system "You are a helpful assistant."
+                    :initial-skills [{:skill-id :debug-clojure
+                                      :description "Use for debugging Clojure code."}]})
+          _ (b/notify! bthread nil)
+          _ (b/notify! bthread {:type [:pavlov.ai.skill/registered :assistant]
+                                :skill-id :write-tests
+                                :description "Use for specifying behavior with tests."
+                                :extra :ignored-by-llm-summary})
+          bid (b/notify! bthread {:type [:pavlov.ai.agent/invoke :assistant]
+                                  :conversation-id :conversation-1
+                                  :message {:role :user
+                                            :content "Help me."}})
+          request (first (:request bid))]
+      (is (= [{:skill-id :debug-clojure
+               :description "Use for debugging Clojure code."}
+              {:skill-id :write-tests
+               :description "Use for specifying behavior with tests."}]
+             (:skills request)))
+      (is (re-find #"Available skills" (:system request)))
+      (is (re-find #":debug-clojure - Use for debugging Clojure code\." (:system request)))
+      (is (re-find #":write-tests - Use for specifying behavior with tests\." (:system request))))))
+
 (deftest tool-config-requires-input-and-output-schemas
   (testing "agent tools must declare structured input and output contracts"
     (is (thrown-with-msg?
@@ -284,6 +310,200 @@
               :request #{expected-tool-request}}
              bid))
       (is (= :awaiting-tools (:phase (b/state bthread)))))))
+
+(deftest multiple-tool-results-are-correlated-by-call-id-not-arrival-order
+  (testing "an LLM response can request multiple tools and waits for all results before continuing"
+    (let [bthread (agent/make-agent-bthread
+                   {:id :assistant
+                    :system "You are a helpful assistant."
+                    :initial-tools [{:tool-name :search
+                                     :description "Search documents"
+                                     :input-schema {:type "object"}
+                                     :output-schema {:type "object"}
+                                     :invocation-event-type [:pavlov.ai.tool/invocation :search]}
+                                    {:tool-name :lookup
+                                     :description "Look up records"
+                                     :input-schema {:type "object"}
+                                     :output-schema {:type "object"}
+                                     :invocation-event-type [:pavlov.ai.tool/invocation :lookup]}]})
+          _ (b/notify! bthread nil)
+          _ (b/notify! bthread {:type [:pavlov.ai.agent/invoke :assistant]
+                                :conversation-id :conversation-1
+                                :message {:role :user
+                                          :content "Search and lookup Pavlov."}})
+          assistant-message {:role :assistant
+                             :content nil
+                             :tool-calls [{:id "call_search_1"
+                                           :name :search
+                                           :arguments {:query "Pavlov"}}
+                                          {:id "call_lookup_1"
+                                           :name :lookup
+                                           :arguments {:id "pavlov"}}]}
+          tool-bid (b/notify! bthread {:type [:pavlov.ai.llm/response-received :assistant]
+                                       :conversation-id :conversation-1
+                                       :call-id [:assistant :conversation-1 1]
+                                       :response {:message assistant-message
+                                                  :finish-reason :tool-calls}})
+          search-result {:results ["Pavlov docs"]}
+          lookup-result {:record {:name "Pavlov"}}
+          partial-bid (b/notify! bthread {:type [:pavlov.ai.tool/succeeded :assistant]
+                                          :conversation-id :conversation-1
+                                          :tool-name :lookup
+                                          :tool-call-id "call_lookup_1"
+                                          :result lookup-result})
+          expected-request {:type [:pavlov.ai.llm/call :assistant]
+                            :agent-id :assistant
+                            :conversation-id :conversation-1
+                            :call-id [:assistant :conversation-1 2]
+                            :system "You are a helpful assistant."
+                            :messages [{:role :user
+                                        :content "Search and lookup Pavlov."}
+                                       assistant-message
+                                       {:role :tool
+                                        :tool-call-id "call_search_1"
+                                        :name :search
+                                        :content (pr-str search-result)}
+                                       {:role :tool
+                                        :tool-call-id "call_lookup_1"
+                                        :name :lookup
+                                        :content (pr-str lookup-result)}]
+                            :tools [{:tool-name :lookup
+                                     :description "Look up records"
+                                     :input-schema {:type "object"}
+                                     :output-schema {:type "object"}
+                                     :invocation-event-type [:pavlov.ai.tool/invocation :lookup]}
+                                    {:tool-name :search
+                                     :description "Search documents"
+                                     :input-schema {:type "object"}
+                                     :output-schema {:type "object"}
+                                     :invocation-event-type [:pavlov.ai.tool/invocation :search]}]
+                            :success-event-type [:pavlov.ai.llm/response-received :assistant]
+                            :failure-event-type [:pavlov.ai.llm/response-failed :assistant]}]
+      (is (= #{[:pavlov.ai.tool/invocation :search]
+               [:pavlov.ai.tool/invocation :lookup]}
+             (set (map :type (:request tool-bid)))))
+      (is (nil? (:request partial-bid)))
+      (is (= :awaiting-tools (:phase (b/state bthread))))
+      (let [final-bid (b/notify! bthread {:type [:pavlov.ai.tool/succeeded :assistant]
+                                          :conversation-id :conversation-1
+                                          :tool-name :search
+                                          :tool-call-id "call_search_1"
+                                          :result search-result})]
+        (is (= expected-request (first (:request final-bid))))
+        (is (= :awaiting-llm (:phase (b/state bthread))))))))
+
+(deftest tool-failure-requests-next-llm-call-for-recovery
+  (testing "when a requested tool fails, the error is appended as a tool message and the LLM can recover"
+    (let [bthread (agent/make-agent-bthread
+                   {:id :assistant
+                    :system "You are a helpful assistant."
+                    :initial-tools [{:tool-name :search
+                                     :description "Search documents"
+                                     :input-schema {:type "object"}
+                                     :output-schema {:type "object"}
+                                     :invocation-event-type [:pavlov.ai.tool/invocation :search]}]})
+          _ (b/notify! bthread nil)
+          _ (b/notify! bthread {:type [:pavlov.ai.agent/invoke :assistant]
+                                :conversation-id :conversation-1
+                                :message {:role :user
+                                          :content "Find docs about Pavlov."}})
+          assistant-message {:role :assistant
+                             :content nil
+                             :tool-calls [{:id "call_search_1"
+                                           :name :search
+                                           :arguments {:query "Pavlov"}}]}
+          _ (b/notify! bthread {:type [:pavlov.ai.llm/response-received :assistant]
+                                :conversation-id :conversation-1
+                                :call-id [:assistant :conversation-1 1]
+                                :response {:message assistant-message
+                                           :finish-reason :tool-calls}})
+          tool-error {:message "Search backend unavailable"}
+          bid (b/notify! bthread {:type [:pavlov.ai.tool/failed :assistant]
+                                  :conversation-id :conversation-1
+                                  :tool-name :search
+                                  :tool-call-id "call_search_1"
+                                  :error tool-error})
+          expected-request {:type [:pavlov.ai.llm/call :assistant]
+                            :agent-id :assistant
+                            :conversation-id :conversation-1
+                            :call-id [:assistant :conversation-1 2]
+                            :system "You are a helpful assistant."
+                            :messages [{:role :user
+                                        :content "Find docs about Pavlov."}
+                                       assistant-message
+                                       {:role :tool
+                                        :tool-call-id "call_search_1"
+                                        :name :search
+                                        :content (pr-str {:error tool-error})}]
+                            :tools [{:tool-name :search
+                                     :description "Search documents"
+                                     :input-schema {:type "object"}
+                                     :output-schema {:type "object"}
+                                     :invocation-event-type [:pavlov.ai.tool/invocation :search]}]
+                            :success-event-type [:pavlov.ai.llm/response-received :assistant]
+                            :failure-event-type [:pavlov.ai.llm/response-failed :assistant]}]
+      (is (= {:wait-on #{[:pavlov.ai.agent/invoke :assistant]
+                         [:pavlov.ai.agent/cancel :assistant]
+                         [:pavlov.ai.tool/registered :assistant]
+                         [:pavlov.ai.tool/deregistered :assistant]
+                         [:pavlov.ai.skill/registered :assistant]
+                         [:pavlov.ai.skill/deregistered :assistant]
+                         [:pavlov.ai.llm/response-received :assistant]
+                         [:pavlov.ai.llm/response-failed :assistant]}
+              :request #{expected-request}}
+             bid))
+      (is (= :awaiting-llm (:phase (b/state bthread)))))))
+
+(deftest max-tool-rounds-sends-limit-message-to-llm
+  (testing "when the configured tool round limit is reached, the LLM is instructed to return a final answer"
+    (let [bthread (agent/make-agent-bthread
+                   {:id :assistant
+                    :system "You are a helpful assistant."
+                    :max-tool-rounds 1
+                    :initial-tools [{:tool-name :search
+                                     :description "Search documents"
+                                     :input-schema {:type "object"}
+                                     :output-schema {:type "object"}
+                                     :invocation-event-type [:pavlov.ai.tool/invocation :search]}]})
+          _ (b/notify! bthread nil)
+          _ (b/notify! bthread {:type [:pavlov.ai.agent/invoke :assistant]
+                                :conversation-id :conversation-1
+                                :message {:role :user
+                                          :content "Find docs about Pavlov."}})
+          first-tool-message {:role :assistant
+                              :content nil
+                              :tool-calls [{:id "call_search_1"
+                                            :name :search
+                                            :arguments {:query "Pavlov"}}]}
+          _ (b/notify! bthread {:type [:pavlov.ai.llm/response-received :assistant]
+                                :conversation-id :conversation-1
+                                :call-id [:assistant :conversation-1 1]
+                                :response {:message first-tool-message
+                                           :finish-reason :tool-calls}})
+          _ (b/notify! bthread {:type [:pavlov.ai.tool/succeeded :assistant]
+                                :conversation-id :conversation-1
+                                :tool-name :search
+                                :tool-call-id "call_search_1"
+                                :result {:results []}})
+          second-tool-message {:role :assistant
+                               :content nil
+                               :tool-calls [{:id "call_search_2"
+                                             :name :search
+                                             :arguments {:query "Pavlov again"}}]}
+          bid (b/notify! bthread {:type [:pavlov.ai.llm/response-received :assistant]
+                                  :conversation-id :conversation-1
+                                  :call-id [:assistant :conversation-1 2]
+                                  :response {:message second-tool-message
+                                             :finish-reason :tool-calls}})
+          request (first (:request bid))
+          limit-message (last (:messages request))]
+      (is (= [:pavlov.ai.llm/call :assistant] (:type request)))
+      (is (= [:assistant :conversation-1 3] (:call-id request)))
+      (is (= :user (:role limit-message)))
+      (is (re-find #"tool call limit" (:content limit-message)))
+      (is (re-find #"final answer" (:content limit-message)))
+      (is (not-any? #(= [:pavlov.ai.tool/invocation :search] (:type %)) (:request bid)))
+      (is (= :awaiting-llm (:phase (b/state bthread)))))))
 
 (deftest tool-result-requests-next-llm-call
   (testing "when all requested tools return, the agent appends tool results and asks the LLM to continue"
