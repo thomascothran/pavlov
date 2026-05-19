@@ -1,7 +1,7 @@
-(ns tech.thomascothran.pavlov.ai.agent-test
+(ns tech.thomascothran.pavlov.ai.agent-old-test
   (:require #?(:clj [clojure.test :refer [deftest is testing]]
                :cljs [cljs.test :refer-macros [deftest is testing]])
-            [tech.thomascothran.pavlov.ai.agent :as agent]
+            [tech.thomascothran.pavlov.ai.agent-old :as agent]
             [tech.thomascothran.pavlov.bthread :as b]
             [tech.thomascothran.pavlov.defaults]))
 
