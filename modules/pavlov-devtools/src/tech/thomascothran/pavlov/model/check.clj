@@ -249,7 +249,7 @@
 
 (defn- find-path
   "Find a path from root to target node in the LTS graph.
-  Returns a vector of events, or nil if no path exists."
+  Returns a vector of full events, or nil if no path exists."
   [lts target-id]
   (let [{:keys [root edges]} lts
         ;; Build adjacency map: node-id -> [{:to id :event e}]
@@ -267,7 +267,7 @@
             (let [neighbors (get adjacency id [])
                   new-states (map (fn [{:keys [to event]}]
                                     {:id to
-                                     :path (conj path (e/type event))})
+                                     :path (conj path event)})
                                   neighbors)]
               (recur (into (pop queue) new-states)
                      (conj visited id)))))
@@ -314,7 +314,7 @@
       (vec (for [deadlock-id deadlock-nodes]
              (let [path (find-path lts deadlock-id)
                    state (get nodes deadlock-id)]
-               {:path path
+               {:path (mapv e/type path)
                 :state state}))))))
 
 (defn- nodes-reaching-terminal
@@ -425,7 +425,7 @@
           (when (seq trapped-nodes)
             (when-let [{:keys [cycle-path cycle-entry-node]}
                        (find-cycle-in-nodes lts trapped-nodes)]
-              [{:path (or (find-path lts cycle-entry-node) [])
+              [{:path (mapv e/type (find-path lts cycle-entry-node))
                 :cycle cycle-path}])))))))
 
 (defn- find-impossible-events

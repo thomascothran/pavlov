@@ -79,10 +79,11 @@
 
 (deftest deadlock-after-first-event
   (testing "Model checker should detect deadlock after first event"
-    (let [result
+    (let [first-event {:type :first-event :payload 42}
+          result
           (check/check
            {:bthreads {:requester
-                       (b/bids [{:request #{:first-event}}])
+                       (b/bids [{:request #{first-event}}])
 
                        :blocker
                        (b/bids [{:wait-on #{:first-event}}
@@ -243,10 +244,12 @@
   (testing "Model checker should explore all branches when multiple events could be selected"
     (let [;; Create a scenario where different paths lead to different outcomes
           ;; If model checker explores all branches, it should find the violation
+          event-a {:type :event-a :payload :a}
+          event-b {:type :event-b :payload :b}
           result
           (check/check
            {:bthreads {:racer-a
-                       (b/bids [{:request #{:event-b :event-a}}])
+                       (b/bids [{:request #{event-b event-a}}])
 
                        ;; This bthread creates different outcomes based on order
                        :conditional-violator
@@ -265,8 +268,8 @@
             "Should have safety violations in new format")
 
         (when-let [violation (first (:safety-violations result))]
-          (is (= [:event-a] (:path violation))
-              "Path should show only :event-a was explored"))))))
+          (is (= [event-a] (:path violation))
+              "Path should include the full :event-a event before the violation"))))))
 
 (deftest directly-check-branching-on-top-level-bid
   (testing "Model checker should explore all branches when multiple events could be selected"
@@ -429,11 +432,12 @@
     ;; Use b/step to create a proper state machine that:
     ;; 1. Waits for :setup
     ;; 2. Then loops forever with :ping/:pong
-    (let [wait-then-loop
+    (let [setup-event {:type :setup :payload 42}
+          wait-then-loop
           (b/step
            (fn [state event]
              (case (or state :waiting)
-               :waiting (if (= :setup event)
+               :waiting (if (= :setup (e/type event))
                           [:ping {:request #{:ping}}]
                           [:waiting {:wait-on #{:setup}}])
                :ping [:pong {:request #{:pong}}]
@@ -442,7 +446,7 @@
           result (check/check
                   {:bthreads {:setup-once
                               ;; Requests setup, then terminates
-                              (b/bids [{:request #{:setup}}])
+                              (b/bids [{:request #{setup-event}}])
                               :wait-then-loop
                               wait-then-loop}
                    :check-livelock? true})]
