@@ -1,13 +1,9 @@
 (ns tech.thomascothran.pavlov.ai.agent
   (:require [tech.thomascothran.pavlov.bthread :as b]
-            [tech.thomascothran.pavlov.event :as event]))
-
-;; Ok -- so do we register ourselves? I think so.
-(defn config->initial-bid
-  [{:keys [initialized-event
-           invocation-event]}]
-  {:request #{{:type initialized-event}}
-   :wait-on #{invocation-event}})
+            [tech.thomascothran.pavlov.event :as event]
+            [tech.thomascothran.pavlov.ai.event
+             :refer [agent-invocation-event-type
+                     make-initialized-event]]))
 
 (defn make-llm-event
   [llm-response-event-type
@@ -37,8 +33,8 @@
   [config]
   (assert (:name config)
           "Agent must have a name")
-  (let [invocation-event (:invocation-event config)
-        agent-name (:name config)
+  (let [agent-name (:name config)
+        invocation-event [agent-invocation-event-type agent-name]
         llm-response-event-type [:pavlov.ai/llm-response agent-name]
         default-waits #{invocation-event llm-response-event-type}]
     (b/step
@@ -46,7 +42,9 @@
        (let [event-type (event/type event)]
          (cond
            (nil? event-type)
-           [config (config->initial-bid config)]
+           [config
+            {:request #{(make-initialized-event config)}
+             :wait-on default-waits}]
 
            ;; invoke llm
            (= event-type invocation-event)

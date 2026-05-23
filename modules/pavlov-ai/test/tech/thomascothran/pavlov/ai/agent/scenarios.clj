@@ -1,26 +1,34 @@
 (ns tech.thomascothran.pavlov.ai.agent.scenarios
   (:require [tech.thomascothran.pavlov.bthread :as b]
-            [tech.thomascothran.pavlov.ai.agent :as agent]))
+            [tech.thomascothran.pavlov.ai.agent :as agent]
+            [tech.thomascothran.pavlov.ai.event
+             :refer [make-invocation-event
+                     make-initialized-event
+                     llm-bthread-response-event-type]]))
 
 (defn make-minimal-happy-path
   []
   (let [happy-path-config
         {:name :happy-path
-         :initialized-event ::happy-path-initialized
-         :invocation-event ::invoke-happy-path
          :response-event-type ::happy-path-response-event}
 
         happy-path-agent (agent/make-bthread happy-path-config)
 
         hello-world-message
-        {:role "user" :content "hello world"}]
+        {:role "user" :content "hello world"}
+
+        invocation-event
+        (make-invocation-event :happy-path
+                               {:message hello-world-message})
+
+        response-event-type
+        (llm-bthread-response-event-type happy-path-config)]
+
     (b/bids [{:bthreads {::happy-path-agent happy-path-agent}
-              :wait-on #{::happy-path-initialized}
+              :wait-on #{[:pavlov.ai/agent-bthread-initialized :happy-path]}
               :hot true}
 
-             {:request #{{:type ::invoke-happy-path
-                          :message hello-world-message}}
-
+             {:request #{invocation-event}
               :hot true}
 
              {:wait-on #{::happy-path-response-event}

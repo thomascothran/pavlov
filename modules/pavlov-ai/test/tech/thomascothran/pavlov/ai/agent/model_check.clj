@@ -4,6 +4,7 @@
             [tech.thomascothran.pavlov.ai.agent.scenarios
              :as scenarios]
             [tech.thomascothran.pavlov.ai.agent.environment :as env]
+            [tech.thomascothran.pavlov.ai.event :as ae]
             [tech.thomascothran.pavlov.bprogram.ephemeral :as bpe]
             [tech.thomascothran.pavlov.bthread :as b]))
 
@@ -21,10 +22,16 @@
   []
   {})
 
+(defn make-bthreads
+  []
+  (into (scenarios/make-bthreads)
+        {::fanout-agent-events
+         (ae/fan-out-agent-events)}))
+
 ;; =====
 
 (deftest check-agent
-  (let [bthreads (scenarios/make-bthreads)
+  (let [bthreads (make-bthreads)
         violations
         (check/check {:bthreads bthreads
                       :check-deadlock? false
