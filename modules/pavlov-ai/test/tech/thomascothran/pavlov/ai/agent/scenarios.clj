@@ -3,8 +3,7 @@
             [tech.thomascothran.pavlov.ai.agent :as agent]
             [tech.thomascothran.pavlov.ai.event
              :refer [make-invocation-event
-                     make-initialized-event
-                     llm-bthread-response-event-type]]))
+                     agent-response-event-type]]))
 
 (defn make-minimal-happy-path
   []
@@ -19,10 +18,7 @@
 
         invocation-event
         (make-invocation-event :happy-path
-                               {:message hello-world-message})
-
-        response-event-type
-        (llm-bthread-response-event-type happy-path-config)]
+                               {:message hello-world-message})]
 
     (b/bids [{:bthreads {::happy-path-agent happy-path-agent}
               :wait-on #{[:pavlov.ai/agent-bthread-initialized :happy-path]}
@@ -31,7 +27,8 @@
              {:request #{invocation-event}
               :hot true}
 
-             {:wait-on #{::happy-path-response-event}
+             {:wait-on #{[agent-response-event-type
+                          :happy-path]}
               :hot true}
 
              (fn [{:keys [response] :as event}]

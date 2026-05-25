@@ -7,6 +7,9 @@
 (def agent-initialized-event
   :pavlov.ai/agent-bthread-initialized)
 
+(def agent-response-event-type
+  :pavlov.ai/agent-bthread-response)
+
 (defn make-invocation-event
   [agent-name m]
   (assoc m
@@ -19,10 +22,13 @@
    :agent/name (:name bthread-config)
    :agent/config bthread-config})
 
-(defn llm-bthread-response-event-type
-  [bthread-config]
-  [:pavlov.ai/agent-bthread-response
-   (:name bthread-config)])
+(defn make-agent-response
+  [agent-name m]
+  (assoc m
+         :type agent-response-event-type
+         :agent/name agent-name
+         :response-event-type [agent-invocation-event-type
+                               agent-name]))
 
 (defn fan-out-agent-events
   "on any event-type fan out to individual events"
@@ -30,7 +36,7 @@
    (fan-out-agent-events
     #{agent-initialized-event
       agent-invocation-event-type
-      :pavlov.ai/agent-bthread-response}))
+      agent-response-event-type}))
   ([event-types]
    (b/on-any event-types
              (fn [{bthread-name :agent/name

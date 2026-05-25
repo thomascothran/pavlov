@@ -3,7 +3,8 @@
             [tech.thomascothran.pavlov.event :as event]
             [tech.thomascothran.pavlov.ai.event
              :refer [agent-invocation-event-type
-                     make-initialized-event]]))
+                     make-initialized-event
+                     make-agent-response]]))
 
 (defn make-llm-event
   [llm-response-event-type
@@ -53,8 +54,10 @@
            ;; handle llm response
            ;; TODO - handle tool calls!
            (= event-type llm-response-event-type)
-           [state {:request #{{:type (:response-event-type config)
-                               :response (get-in event [:choices 0 :message :content])}}}]
+           [state {:request
+                   #{(make-agent-response
+                      agent-name
+                      {:response (get-in event [:choices 0 :message :content])})}}]
 
            :else
            [state {:wait-on default-waits}]))))))

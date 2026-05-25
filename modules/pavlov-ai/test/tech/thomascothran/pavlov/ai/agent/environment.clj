@@ -7,7 +7,7 @@
               {:role "assistant"
                :content "hello back"}}]})
 
-(def tool-call-response
+(def one-tool-call-response
   {:choices [{:finish_reason "tool_calls"
               :message
               {:role "assistant",
@@ -22,12 +22,22 @@
                   :arguments
                   "{\"items\": [{\"name\":\"Ada\",\"age\":36},{\"name\":\"Grace\",\"age\":30},{\"name\":\"Edsger\",\"age\":42}], \"key\": \"age\", \"descending\": false}"}}]}}]})
 
+(def two-tool-call-response
+  (assoc-in one-tool-call-response
+            [:choices 0 :message :tool_calls 1]
+            {:type "function"
+             :id "call_01_PasdfasLKlkasdflakse"
+             :function
+             {:name "sum"
+              :arguments "[1, 3]"}}))
+
 (defn -llm-response
   [{:keys [llm-response-event-type] :as event}]
   {:request (into #{}
                   (map #(assoc % :type llm-response-event-type))
                   [stop-response
-                   #_tool-call-response])})
+                   one-tool-call-response
+                   #_two-tool-call-response])})
 
 (defn make-llm-response-bthread
   []
