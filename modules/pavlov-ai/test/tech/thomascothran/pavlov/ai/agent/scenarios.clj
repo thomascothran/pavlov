@@ -67,7 +67,10 @@
 (defn make-tool-call-path
   []
   (b/bids [{:wait-on #{:email/list}}
-           #_{:request #{{:type :! :invariant-violated true}}}]))
+           {:wait-on #{[:pavlov.ai/llm-response :happy-path]}}
+           {:wait-on #{[:pavlov.ai/llm-response :happy-path]}}
+           {:wait-on #{[:pavlov.ai/llm-response :happy-path]}}
+           {:request #{{:type :! :invariant-violated true}}}]))
 
 (defn make-bthreads
   []
