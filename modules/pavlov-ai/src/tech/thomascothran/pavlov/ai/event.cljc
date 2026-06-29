@@ -23,12 +23,21 @@
    :agent/config bthread-config})
 
 (defn make-agent-response
-  [agent-name m]
-  (assoc m
-         :type agent-response-event-type
-         :agent/name agent-name
-         :response-event-type [agent-invocation-event-type
-                               agent-name]))
+  [action-response-type event] ;; should have action?
+  (let [missing-event-type ::missing-event-type
+
+        event-type
+        (get-in event
+                [:response :actions 0 :type]
+                missing-event-type)]
+
+    (cond-> (assoc event
+                   :type event-type
+                   :response-event-type action-response-type)
+
+      (= event-type missing-event-type)
+      (assoc :invariant-violated true
+             :event event))))
 
 (defn fan-out-agent-events
   "on any event-type fan out to individual events"

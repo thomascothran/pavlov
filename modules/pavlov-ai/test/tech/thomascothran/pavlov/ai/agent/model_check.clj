@@ -34,6 +34,7 @@
   (let [bthreads (make-bthreads)
         violations
         (check/check {:bthreads bthreads
+                      :possible (scenarios/possible-events)
                       :check-deadlock? false
                       :environment-bthreads (env/make-bthreads)})]
     (def violations violations)

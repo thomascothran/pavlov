@@ -30,6 +30,17 @@
              :request #{llm-event}}]
     [state bid]))
 
+;; (defn action-result->bid
+;;   [{:keys [message-history llm-calls] :as state}
+;;    event llm-response-event-type default-waits]
+;;   ;; need to make response.
+;;   (let [message-history' (conj message-history
+;;                                (dissoc event :type))
+;;         llm-calls' (inc (or llm-calls 0))]
+;;     [(assoc state
+;;             :llm-calls llm-calls'
+;;             :message-history message-history')]))
+
 (defn make-bthread
   [config]
   (assert (:name config)
@@ -37,7 +48,8 @@
   (let [agent-name (:name config)
         invocation-event [agent-invocation-event-type agent-name]
         llm-response-event-type [:pavlov.ai/llm-response agent-name]
-        default-waits #{invocation-event llm-response-event-type}]
+        action-response-type [:pavlov.ai/action-response agent-name]
+        default-waits #{invocation-event llm-response-event-type action-response-type}]
     (b/step
      (fn [state event]
        (let [event-type (event/type event)]
@@ -51,13 +63,14 @@
            (= event-type invocation-event)
            (llm-invocation->bid state event llm-response-event-type default-waits)
 
-           ;; handle llm response
-           ;; TODO - handle tool calls!
+           ;; llm responses
            (= event-type llm-response-event-type)
            [state {:request
-                   #{(make-agent-response
-                      agent-name
-                      {:response (get-in event [:choices 0 :message :content])})}}]
+                   #{(make-agent-response action-response-type event)}}]
+
+           ;; action responses
+           (= event-type action-response-type)
+           (llm-invocation->bid state event llm-response-event-type default-waits)
 
            :else
            [state {:wait-on default-waits}]))))))
