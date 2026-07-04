@@ -5,8 +5,7 @@
              :as scenarios]
             [tech.thomascothran.pavlov.ai.agent.environment :as env]
             [tech.thomascothran.pavlov.ai.event :as ae]
-            [tech.thomascothran.pavlov.bprogram.ephemeral :as bpe]
-            [tech.thomascothran.pavlov.bthread :as b]))
+            [tech.thomascothran.pavlov.bthread]))
 
 ;; Scenarios
 

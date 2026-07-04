@@ -1,5 +1,6 @@
 (ns tech.thomascothran.pavlov.ai.agent.environment
-  (:require [tech.thomascothran.pavlov.bthread :as b]))
+  (:require [tech.thomascothran.pavlov.bthread :as b]
+            [tech.thomascothran.pavlov.ai.event :as aie]))
 
 (def text-response
   {:actions
@@ -33,10 +34,15 @@
   (b/on :email/list make-email-list-response))
 
 (defn -llm-response
-  [{:keys [llm-response-event-type]}]
+  [{:keys [llm-response-event-type]
+    agent-name :agent-name}]
+  (assert agent-name)
   (let [responses [text-response find-email-list email-send]]
     {:request (into #{}
-                    (map #(assoc {:type llm-response-event-type}
+                    (map #(assoc {:type aie/llm-response-event-type
+                                  ;; for retargeting
+                                  :agent-name agent-name
+                                  :retargeted-event-type llm-response-event-type}
                                  :response %))
                     responses)}))
 

@@ -10,16 +10,22 @@
 (def agent-response-event-type
   :pavlov.ai/agent-bthread-response)
 
+(def llm-response-event-type
+  :pavlov.ai/llm-response)
+
+(def action-response-event-type
+  :pavlov.ai/action-response)
+
 (defn make-invocation-event
   [agent-name m]
   (assoc m
-         :agent/name agent-name
+         :agent-name agent-name
          :type agent-invocation-event-type))
 
 (defn make-initialized-event
   [bthread-config]
   {:type agent-initialized-event
-   :agent/name (:name bthread-config)
+   :agent-name (:name bthread-config)
    :agent/config bthread-config})
 
 (defn make-agent-response
@@ -45,12 +51,15 @@
    (fan-out-agent-events
     #{agent-initialized-event
       agent-invocation-event-type
-      agent-response-event-type}))
+      agent-response-event-type
+      llm-response-event-type}))
   ([event-types]
    (b/on-any event-types
-             (fn [{bthread-name :agent/name
+             (fn [{bthread-name :agent-name
+                   retargeted-event-type :retargeted-event-type
                    event-type :type
                    :as event}]
                {:request
                 #{(assoc event :type
-                         [event-type bthread-name])}}))))
+                         (or retargeted-event-type
+                             [event-type bthread-name]))}}))))
