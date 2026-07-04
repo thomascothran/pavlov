@@ -12,12 +12,17 @@
      :lookback {:unit :minutes
                 :value 20}}]})
 
+(def email-send
+  {:actions
+   [{:type :email/send
+     :subject "Mission Accepted"
+     :message "I'll be in the Bahamas"}]})
+
 (def successfully-found-email-list
   {:truncated false
    :emails [{:from "boss"
              :message "Take a vacation"}]})
 
-;; TODO - handle email list call
 (defn make-email-list-response
   [{:keys [response-event-type]}]
   {:request #{{:message successfully-found-email-list
@@ -27,15 +32,9 @@
   []
   (b/on :email/list make-email-list-response))
 
-(defn- action-result-message?
-  [message]
-  (contains? message :emails))
-
 (defn -llm-response
-  [{:keys [llm-response-event-type messages]}]
-  (let [responses (if (some action-result-message? messages)
-                    [text-response]
-                    [text-response find-email-list])]
+  [{:keys [llm-response-event-type]}]
+  (let [responses [text-response find-email-list email-send]]
     {:request (into #{}
                     (map #(assoc {:type llm-response-event-type}
                                  :response %))
@@ -44,6 +43,15 @@
 (defn make-llm-response-bthread
   []
   (b/on :pavlov.ai/call-llm -llm-response))
+
+(defn make-llm-response-bthread
+  []
+  (b/bids [{:wait-on #{:pavlov.ai/call-llm}}
+           -llm-response
+           {:wait-on #{:pavlov.ai/call-llm}}
+           -llm-response
+           {:wait-on #{:pavlov.ai/call-llm}}
+           -llm-response]))
 
 (defn make-bthreads
   []

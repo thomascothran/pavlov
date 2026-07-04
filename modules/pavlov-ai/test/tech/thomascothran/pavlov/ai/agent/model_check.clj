@@ -10,18 +10,6 @@
 
 ;; Scenarios
 
-(defn make-safety-bthreads
-  []
-  {})
-
-(defn make-liveness-bthreads
-  []
-  {})
-
-(defn make-agent-bthreads
-  []
-  {})
-
 (defn make-bthreads
   []
   (into (scenarios/make-bthreads)
@@ -34,10 +22,10 @@
   (let [bthreads (make-bthreads)
         violations
         (check/check {:bthreads bthreads
-                      :possible (scenarios/possible-events)
+                      :possible (into #{:email/list :email/send :text-response}
+                                      (scenarios/possible-events))
                       :check-deadlock? false
                       :environment-bthreads (env/make-bthreads)})]
-    (def violations violations)
     (when violations
       (tap> [::violations violations]))
     (is (not (boolean violations)))))
