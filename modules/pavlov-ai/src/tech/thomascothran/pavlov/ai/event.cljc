@@ -16,7 +16,12 @@
 (def action-response-event-type
   :pavlov.ai/action-response)
 
+(def call-llm-event-type
+  :pavlov.ai/call-llm)
+
 (defn make-invocation-event
+  "Create the generic invocation event; the fan-out-agent-events
+  function is required to retarget to specific bthreads."
   [agent-name m]
   (assoc m
          :agent-name agent-name
@@ -29,6 +34,9 @@
    :agent/config bthread-config})
 
 (defn make-agent-response
+  "Given the result from the LLM, create a response event.
+
+  For now supports only 1 action."
   [action-response-type event] ;; should have action?
   (let [missing-event-type ::missing-event-type
 
@@ -43,6 +51,7 @@
 
       (= event-type missing-event-type)
       (assoc :invariant-violated true
+             :reason :missing-event-type
              :event event))))
 
 (defn fan-out-agent-events

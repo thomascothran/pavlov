@@ -6,26 +6,33 @@
                      make-initialized-event
                      make-agent-response
                      llm-response-event-type
-                     action-response-event-type]]))
+                     action-response-event-type
+                     call-llm-event-type]]))
 
 (defn make-llm-event
-  [agent-name llm-response-event-type
+  [agent-config llm-response-event-type
    {:keys [message-history llm-calls]
     :or {message-history []
          llm-calls 0}
     :as _state}
    {:keys [message] :as _event}]
-  (let [llm-calls' (inc llm-calls)]
-    {:type :pavlov.ai/call-llm
+  (assert (map? agent-config))
+  (let [agent-name (get agent-config :name)
+        actions (get agent-config :actions)
+        llm-calls' (inc llm-calls)
+        message' {:role "assistant"
+                  :content message}]
+    {:type call-llm-event-type
      :agent-name agent-name
+     :actions actions
      :llm-response-event-type llm-response-event-type
      :llm-calls llm-calls'
-     :messages (conj message-history message)}))
+     :messages (conj message-history message')}))
 
 (defn llm-invocation->bid
-  [agent-name state event llm-response-event-type default-waits]
+  [agent-config state event llm-response-event-type default-waits]
   (let [{:keys [messages llm-calls] :as llm-event}
-        (make-llm-event agent-name llm-response-event-type state event)
+        (make-llm-event agent-config llm-response-event-type state event)
         state (assoc state
                      :message-history messages
                      :llm-calls llm-calls)
@@ -54,16 +61,18 @@
 
            ;; invoke llm
            (= event-type invocation-event)
-           (llm-invocation->bid agent-name state event llm-response-event-type default-waits)
+           (llm-invocation->bid config state event llm-response-event-type default-waits)
 
            ;; llm responses
            (= event-type llm-response-event-type)
-           [state {:request
-                   #{(make-agent-response action-response-type event)}}]
+           (do (def event event)
+               [state
+                {:request
+                 #{(make-agent-response action-response-type event)}}])
 
            ;; action responses
            (= event-type action-response-type)
-           (llm-invocation->bid agent-name state event llm-response-event-type default-waits)
+           (llm-invocation->bid config state event llm-response-event-type default-waits)
 
            :else
            [state {:wait-on default-waits}]))))))

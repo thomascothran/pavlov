@@ -5,6 +5,7 @@
             [tech.thomascothran.pavlov.ai.schema :as ais]
             [tech.thomascothran.pavlov.ai.event
              :refer [make-invocation-event
+                     call-llm-event-type
                      agent-response-event-type]]))
 
 (def list-email-action
@@ -26,7 +27,6 @@
 
 (def happy-path-config
   {:name :happy-path
-   :response-event-type ::happy-path-response-event
    :actions {:email/list list-email-action
              :text-response text-response-action}})
 
@@ -50,7 +50,7 @@
              {:request #{invocation-event}
               :hot true}
 
-             {:wait-on #{:pavlov.ai/call-llm}
+             {:wait-on #{call-llm-event-type}
               :hot true}
 
              (fn [{:keys [llm-response-event-type]}] ;; done via test env

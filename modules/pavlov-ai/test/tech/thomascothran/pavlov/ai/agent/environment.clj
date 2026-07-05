@@ -25,9 +25,10 @@
              :message "Take a vacation"}]})
 
 (defn make-email-list-response
-  [{:keys [response-event-type]}]
+  [{:keys [response-event-type] :as e}]
   {:request #{{:message successfully-found-email-list
-               :type response-event-type}}})
+               :type response-event-type
+               :invariant-violated (nil? response-event-type)}}})
 
 (defn make-email-bthread
   []
@@ -40,7 +41,7 @@
   (let [responses [text-response find-email-list email-send]]
     {:request (into #{}
                     (map #(assoc {:type aie/llm-response-event-type
-                                  ;; for retargeting
+                                  ;; for fan-out retargeting
                                   :agent-name agent-name
                                   :retargeted-event-type llm-response-event-type}
                                  :response %))
@@ -48,15 +49,11 @@
 
 (defn make-llm-response-bthread
   []
-  (b/on :pavlov.ai/call-llm -llm-response))
-
-(defn make-llm-response-bthread
-  []
-  (b/bids [{:wait-on #{:pavlov.ai/call-llm}}
+  (b/bids [{:wait-on #{aie/call-llm-event-type}}
            -llm-response
-           {:wait-on #{:pavlov.ai/call-llm}}
+           {:wait-on #{aie/call-llm-event-type}}
            -llm-response
-           {:wait-on #{:pavlov.ai/call-llm}}
+           {:wait-on #{aie/call-llm-event-type}}
            -llm-response]))
 
 (defn make-bthreads

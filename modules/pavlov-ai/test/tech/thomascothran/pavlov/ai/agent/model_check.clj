@@ -5,6 +5,7 @@
              :as scenarios]
             [tech.thomascothran.pavlov.ai.agent.environment :as env]
             [tech.thomascothran.pavlov.ai.event :as ae]
+            [tech.thomascothran.pavlov.ai.agent.safety :as safety]
             [tech.thomascothran.pavlov.bthread]))
 
 ;; Scenarios
@@ -21,6 +22,7 @@
   (let [bthreads (make-bthreads)
         violations
         (check/check {:bthreads bthreads
+                      :safety-bthreads (safety/make-bthreads)
                       :possible (into #{:email/list :email/send :text-response}
                                       (scenarios/possible-events))
                       :check-deadlock? false
