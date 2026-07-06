@@ -82,8 +82,9 @@
            [(update state :message-history conj
                     {:content (:response event)
                      :role "assistant"})
-            {:request
-             #{(make-agent-response action-response-type event)}}]
+            {:request (make-agent-response
+                       (constantly action-response-type)
+                       event)}]
 
            ;; action responses
            (= event-type action-response-type)

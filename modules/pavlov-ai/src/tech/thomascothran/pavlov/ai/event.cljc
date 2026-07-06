@@ -36,23 +36,32 @@
 (defn make-agent-response
   "Given the result from the LLM, create a response event.
 
-  For now supports only 1 action."
+  Action-response-type is a function that takes the action type
+  and returns the type for the response to that action"
   [action-response-type event] ;; should have action?
-  (let [missing-event-type ::missing-event-type
+  (let [missing-event-type ::missing-event-type]
+    (into []
+          (comp (map #(assoc % :response-event-type
+                             (action-response-type (:type %))))
+                (map #(if (nil? (:type %))
+                        (assoc % :invariant-violated true
+                               :type missing-event-type)
+                        %)))
+          (get-in event [:response :actions]))))
 
-        event-type
-        (get-in event
-                [:response :actions 0 :type]
-                missing-event-type)]
+(comment
+  ;; The current `make-agent-response` preserves the original LLM response
+  ;; envelope and only changes the top-level event type. That means action
+  ;; arguments stay nested under [:response :actions 0 ...].
+  (def llm-email-list-response
+    {:type [:pavlov.ai/llm-response :happy-path]
+     :agent-name :happy-path
+     :response {:actions [{:type :email/list
+                           :lookback {:unit :minutes
+                                      :value 20}}]}})
 
-    (cond-> (assoc event
-                   :type event-type
-                   :response-event-type action-response-type)
-
-      (= event-type missing-event-type)
-      (assoc :invariant-violated true
-             :reason :missing-event-type
-             :event event))))
+  (make-agent-response (constantly [:pavlov.ai/action-response :happy-path])
+                       llm-email-list-response))
 
 (defn fan-out-agent-events
   "on any event-type fan out to individual events"
