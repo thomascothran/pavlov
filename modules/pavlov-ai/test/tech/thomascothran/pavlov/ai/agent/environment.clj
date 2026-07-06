@@ -26,7 +26,7 @@
 
 (defn make-email-list-response
   [{:keys [response-event-type] :as e}]
-  {:request #{{:message successfully-found-email-list
+  {:request #{{:result successfully-found-email-list
                :type response-event-type
                :invariant-violated (nil? response-event-type)}}})
 

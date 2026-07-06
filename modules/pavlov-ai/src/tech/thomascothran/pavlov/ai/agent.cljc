@@ -15,24 +15,38 @@
     :or {message-history []
          llm-calls 0}
     :as _state}
-   {:keys [message] :as _event}]
+   message]
   (assert (map? agent-config))
   (let [agent-name (get agent-config :name)
         actions (get agent-config :actions)
-        llm-calls' (inc llm-calls)
-        message' {:role "assistant"
-                  :content message}]
+        llm-calls' (inc llm-calls)]
     {:type call-llm-event-type
      :agent-name agent-name
      :actions actions
      :llm-response-event-type llm-response-event-type
      :llm-calls llm-calls'
-     :messages (conj message-history message')}))
+     :messages (conj message-history message)}))
 
-(defn llm-invocation->bid
+(defn llm-invocation->
+  "Produce the bid that invokes the LLM"
   [agent-config state event llm-response-event-type default-waits]
   (let [{:keys [messages llm-calls] :as llm-event}
-        (make-llm-event agent-config llm-response-event-type state event)
+        (make-llm-event agent-config llm-response-event-type state (:message event))
+        state (assoc state
+                     :message-history messages
+                     :llm-calls llm-calls)
+        bid {:wait-on default-waits
+             :request #{llm-event}}]
+    [state bid]))
+
+(defn action-result->
+  "Produce the bid from the action result"
+  [agent-config state {:keys [result] :as event}
+   llm-response-event-type default-waits]
+  (let [message {:content result
+                 :role "user"}
+        {:keys [messages llm-calls] :as llm-event}
+        (make-llm-event agent-config llm-response-event-type state message)
         state (assoc state
                      :message-history messages
                      :llm-calls llm-calls)
@@ -61,18 +75,19 @@
 
            ;; invoke llm
            (= event-type invocation-event)
-           (llm-invocation->bid config state event llm-response-event-type default-waits)
+           (llm-invocation-> config state event llm-response-event-type default-waits)
 
            ;; llm responses
            (= event-type llm-response-event-type)
-           (do (def event event)
-               [state
-                {:request
-                 #{(make-agent-response action-response-type event)}}])
+           [(update state :message-history conj
+                    {:content (:response event)
+                     :role "assistant"})
+            {:request
+             #{(make-agent-response action-response-type event)}}]
 
            ;; action responses
            (= event-type action-response-type)
-           (llm-invocation->bid config state event llm-response-event-type default-waits)
+           (action-result-> config state event llm-response-event-type default-waits)
 
            :else
            [state {:wait-on default-waits}]))))))

@@ -51,7 +51,7 @@
                                    :event event)}}
 
                 (missing-content? messages)
-                {:request #{(assoc missing-roles
+                {:request #{(assoc missing-content
                                    :event event)}}))))
 
 (defn make-bthreads
