@@ -5,7 +5,7 @@
 (def text-response
   {:actions
    [{:type :text-response
-     :message "Hello yourself"}]})
+     :response "Hello yourself"}]})
 
 (def find-email-list
   {:actions
@@ -13,11 +13,30 @@
      :lookback {:unit :minutes
                 :value 20}}]})
 
+(def find-email-list-with-invalid-arguments
+  {:actions
+   [{:type :email/list
+     :lookback {:unit :minutes
+                :value "twenty"}}]})
+
 (def email-send
   {:actions
    [{:type :email/send
      :subject "Mission Accepted"
      :message "I'll be in the Bahamas"}]})
+
+(def multiple-valid-actions
+  {:actions
+   [{:type :email/list
+     :lookback {:unit :minutes
+                :value 20}}
+    {:type :email/send
+     :subject "Mission Accepted"
+     :message "I'll be in the Bahamas"}]})
+
+(def non-existent-action
+  {:actions
+   [{:type :non-existent-action}]})
 
 (def successfully-found-email-list
   {:truncated false
@@ -38,7 +57,12 @@
   [{:keys [llm-response-event-type]
     agent-name :agent-name}]
   (assert agent-name)
-  (let [responses [text-response find-email-list email-send]]
+  (let [responses [text-response
+                   find-email-list
+                   find-email-list-with-invalid-arguments
+                   email-send
+                   multiple-valid-actions
+                   non-existent-action]]
     {:request (into #{}
                     (map #(assoc {:type aie/llm-response-event-type
                                   ;; for fan-out retargeting

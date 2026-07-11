@@ -18,6 +18,33 @@
   {:type ::missing-message-content
    :invariant-violated true})
 
+(def ^:private non-existent-action-requested
+  {:type ::non-existent-action-requested
+   :invariant-violated true})
+
+(def ^:private invalid-email-list-arguments-requested
+  {:type ::invalid-email-list-arguments-requested
+   :invariant-violated true})
+
+(def ^:private multiple-action-response-forwarded
+  {:type ::multiple-action-response-forwarded
+   :invariant-violated true})
+
+(defn make-invalid-email-list-arguments-bthread
+  []
+  (b/on :email/list
+        (fn [event]
+          (when (= "twenty" (get-in event [:lookback :value]))
+            {:request #{(assoc invalid-email-list-arguments-requested
+                               :event event)}}))))
+
+(defn make-non-existent-action-bthread
+  []
+  (b/on :non-existent-action
+        (fn [event]
+          {:request #{(assoc non-existent-action-requested
+                             :event event)}})))
+
 (defn make-action-spec-bthread
   []
   (b/on :pavlov.ai/call-llm
@@ -54,7 +81,37 @@
                 {:request #{(assoc missing-content
                                    :event event)}}))))
 
+(defn multiple-action-response?
+  [event]
+  (and (= [:pavlov.ai/llm-response :happy-path] (:type event))
+       (> (count (get-in event [:response :actions])) 1)))
+
+(defn make-multiple-action-response-not-forwarded-bthread
+  []
+  (b/bids
+   [{:wait-on #{[:pavlov.ai/llm-response :happy-path]}}
+
+    (fn [event]
+      (if (multiple-action-response? event)
+        {:wait-on #{:email/list
+                    :email/send
+                    :text-response
+                    [:pavlov.ai/action-rejected :happy-path]}
+         :hot nil #_true}
+        {:wait-on #{::unrelated-llm-response}}))
+
+    (fn [event]
+      (if (#{:email/list :email/send :text-response} (:type event))
+        {:request #{(assoc multiple-action-response-forwarded
+                           :event event)}}
+        {:request #{::multiple-actions-safely-rejected}}))]))
+
 (defn make-bthreads
   []
-  {::make-action-spec-bthread (make-action-spec-bthread)
-   ::make-history-check-bthread (make-history-check-bthread)})
+  {::make-invalid-email-list-arguments-bthread
+   (make-invalid-email-list-arguments-bthread)
+   ::make-non-existent-action-bthread (make-non-existent-action-bthread)
+   ::make-action-spec-bthread (make-action-spec-bthread)
+   ::make-history-check-bthread (make-history-check-bthread)
+   ::make-multiple-action-response-not-forwarded-bthread
+   (make-multiple-action-response-not-forwarded-bthread)})

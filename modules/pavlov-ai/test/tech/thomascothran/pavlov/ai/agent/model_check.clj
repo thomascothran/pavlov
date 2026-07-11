@@ -23,10 +23,14 @@
         violations
         (check/check {:bthreads bthreads
                       :safety-bthreads (safety/make-bthreads)
-                      :possible (into #{:email/list :email/send :text-response}
+                      :possible (into #{:email/list
+                                        :email/send
+                                        :text-response
+                                        ::safety/multiple-actions-safely-rejected}
                                       (scenarios/possible-events))
                       :check-deadlock? false
                       :environment-bthreads (env/make-bthreads)})]
+    (def violations violations)
     (when violations
       (tap> [::violations violations]))
     (is (not (boolean violations)))))

@@ -6,6 +6,7 @@
             [tech.thomascothran.pavlov.ai.event
              :refer [make-invocation-event
                      call-llm-event-type
+                     action-rejected-event-type
                      agent-response-event-type]]))
 
 (def list-email-action
@@ -20,6 +21,13 @@
 (comment
   (-> list-email-action :request/schema ais/->json-schema))
 
+(def send-email-action
+  {:description "Send an email"
+   :request/schema [:map
+                    [:subject :string]
+                    [:message :string]]
+   :success/type :email/send-succeeded})
+
 (def text-response-action
   {:description "Respond to the user with text. Yields control back to the bprogram."
    :request/schema [:map [:response :string]]
@@ -28,6 +36,7 @@
 (def happy-path-config
   {:name :happy-path
    :actions {:email/list list-email-action
+             :email/send send-email-action
              :text-response text-response-action}})
 
 (def hello-world-message
@@ -72,11 +81,94 @@
            {:wait-on #{[:pavlov.ai/llm-response :happy-path]}}
            {:request #{{:type :! :invariant-violated true}}}]))
 
+(defn- rejection-has?
+  [event action-type reason]
+  (some #(and (= action-type (:action-type %))
+              (= reason (:reason %)))
+        (:violations event)))
+
+(defn- wait-for-addressed-rejection
+  [action-type reason {:keys [type agent-name] :as event}]
+  (if (rejection-has? event action-type reason)
+    {:wait-on #{[type agent-name]}}
+    {:wait-on #{::unrelated-action-rejection}}))
+
+(defn- llm-called-with-rejection
+  [event]
+  (let [message (last (:messages event))
+        content (:content message)
+        undeclared-action?
+        (some #(and (= :non-existent-action (:action-type %))
+                    (= :undeclared-action (:reason %)))
+              (:violations content))]
+    (if (and (= "user" (:role message))
+             (= :action-rejected (:kind content))
+             undeclared-action?)
+      {:request #{::invalid-action-returned-to-llm}}
+      {:request #{{:type ::invalid-action-not-returned-to-llm
+                   :invariant-violated true
+                   :expected {:kind :action-rejected
+                              :action-type :non-existent-action
+                              :reason :undeclared-action}
+                   :llm-call event}}})))
+
+(defn- llm-called-with-invalid-arguments-rejection
+  [event]
+  (let [message (last (:messages event))
+        content (:content message)
+        invalid-arguments?
+        (some #(and (= :email/list (:action-type %))
+                    (= :invalid-arguments (:reason %))
+                    (some? (:explanation %)))
+              (:violations content))]
+    (if (and (= "user" (:role message))
+             (= :action-rejected (:kind content))
+             invalid-arguments?)
+      {:request #{::invalid-action-arguments-returned-to-llm}}
+      {:request #{{:type ::invalid-action-arguments-not-returned-to-llm
+                   :invariant-violated true
+                   :expected {:kind :action-rejected
+                              :action-type :email/list
+                              :reason :invalid-arguments
+                              :explanation :present}
+                   :llm-call event}}})))
+
+(defn make-invalid-action-rejection-path
+  []
+  (b/bids
+   [{:wait-on #{action-rejected-event-type}}
+
+    (partial wait-for-addressed-rejection
+             :non-existent-action
+             :undeclared-action)
+
+    {:wait-on #{call-llm-event-type}}
+
+    llm-called-with-rejection]))
+
+(defn make-invalid-action-arguments-rejection-path
+  []
+  (b/bids
+   [{:wait-on #{action-rejected-event-type}}
+
+    (partial wait-for-addressed-rejection
+             :email/list
+             :invalid-arguments)
+
+    {:wait-on #{call-llm-event-type}}
+
+    llm-called-with-invalid-arguments-rejection]))
+
 (defn make-bthreads
   []
   {::minimal-happy-path (make-minimal-happy-path)
+   ::invalid-action-rejection-path (make-invalid-action-rejection-path)
+   ::invalid-action-arguments-rejection-path
+   (make-invalid-action-arguments-rejection-path)
    :tool-call-path (make-tool-call-path)})
 
 (defn possible-events
   []
-  #{::successful-happy-path})
+  #{::successful-happy-path
+    ::invalid-action-returned-to-llm
+    ::invalid-action-arguments-returned-to-llm})
