@@ -6,8 +6,7 @@
             [tech.thomascothran.pavlov.ai.event
              :refer [make-invocation-event
                      call-llm-event-type
-                     action-rejected-event-type
-                     agent-response-event-type]]))
+                     action-rejected-event-type]]))
 
 (def list-email-action
   {:description "List recent emails"

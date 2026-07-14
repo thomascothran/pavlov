@@ -29,10 +29,10 @@
   {:actions
    [{:type :email/list
      :lookback {:unit :minutes
-                :value 20}}
+                :value 21}}
     {:type :email/send
-     :subject "Mission Accepted"
-     :message "I'll be in the Bahamas"}]})
+     :subject "Multiple action response"
+     :message "This action must not be forwarded"}]})
 
 (def non-existent-action
   {:actions
@@ -64,10 +64,8 @@
                    multiple-valid-actions
                    non-existent-action]]
     {:request (into #{}
-                    (map #(assoc {:type aie/llm-response-event-type
-                                  ;; for fan-out retargeting
-                                  :agent-name agent-name
-                                  :retargeted-event-type llm-response-event-type}
+                    (map #(assoc {:type llm-response-event-type}
+                                 :agent-name agent-name
                                  :response %))
                     responses)}))
 

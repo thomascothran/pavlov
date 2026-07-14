@@ -28,19 +28,18 @@
   [agent-name m]
   (assoc m
          :agent-name agent-name
-         :type agent-invocation-event-type))
+         :type [agent-invocation-event-type agent-name]))
 
 (defn make-initialized-event
   [bthread-config]
-  {:type agent-initialized-event
-   :agent-name (:name bthread-config)
+  {:agent-name (:name bthread-config)
+   :type [agent-initialized-event (:name bthread-config)]
    :agent/config bthread-config})
 
 (defn make-action-rejected-event
-  [agent-name retargeted-event-type violations]
-  {:type action-rejected-event-type
+  [agent-name violations]
+  {:type [action-rejected-event-type agent-name]
    :agent-name agent-name
-   :retargeted-event-type retargeted-event-type
    :violations violations})
 
 (defn make-agent-response
@@ -72,23 +71,3 @@
 
   (make-agent-response (constantly [:pavlov.ai/action-response :happy-path])
                        llm-email-list-response))
-
-(defn fan-out-agent-events
-  "on any event-type fan out to individual events"
-  ([]
-   (fan-out-agent-events
-    #{agent-initialized-event
-      agent-invocation-event-type
-      agent-response-event-type
-      llm-response-event-type
-      action-rejected-event-type}))
-  ([event-types]
-   (b/on-any event-types
-             (fn [{bthread-name :agent-name
-                   retargeted-event-type :retargeted-event-type
-                   event-type :type
-                   :as event}]
-               {:request
-                #{(assoc event :type
-                         (or retargeted-event-type
-                             [event-type bthread-name]))}}))))

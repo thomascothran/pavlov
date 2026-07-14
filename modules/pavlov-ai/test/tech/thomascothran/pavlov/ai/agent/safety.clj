@@ -30,6 +30,10 @@
   {:type ::multiple-action-response-forwarded
    :invariant-violated true})
 
+(def ^:private overlapping-llm-call
+  {:type ::overlapping-llm-call
+   :invariant-violated true})
+
 (defn make-invalid-email-list-arguments-bthread
   []
   (b/on :email/list
@@ -86,6 +90,11 @@
   (and (= [:pavlov.ai/llm-response :happy-path] (:type event))
        (> (count (get-in event [:response :actions])) 1)))
 
+(defn forwarded-multiple-action?
+  [event]
+  (or (= {:unit :minutes :value 21} (:lookback event))
+      (= "Multiple action response" (:subject event))))
+
 (defn make-multiple-action-response-not-forwarded-bthread
   []
   (b/bids
@@ -101,10 +110,24 @@
         {:wait-on #{::unrelated-llm-response}}))
 
     (fn [event]
-      (if (#{:email/list :email/send :text-response} (:type event))
+      (if (forwarded-multiple-action? event)
         {:request #{(assoc multiple-action-response-forwarded
                            :event event)}}
         {:request #{::multiple-actions-safely-rejected}}))]))
+
+(defn make-single-llm-call-safety-bthread
+  []
+  (b/bids
+   [{:wait-on #{:pavlov.ai/call-llm}}
+
+    {:wait-on #{:pavlov.ai/call-llm
+                [:pavlov.ai/llm-response :happy-path]}}
+
+    (fn [event]
+      (if (= :pavlov.ai/call-llm (:type event))
+        {:request #{(assoc overlapping-llm-call
+                           :event event)}}
+        {:wait-on #{::single-llm-call-observed}}))]))
 
 (defn make-bthreads
   []
@@ -114,4 +137,6 @@
    ::make-action-spec-bthread (make-action-spec-bthread)
    ::make-history-check-bthread (make-history-check-bthread)
    ::make-multiple-action-response-not-forwarded-bthread
-   (make-multiple-action-response-not-forwarded-bthread)})
+   (make-multiple-action-response-not-forwarded-bthread)
+   ::make-single-llm-call-safety-bthread
+   (make-single-llm-call-safety-bthread)})

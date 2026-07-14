@@ -12,9 +12,7 @@
 
 (defn make-bthreads
   []
-  (into (scenarios/make-bthreads)
-        {::fanout-agent-events
-         (ae/fan-out-agent-events)}))
+  (scenarios/make-bthreads))
 
 ;; =====
 
@@ -25,12 +23,12 @@
                       :safety-bthreads (safety/make-bthreads)
                       :possible (into #{:email/list
                                         :email/send
-                                        :text-response
-                                        ::safety/multiple-actions-safely-rejected}
+                                        :text-response}
                                       (scenarios/possible-events))
                       :check-deadlock? false
                       :environment-bthreads (env/make-bthreads)})]
     (def violations violations)
+    (-> violations :liveness-violation :path-edges)
     (when violations
       (tap> [::violations violations]))
     (is (not (boolean violations)))))
