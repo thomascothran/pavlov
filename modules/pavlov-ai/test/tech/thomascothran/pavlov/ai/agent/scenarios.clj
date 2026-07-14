@@ -5,8 +5,8 @@
             [tech.thomascothran.pavlov.ai.schema :as ais]
             [tech.thomascothran.pavlov.ai.event
              :refer [make-invocation-event
-                     call-llm-event-type
-                     action-rejected-event-type]]))
+                     call-llm-event-type]
+             :as aie]))
 
 (def list-email-action
   {:description "List recent emails"
@@ -80,16 +80,19 @@
            {:wait-on #{[:pavlov.ai/llm-response :happy-path]}}
            {:request #{{:type :! :invariant-violated true}}}]))
 
-(defn- rejection-has?
+(defn- rejection-for?
   [event action-type reason]
   (some #(and (= action-type (:action-type %))
               (= reason (:reason %)))
         (:violations event)))
 
 (defn- wait-for-addressed-rejection
-  [action-type reason {:keys [type agent-name] :as event}]
-  (if (rejection-has? event action-type reason)
-    {:wait-on #{[type agent-name]}}
+  [action-type reason {:keys [type] :as event}]
+  (def event event)
+  (def reason reason)
+  (def action-type action-type)
+  (if (rejection-for? event action-type reason)
+    {:wait-on #{type}}
     {:wait-on #{::unrelated-action-rejection}}))
 
 (defn- llm-called-with-rejection
@@ -135,26 +138,28 @@
 (defn make-invalid-action-rejection-path
   []
   (b/bids
-   [{:wait-on #{action-rejected-event-type}}
+   [{:wait-on #{(aie/make-action-rejected-event-type
+                 :happy-path)}}
 
-    (partial wait-for-addressed-rejection
-             :non-existent-action
-             :undeclared-action)
-
-    {:wait-on #{call-llm-event-type}}
+    (fn [event]
+      (if (rejection-for? event
+                          :non-existent-action
+                          :undeclared-action)
+        {:wait-on #{call-llm-event-type}}
+        {}))
 
     llm-called-with-rejection]))
 
 (defn make-invalid-action-arguments-rejection-path
   []
   (b/bids
-   [{:wait-on #{action-rejected-event-type}}
+   [{:wait-on #{(aie/make-action-rejected-event-type
+                 :happy-path)}}
 
-    (partial wait-for-addressed-rejection
-             :email/list
-             :invalid-arguments)
-
-    {:wait-on #{call-llm-event-type}}
+    (fn [event]
+      (if (rejection-for? event :email/list :invalid-arguments)
+        {:wait-on #{call-llm-event-type}}
+        {}))
 
     llm-called-with-invalid-arguments-rejection]))
 

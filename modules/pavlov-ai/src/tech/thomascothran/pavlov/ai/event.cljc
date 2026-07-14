@@ -36,6 +36,10 @@
    :type [agent-initialized-event (:name bthread-config)]
    :agent/config bthread-config})
 
+(defn make-action-rejected-event-type
+  [agent-name]
+  [action-rejected-event-type agent-name])
+
 (defn make-action-rejected-event
   [agent-name violations]
   {:type [action-rejected-event-type agent-name]
