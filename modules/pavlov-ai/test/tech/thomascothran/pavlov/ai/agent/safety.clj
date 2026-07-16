@@ -1,37 +1,46 @@
 (ns tech.thomascothran.pavlov.ai.agent.safety
-  (:require [tech.thomascothran.pavlov.bthread :as b]))
+  (:require [tech.thomascothran.pavlov.bthread :as b]
+            [tech.thomascothran.pavlov.event :as e]))
 
 (def ^:private
   missing-actions
   {:type ::missing-actions
+   :terminal true
    :invariant-violated true})
 
 (def ^:private missing-messages
   {:type ::missing-message-history
+   :terminal true
    :invariant-violated true})
 
 (def ^:private missing-roles
   {:type ::missing-message-roles
+   :terminal true
    :invariant-violated true})
 
 (def ^:private missing-content
   {:type ::missing-message-content
+   :terminal true
    :invariant-violated true})
 
 (def ^:private non-existent-action-requested
   {:type ::non-existent-action-requested
+   :terminal true
    :invariant-violated true})
 
 (def ^:private invalid-email-list-arguments-requested
   {:type ::invalid-email-list-arguments-requested
+   :terminal true
    :invariant-violated true})
 
 (def ^:private multiple-action-response-forwarded
   {:type ::multiple-action-response-forwarded
+   :terminal true
    :invariant-violated true})
 
 (def ^:private overlapping-llm-call
   {:type ::overlapping-llm-call
+   :terminal true
    :invariant-violated true})
 
 (defn make-invalid-email-list-arguments-bthread
@@ -84,6 +93,53 @@
                 (missing-content? messages)
                 {:request #{(assoc missing-content
                                    :event event)}}))))
+
+(defn make-ensure-call-ids-bthread
+  []
+  (let [default-bid {:wait-on #{:pavlov.ai/call-llm}}
+
+        id-check-request-request
+        (fn id-check-bid
+          [state event agent-name]
+          (let [mismatch-call-count
+                (not= (-> state
+                          (get-in [:call-count agent-name] 0)
+                          inc)
+                      (:llm-calls event)
+                      (get-in event [:llm-call-id 1]))
+
+                wrong-agent-name
+                (not= agent-name
+                      (get-in event [:llm-call-id 0]))
+                base {:type ::call-id-check-failed
+                      :terminal true
+                      :invariant-violated true
+                      :state state
+                      :event event}]
+            (cond mismatch-call-count
+                  (assoc base :reason :mismatched-call-count)
+
+                  wrong-agent-name
+                  (assoc base :reason :wrong-agent-name))))]
+    (b/step
+     (fn [state event]
+       (let [event-type (e/type event)
+             agent-name (when (map? event)
+                          (get event :agent-name))
+
+             state-call-count
+             (get-in state [:call-count agent-name] 0)]
+
+         (cond (nil? event)
+               [state default-bid]
+
+               (= :pavlov.ai/call-llm event-type)
+               [(assoc-in state
+                          [:call-count agent-name]
+                          (inc state-call-count))
+                (if-let [request (id-check-request-request state event agent-name)]
+                  (assoc default-bid :request #{request})
+                  default-bid)]))))))
 
 (defn multiple-action-response?
   [event]
@@ -139,4 +195,5 @@
    ::make-multiple-action-response-not-forwarded-bthread
    (make-multiple-action-response-not-forwarded-bthread)
    ::make-single-llm-call-safety-bthread
-   (make-single-llm-call-safety-bthread)})
+   (make-single-llm-call-safety-bthread)
+   ::ensure-call-ids (make-ensure-call-ids-bthread)})

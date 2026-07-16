@@ -62,6 +62,10 @@
                         %)))
           (get-in event [:response :actions]))))
 
+(defn make-action-response-type
+  [agent-name]
+  [action-response-event-type agent-name])
+
 (comment
   ;; The current `make-agent-response` preserves the original LLM response
   ;; envelope and only changes the top-level event type. That means action

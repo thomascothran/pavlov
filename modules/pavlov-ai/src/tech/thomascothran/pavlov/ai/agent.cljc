@@ -10,7 +10,8 @@
                      llm-response-event-type
                      action-response-event-type
                      action-rejected-event-type
-                     call-llm-event-type]]))
+                     call-llm-event-type
+                     make-action-response-type]]))
 
 (defn make-llm-event
   [agent-config llm-response-event-type
@@ -26,6 +27,7 @@
     {:type call-llm-event-type
      :agent-name agent-name
      :actions actions
+     :llm-call-id [agent-name llm-calls']
      :llm-response-event-type llm-response-event-type
      :llm-calls llm-calls'
      :messages (conj message-history message)}))
@@ -108,8 +110,7 @@
   config)
 
 (defn- make-single-flight-only-bthread
-  [{:keys [bthread-name
-           call-llm-event-type
+  [{:keys [call-llm-event-type
            agent-invocation-event-type
            llm-response-event-type]}]
   (let [default-bid {:wait-on #{call-llm-event-type}}
@@ -118,8 +119,7 @@
     (b/step
      (fn [state event]
        (let [event-type (event/type event)]
-         (if (and (= event-type call-llm-event-type)
-                  (= bthread-name (:agent-name event)))
+         (if (= event-type call-llm-event-type)
            [state block-until]
            [state default-bid]))))))
 
@@ -139,7 +139,8 @@
         invocation-event [agent-invocation-event-type agent-name]
         llm-response-event-type [llm-response-event-type agent-name]
         ;; Assumes that we only have one tool call outstanding at a time
-        action-response-type [action-response-event-type agent-name]
+        action-response-type
+        (make-action-response-type agent-name)
         action-rejected-response-type [action-rejected-event-type agent-name]
         default-waits #{invocation-event
                         llm-response-event-type
