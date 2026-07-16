@@ -172,13 +172,15 @@
          :saved-bthread-states saved-initial-states})
 
       (succ [this wrapped]
-        (let [path (:path wrapped)
-              sid (identifier this wrapped)
-              successor-templates (or (get @successor-cache sid)
-                                      (let [templates (compute-successor-templates wrapped)]
-                                        (swap! successor-cache assoc sid templates)
-                                        templates))]
-          (materialize-successors path successor-templates)))
+        (if (event/terminal? (get-in wrapped [:bprogram/state :last-event]))
+          []
+          (let [path (:path wrapped)
+                sid (identifier this wrapped)
+                successor-templates (or (get @successor-cache sid)
+                                        (let [templates (compute-successor-templates wrapped)]
+                                          (swap! successor-cache assoc sid templates)
+                                          templates))]
+            (materialize-successors path successor-templates))))
 
       (identifier [_ wrapped]
         ;; Use saved states instead of live bthread states to avoid mutation issues
