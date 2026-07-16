@@ -94,7 +94,84 @@
                 {:request #{(assoc missing-content
                                    :event event)}}))))
 
-(defn make-ensure-call-ids-bthread
+(defn make-llm-id-tracing-bthread
+  "Ensures that llm ids are properly passed through"
+  []
+  (b/step
+   (fn [{:keys [wait-on event->call-id]
+         :as state}
+        event]
+     (let [event-type (e/type event)]
+       (cond
+         (nil? event-type) ;; setup
+         [{:wait-on #{:pavlov.ai/call-llm}}
+          {:wait-on #{:pavlov.ai/call-llm}}]
+
+         (= :pavlov.ai/call-llm event-type)
+         (let [{:keys [llm-response-event-type
+                       llm-call-id]} event
+
+               _ (assert llm-response-event-type)
+               _ (assert llm-call-id)
+               next-state
+               (-> state
+                   (assoc-in [:event->call-id
+                              llm-response-event-type]
+                             llm-call-id)
+                   (update :wait-on conj llm-response-event-type))
+
+               bid
+               {:wait-on (conj wait-on llm-response-event-type)}]
+           [next-state bid])
+
+         ;; we have another event - the response
+         (get event->call-id event-type)
+         (let [expected-llm-call-id
+               (get-in state [:event->call-id event-type])
+
+               actual-llm-call-id (get event :llm-call-id)
+
+               request
+               (when (not= expected-llm-call-id
+                           actual-llm-call-id)
+                 {:type ::mismatched-call-id
+                  :terminal true
+                  :invariant-violated true
+                  :actual-llm-call-id actual-llm-call-id
+                  :expected-llm-call-id expected-llm-call-id
+                  :event event})
+
+               response-event-type (:response-event-type event)
+
+               ;; extract events and actions from
+               ;; llm response events
+               action-events->llm-call-id
+               (into (if response-event-type
+                       {response-event-type actual-llm-call-id}
+                       {})
+                     (comp (map e/type)
+                           (map #(vector % actual-llm-call-id)))
+                     (get-in event [:response :actions]))
+
+               new-waits
+               (-> wait-on
+                   (disj event-type)
+                   (into (keys action-events->llm-call-id)))
+
+               new-state
+               (-> state
+                   (update :event->call-id dissoc event-type)
+                   (update :event->call-id merge action-events->llm-call-id)
+                   (assoc :wait-on new-waits))]
+
+           [new-state
+            (cond-> {:wait-on new-waits}
+              request (assoc :request #{request}))])
+
+         :else
+         [state {:wait-on wait-on}])))))
+
+(defn make-ensure-call-ids-on-llm-calls-bthread
   []
   (let [default-bid {:wait-on #{:pavlov.ai/call-llm}}
 
@@ -196,4 +273,5 @@
    (make-multiple-action-response-not-forwarded-bthread)
    ::make-single-llm-call-safety-bthread
    (make-single-llm-call-safety-bthread)
-   ::ensure-call-ids (make-ensure-call-ids-bthread)})
+   ::ensure-call-ids (make-ensure-call-ids-on-llm-calls-bthread)
+   ::llm-id-tracing-bthread (make-llm-id-tracing-bthread)})

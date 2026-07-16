@@ -44,9 +44,11 @@
              :message "Take a vacation"}]})
 
 (defn make-email-list-response
-  [{:keys [response-event-type] :as e}]
+  [{:keys [response-event-type
+           llm-call-id]}]
   {:request #{{:result successfully-found-email-list
                :type response-event-type
+               :llm-call-id llm-call-id
                :invariant-violated (nil? response-event-type)}}})
 
 (defn make-email-bthread
@@ -54,9 +56,10 @@
   (b/on :email/list make-email-list-response))
 
 (defn -llm-response
-  [{:keys [llm-response-event-type]
+  [{:keys [llm-response-event-type llm-call-id]
     agent-name :agent-name}]
   (assert agent-name)
+  (assert llm-call-id)
   (let [responses [text-response
                    find-email-list
                    find-email-list-with-invalid-arguments
@@ -65,6 +68,7 @@
                    non-existent-action]]
     {:request (into #{}
                     (map #(assoc {:type llm-response-event-type}
+                                 :llm-call-id llm-call-id
                                  :agent-name agent-name
                                  :response %))
                     responses)}))

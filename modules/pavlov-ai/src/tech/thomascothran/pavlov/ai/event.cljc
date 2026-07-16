@@ -51,11 +51,16 @@
 
   Action-response-type is a function that takes the action type
   and returns the type for the response to that action"
-  [action-response-type event] ;; should have action?
+  [action-response-type
+   {:keys [llm-call-id] :as event}] ;; should have action?
+  (assert llm-call-id)
   (let [missing-event-type ::missing-event-type]
     (into []
-          (comp (map #(assoc % :response-event-type
-                             (action-response-type (:type %))))
+          (comp (map #(assoc %
+                             :response-event-type
+                             (action-response-type (:type %))
+                             :llm-call-id llm-call-id))
+
                 (map #(if (nil? (:type %))
                         (assoc % :invariant-violated true
                                :type missing-event-type)
