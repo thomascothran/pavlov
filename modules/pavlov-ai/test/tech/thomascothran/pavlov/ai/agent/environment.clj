@@ -43,17 +43,39 @@
    :emails [{:from "boss"
              :message "Take a vacation"}]})
 
-(defn make-email-list-response
-  [{:keys [response-event-type
-           llm-call-id]}]
-  {:request #{{:result successfully-found-email-list
+(defn- action-response
+  "Return an action response that preserves its originating action and LLM call."
+  [result {:keys [response-event-type llm-call-id]
+           action-type :type}]
+  {:request #{{:result result
                :type response-event-type
+               :action-type action-type
                :llm-call-id llm-call-id
                :invariant-violated (nil? response-event-type)}}})
+
+(defn make-email-list-response
+  [event]
+  (action-response successfully-found-email-list event))
+
+(defn make-email-send-response
+  [event]
+  (action-response {:sent true} event))
+
+(defn make-text-response
+  [{:keys [response] :as event}]
+  (action-response {:response response} event))
 
 (defn make-email-bthread
   []
   (b/on :email/list make-email-list-response))
+
+(defn make-email-send-bthread
+  []
+  (b/on :email/send make-email-send-response))
+
+(defn make-text-response-bthread
+  []
+  (b/on :text-response make-text-response))
 
 (defn -llm-response
   [{:keys [llm-response-event-type llm-call-id]
@@ -85,4 +107,6 @@
 (defn make-bthreads
   []
   {::llm-response (make-llm-response-bthread)
-   ::email (make-email-bthread)})
+   ::email (make-email-bthread)
+   ::email-send (make-email-send-bthread)
+   ::text-response (make-text-response-bthread)})

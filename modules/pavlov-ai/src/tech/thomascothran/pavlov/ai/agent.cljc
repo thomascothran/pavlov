@@ -97,6 +97,7 @@
 (defn- action-rejected-message
   [event]
   {:role "user"
+   :llm-call-id (:llm-call-id event)
    :content {:kind :action-rejected
              :violations (:violations event)}})
 
@@ -170,10 +171,11 @@
 
            ;; llm responses
            (= event-type llm-response-event-type)
-           (let [response (:response event)
+           (let [{:keys [response llm-call-id]} event
                  state (update state :message-history conj
                                {:content response
-                                :role "assistant"})
+                                :role "assistant"
+                                :llm-call-id llm-call-id})
                  errors (action-validation-errors
                          (:actions config)
                          (:actions response))]
@@ -181,6 +183,7 @@
                [state
                 {:request #{(make-action-rejected-event
                              agent-name
+                             llm-call-id
                              errors)}
                  :wait-on default-waits}]
                [state

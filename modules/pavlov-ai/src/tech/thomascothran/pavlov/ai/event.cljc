@@ -41,9 +41,11 @@
   [action-rejected-event-type agent-name])
 
 (defn make-action-rejected-event
-  [agent-name violations]
+  [agent-name llm-call-id violations]
+  (assert llm-call-id)
   {:type [action-rejected-event-type agent-name]
    :agent-name agent-name
+   :llm-call-id llm-call-id
    :violations violations})
 
 (defn make-agent-response
