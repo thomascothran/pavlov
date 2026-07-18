@@ -5,7 +5,9 @@
 
   - `:llm-responses` contains `[response-event-type llm-call-id]` pairs.
   - `:actions` is keyed by `[action-type llm-call-id]` and records whether
-    each action is awaiting its request event or its response event."
+    each action is awaiting its request event or its response event.
+  - `:assistant-history` records LLM responses that must appear, with their
+    call IDs, in the next observable message history for that agent."
   (:require [tech.thomascothran.pavlov.bthread :as b]
             [tech.thomascothran.pavlov.event :as e]))
 
@@ -16,6 +18,9 @@
 
 (def ^:private ambiguous-action-response-event-type
   :tech.thomascothran.pavlov.ai.agent.safety/ambiguous-action-response)
+
+(def ^:private missing-assistant-history-event-type
+  :tech.thomascothran.pavlov.ai.agent.safety/missing-assistant-history)
 
 (defn- pending-event-types
   "Return the event types that can complete a pending LLM or action correlation."
@@ -73,19 +78,63 @@
   "Initialize the correlation indexes and wait for the first LLM call."
   []
   (let [state {:llm-responses #{}
-               :actions {}}]
+               :actions {}
+               :assistant-history {}}]
     [state (continue-monitoring state)]))
 
+(defn- assistant-message-recorded?
+  "Return true when message history contains the expected assistant response."
+  [messages llm-call-id response]
+  (some #(and (= "assistant" (:role %))
+              (= llm-call-id (:llm-call-id %))
+              (= response (:content %)))
+        messages))
+
+(defn- missing-assistant-history
+  "Return assistant responses absent from the next history emitted by AGENT-NAME."
+  [assistant-history agent-name messages]
+  (into {}
+        (remove (fn [[llm-call-id response]]
+                  (or (not= agent-name (first llm-call-id))
+                      (assistant-message-recorded? messages
+                                                   llm-call-id
+                                                   response))))
+        assistant-history))
+
+(defn- forget-assistant-history
+  "Remove verified assistant-history obligations for AGENT-NAME."
+  [state agent-name]
+  (update state :assistant-history
+          (fn [assistant-history]
+            (into {}
+                  (remove (fn [[llm-call-id _response]]
+                            (= agent-name (first llm-call-id))))
+                  assistant-history))))
+
 (defn- remember-llm-call
-  "Remember the response event and ID expected for an emitted LLM call."
-  [state {:keys [llm-response-event-type llm-call-id]}]
+  "Verify prior assistant history and remember the response expected for this call."
+  [state {:keys [agent-name llm-response-event-type llm-call-id messages]
+          :as event}]
   (assert llm-response-event-type)
   (assert llm-call-id)
-  (let [next-state (update state
-                           :llm-responses
-                           conj
-                           [llm-response-event-type llm-call-id])]
-    [next-state (continue-monitoring next-state)]))
+  (let [missing-history (missing-assistant-history (:assistant-history state)
+                                                   agent-name
+                                                   messages)
+        violation (when (seq missing-history)
+                    {:type missing-assistant-history-event-type
+                     :terminal true
+                     :invariant-violated true
+                     :agent-name agent-name
+                     :missing-assistant-history missing-history
+                     :event event})
+        next-state (if violation
+                     state
+                     (-> state
+                         (forget-assistant-history agent-name)
+                         (update :llm-responses
+                                 conj
+                                 [llm-response-event-type llm-call-id])))]
+    [next-state (continue-monitoring next-state violation)]))
 
 (defn- remember-response-actions
   "Replace a completed LLM response correlation with its expected actions."
@@ -109,7 +158,9 @@
           (-> state
               (update :llm-responses disj
                       [event-type actual-llm-call-id])
-              (update :actions merge action-entries)))]
+              (update :actions merge action-entries)
+              (assoc-in [:assistant-history actual-llm-call-id]
+                        (:response event))))]
     [next-state (continue-monitoring next-state mismatch)]))
 
 (defn- await-action-response
