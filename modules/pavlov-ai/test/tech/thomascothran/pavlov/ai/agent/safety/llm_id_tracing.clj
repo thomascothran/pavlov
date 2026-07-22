@@ -6,8 +6,10 @@
   - `:llm-responses` contains `[response-event-type llm-call-id]` pairs.
   - `:actions` is keyed by `[action-type llm-call-id]` and records whether
     each action is awaiting its request event or its response event.
-  - `:assistant-history` records LLM responses that must appear, with their
-    call IDs, in the next observable message history for that agent."
+  - `:rejections` contains `[rejection-event-type llm-call-id]` alternatives
+    to action requests.
+  - `:assistant-history` and `:rejection-history` record messages that must
+    appear, with their call IDs, in the next observable history for that agent."
   (:require [tech.thomascothran.pavlov.bthread :as b]
             [tech.thomascothran.pavlov.event :as e]))
 
@@ -22,12 +24,18 @@
 (def ^:private missing-assistant-history-event-type
   :tech.thomascothran.pavlov.ai.agent.safety/missing-assistant-history)
 
+(def ^:private missing-rejection-history-event-type
+  :tech.thomascothran.pavlov.ai.agent.safety/missing-rejection-history)
+
+(def ^:private action-rejected-event-type :pavlov.ai/action-rejected)
+
 (defn- pending-event-types
   "Return the event types that can complete a pending LLM or action correlation."
-  [{:keys [llm-responses actions]}]
+  [{:keys [llm-responses actions rejections]}]
   (into #{call-llm-event-type}
         (concat
          (map first llm-responses)
+         (map first rejections)
          (map (fn [[[action-type _llm-call-id]
                     {:keys [stage response-event-type]}]]
                 (if (= :request stage)
@@ -79,7 +87,9 @@
   []
   (let [state {:llm-responses #{}
                :actions {}
-               :assistant-history {}}]
+               :rejections #{}
+               :assistant-history {}
+               :rejection-history {}}]
     [state (continue-monitoring state)]))
 
 (defn- assistant-message-recorded?
@@ -111,26 +121,69 @@
                             (= agent-name (first llm-call-id))))
                   assistant-history))))
 
+(defn- rejection-message-recorded?
+  "Return true when message history contains the expected rejection feedback."
+  [messages llm-call-id content]
+  (some #(and (= "user" (:role %))
+              (= llm-call-id (:llm-call-id %))
+              (= content (:content %)))
+        messages))
+
+(defn- missing-rejection-history
+  "Return rejection feedback absent from the next history emitted by AGENT-NAME."
+  [rejection-history agent-name messages]
+  (into {}
+        (remove (fn [[llm-call-id content]]
+                  (or (not= agent-name (first llm-call-id))
+                      (rejection-message-recorded? messages
+                                                   llm-call-id
+                                                   content))))
+        rejection-history))
+
+(defn- forget-rejection-history
+  "Remove verified rejection-history obligations for AGENT-NAME."
+  [state agent-name]
+  (update state :rejection-history
+          (fn [rejection-history]
+            (into {}
+                  (remove (fn [[llm-call-id _content]]
+                            (= agent-name (first llm-call-id))))
+                  rejection-history))))
+
 (defn- remember-llm-call
-  "Verify prior assistant history and remember the response expected for this call."
+  "Verify prior correlated history and remember the response expected for this call."
   [state {:keys [agent-name llm-response-event-type llm-call-id messages]
           :as event}]
   (assert llm-response-event-type)
   (assert llm-call-id)
-  (let [missing-history (missing-assistant-history (:assistant-history state)
-                                                   agent-name
-                                                   messages)
-        violation (when (seq missing-history)
-                    {:type missing-assistant-history-event-type
-                     :terminal true
-                     :invariant-violated true
-                     :agent-name agent-name
-                     :missing-assistant-history missing-history
-                     :event event})
+  (let [missing-assistant (missing-assistant-history (:assistant-history state)
+                                                     agent-name
+                                                     messages)
+        missing-rejection (missing-rejection-history (:rejection-history state)
+                                                     agent-name
+                                                     messages)
+        violation
+        (cond
+          (seq missing-assistant)
+          {:type missing-assistant-history-event-type
+           :terminal true
+           :invariant-violated true
+           :agent-name agent-name
+           :missing-assistant-history missing-assistant
+           :event event}
+
+          (seq missing-rejection)
+          {:type missing-rejection-history-event-type
+           :terminal true
+           :invariant-violated true
+           :agent-name agent-name
+           :missing-rejection-history missing-rejection
+           :event event})
         next-state (if violation
                      state
                      (-> state
                          (forget-assistant-history agent-name)
+                         (forget-rejection-history agent-name)
                          (update :llm-responses
                                  conj
                                  [llm-response-event-type llm-call-id])))]
@@ -141,6 +194,7 @@
   [state event pending-response-keys]
   (let [event-type (e/type event)
         actual-llm-call-id (:llm-call-id event)
+        rejection-event-type [action-rejected-event-type (:agent-name event)]
         expected-llm-call-ids (into #{} (map second) pending-response-keys)
         mismatch (when-not (expected-llm-call-ids actual-llm-call-id)
                    (call-id-mismatch expected-llm-call-ids
@@ -159,6 +213,8 @@
               (update :llm-responses disj
                       [event-type actual-llm-call-id])
               (update :actions merge action-entries)
+              (update :rejections conj
+                      [rejection-event-type actual-llm-call-id])
               (assoc-in [:assistant-history actual-llm-call-id]
                         (:response event))))]
     [next-state (continue-monitoring next-state mismatch)]))
@@ -177,10 +233,16 @@
         next-state
         (if mismatch
           state
-          (assoc-in state
-                    [:actions action-key]
-                    {:stage :response
-                     :response-event-type (:response-event-type event)}))]
+          (-> state
+              (assoc-in [:actions action-key]
+                        {:stage :response
+                         :response-event-type (:response-event-type event)})
+              (update :rejections
+                      (fn [rejections]
+                        (into #{}
+                              (remove (fn [[_rejection-type llm-call-id]]
+                                        (= actual-llm-call-id llm-call-id)))
+                              rejections)))))]
     [next-state (continue-monitoring next-state mismatch)]))
 
 (defn- responses-correlated-to
@@ -220,12 +282,48 @@
                   (ffirst matching-responses)))]
     [next-state (continue-monitoring next-state violation)]))
 
+(defn- rejections-addressed-by
+  "Return pending rejection alternatives addressed by the selected event type."
+  [rejections event-type]
+  (filter #(= event-type (first %)) rejections))
+
+(defn- complete-rejection
+  "Complete a rejected-action alternative and remember its feedback history."
+  [state event pending-rejections]
+  (let [event-type (e/type event)
+        actual-llm-call-id (:llm-call-id event)
+        expected-llm-call-ids (into #{} (map second) pending-rejections)
+        mismatch (when-not (expected-llm-call-ids actual-llm-call-id)
+                   (call-id-mismatch expected-llm-call-ids
+                                     actual-llm-call-id
+                                     event))
+        rejection-content {:kind :action-rejected
+                           :violations (:violations event)}
+        next-state
+        (if mismatch
+          state
+          (-> state
+              (update :rejections disj
+                      [event-type actual-llm-call-id])
+              (update :actions
+                      (fn [actions]
+                        (into {}
+                              (remove (fn [[[_action-type llm-call-id]
+                                            _action-state]]
+                                        (= actual-llm-call-id llm-call-id)))
+                              actions)))
+              (assoc-in [:rejection-history actual-llm-call-id]
+                        rejection-content)))]
+    [next-state (continue-monitoring next-state mismatch)]))
+
 (defn- advance-correlation
   "Advance the correlation obligation addressed by EVENT."
-  [{:keys [llm-responses actions] :as state} event]
+  [{:keys [llm-responses actions rejections] :as state} event]
   (let [event-type (e/type event)
         pending-llm-responses
         (llm-responses-addressed-by llm-responses event-type)
+        pending-rejections
+        (rejections-addressed-by rejections event-type)
         pending-action-requests
         (actions-addressed-by actions :request event-type)
         pending-action-responses
@@ -239,6 +337,9 @@
 
       (seq pending-llm-responses)
       (remember-response-actions state event pending-llm-responses)
+
+      (seq pending-rejections)
+      (complete-rejection state event pending-rejections)
 
       (seq pending-action-requests)
       (await-action-response state event pending-action-requests)
