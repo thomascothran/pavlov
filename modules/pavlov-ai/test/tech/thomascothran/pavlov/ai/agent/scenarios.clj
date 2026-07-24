@@ -86,15 +86,6 @@
               (= reason (:reason %)))
         (:violations event)))
 
-(defn- wait-for-addressed-rejection
-  [action-type reason {:keys [type] :as event}]
-  (def event event)
-  (def reason reason)
-  (def action-type action-type)
-  (if (rejection-for? event action-type reason)
-    {:wait-on #{type}}
-    {:wait-on #{::unrelated-action-rejection}}))
-
 (defn- llm-called-with-rejection
   [event]
   (let [message (last (:messages event))

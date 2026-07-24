@@ -111,27 +111,6 @@
                        :action-spec action-spec}))))
   config)
 
-(defn- make-single-flight-only-bthread
-  [{:keys [call-llm-event-type
-           agent-invocation-event-type
-           llm-response-event-type]}]
-  (let [default-bid {:wait-on #{call-llm-event-type}}
-        block-until {:block #{agent-invocation-event-type}
-                     :wait-on #{llm-response-event-type}}]
-    (b/step
-     (fn [state event]
-       (let [event-type (event/type event)]
-         (if (= event-type call-llm-event-type)
-           [state block-until]
-           [state default-bid]))))))
-
-(defn- make-policy-bthreads
-  [opts]
-  (if-let [bthread-name (:bthread-name opts)]
-    {[::single-flight-only bthread-name]
-     (make-single-flight-only-bthread opts)}
-    (throw (ex-info "bthread name is required" opts))))
-
 (defn make-bthread
   [config]
   (assert (:name config)
@@ -147,14 +126,7 @@
         default-waits #{invocation-event
                         llm-response-event-type
                         action-response-type
-                        action-rejected-response-type}
-
-        policy-bthreads
-        (make-policy-bthreads
-         {:bthread-name agent-name
-          :agent-invocation-event-type invocation-event
-          :llm-response-event-type llm-response-event-type
-          :call-llm-event-type call-llm-event-type})]
+                        action-rejected-response-type}]
 
     (b/step
      (fn [state event]
@@ -163,7 +135,6 @@
            (nil? event-type)
            [config
             {:request #{(make-initialized-event config)}
-             :bthreads policy-bthreads
              :wait-on default-waits}]
 
            ;; invoke llm
