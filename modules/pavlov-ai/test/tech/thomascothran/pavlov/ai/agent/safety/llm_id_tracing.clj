@@ -8,8 +8,9 @@
     each action is awaiting its request event or its response event.
   - `:rejections` contains `[rejection-event-type llm-call-id]` alternatives
     to action requests.
-  - `:assistant-history` and `:rejection-history` record messages that must
-    appear, with their call IDs, in the next observable history for that agent."
+  - `:assistant-history`, `:action-history`, and `:rejection-history` record
+    messages that must appear, with their call IDs, in the next observable
+    history for that agent."
   (:require [tech.thomascothran.pavlov.bthread :as b]
             [tech.thomascothran.pavlov.event :as e]))
 
@@ -26,6 +27,9 @@
 
 (def ^:private missing-rejection-history-event-type
   :tech.thomascothran.pavlov.ai.agent.safety/missing-rejection-history)
+
+(def ^:private missing-action-history-event-type
+  :tech.thomascothran.pavlov.ai.agent.safety/missing-action-history)
 
 (def ^:private action-rejected-event-type :pavlov.ai/action-rejected)
 
@@ -89,6 +93,7 @@
                :actions {}
                :rejections #{}
                :assistant-history {}
+               :action-history {}
                :rejection-history {}}]
     [state (continue-monitoring state)]))
 
@@ -120,6 +125,37 @@
                   (remove (fn [[llm-call-id _response]]
                             (= agent-name (first llm-call-id))))
                   assistant-history))))
+
+(defn- action-result-recorded?
+  "Return true when message history contains the expected correlated action result."
+  [messages action-type llm-call-id result]
+  (some #(and (= "user" (:role %))
+              (= action-type (:action-type %))
+              (= llm-call-id (:llm-call-id %))
+              (= result (:content %)))
+        messages))
+
+(defn- missing-action-history
+  "Return action results absent from the next history emitted by AGENT-NAME."
+  [action-history agent-name messages]
+  (into {}
+        (remove (fn [[[action-type llm-call-id] result]]
+                  (or (not= agent-name (first llm-call-id))
+                      (action-result-recorded? messages
+                                               action-type
+                                               llm-call-id
+                                               result))))
+        action-history))
+
+(defn- forget-action-history
+  "Remove verified action-history obligations for AGENT-NAME."
+  [state agent-name]
+  (update state :action-history
+          (fn [action-history]
+            (into {}
+                  (remove (fn [[[_action-type llm-call-id] _result]]
+                            (= agent-name (first llm-call-id))))
+                  action-history))))
 
 (defn- rejection-message-recorded?
   "Return true when message history contains the expected rejection feedback."
@@ -159,6 +195,9 @@
   (let [missing-assistant (missing-assistant-history (:assistant-history state)
                                                      agent-name
                                                      messages)
+        missing-action (missing-action-history (:action-history state)
+                                               agent-name
+                                               messages)
         missing-rejection (missing-rejection-history (:rejection-history state)
                                                      agent-name
                                                      messages)
@@ -172,6 +211,14 @@
            :missing-assistant-history missing-assistant
            :event event}
 
+          (seq missing-action)
+          {:type missing-action-history-event-type
+           :terminal true
+           :invariant-violated true
+           :agent-name agent-name
+           :missing-action-history missing-action
+           :event event}
+
           (seq missing-rejection)
           {:type missing-rejection-history-event-type
            :terminal true
@@ -183,6 +230,7 @@
                      state
                      (-> state
                          (forget-assistant-history agent-name)
+                         (forget-action-history agent-name)
                          (forget-rejection-history agent-name)
                          (update :llm-responses
                                  conj
@@ -275,11 +323,14 @@
            :invariant-violated true
            :llm-call-id actual-llm-call-id
            :event event})
+        action-key (ffirst matching-responses)
         next-state
         (if violation
           state
-          (update state :actions dissoc
-                  (ffirst matching-responses)))]
+          (-> state
+              (update :actions dissoc action-key)
+              (assoc-in [:action-history action-key]
+                        (:result event))))]
     [next-state (continue-monitoring next-state violation)]))
 
 (defn- rejections-addressed-by

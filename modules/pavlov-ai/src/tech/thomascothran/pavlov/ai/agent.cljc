@@ -8,7 +8,6 @@
                      make-action-rejected-event
                      make-agent-response
                      llm-response-event-type
-                     action-response-event-type
                      action-rejected-event-type
                      call-llm-event-type
                      make-action-response-type]]))
@@ -46,9 +45,11 @@
 
 (defn action-result->
   "Produce the bid from the action result"
-  [agent-config state {:keys [result] :as _event}
+  [agent-config state {:keys [result llm-call-id action-type] :as event}
    llm-response-event-type default-waits]
   (let [message {:content result
+                 :llm-call-id llm-call-id
+                 :action-type action-type
                  :role "user"}
         {:keys [messages llm-calls] :as llm-event}
         (make-llm-event agent-config llm-response-event-type state message)
