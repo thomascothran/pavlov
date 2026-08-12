@@ -1,0 +1,34 @@
+(ns tech.thomascothran.pavlov.ai.agent.model-check
+  (:require [clojure.test :refer [deftest testing is]]
+            [tech.thomascothran.pavlov.model.check :as check]
+            [tech.thomascothran.pavlov.ai.agent.scenarios
+             :as scenarios]
+            [tech.thomascothran.pavlov.ai.agent.environment :as env]
+            [tech.thomascothran.pavlov.ai.event :as ae]
+            [tech.thomascothran.pavlov.ai.agent.safety :as safety]
+            [tech.thomascothran.pavlov.bthread]))
+
+;; Scenarios
+
+(defn make-bthreads
+  []
+  (scenarios/make-bthreads))
+
+;; =====
+
+(deftest check-agent
+  (let [bthreads (make-bthreads)
+        violations
+        (check/check {:bthreads bthreads
+                      :safety-bthreads (safety/make-bthreads)
+                      :possible (into #{:email/list
+                                        :email/send
+                                        :text-response}
+                                      (scenarios/possible-events))
+                      :check-deadlock? false
+                      :environment-bthreads (env/make-bthreads)})]
+    (def violations violations)
+    (-> violations :liveness-violation :path-edges)
+    (when violations
+      (tap> [::violations violations]))
+    (is (not (boolean violations)))))

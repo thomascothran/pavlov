@@ -19,8 +19,15 @@
   Returns an empty vector if event is nil."
   [state event]
   (when event
-    (reduce into [] [(get-in state [:waits (event/type event)])
-                     (get-in state [:requests (event/type event)])])))
+    (let [requesting-bthreads
+          (get-in state [:requests (event/type event)])
+
+          waiting-bthreads
+          (into []
+                (remove (into #{} requesting-bthreads))
+                (get-in state [:waits (event/type event)]))]
+      (reduce into [] [waiting-bthreads
+                       requesting-bthreads]))))
 
 (defn index-bid-events
   "Indexes events from a bid by adding the bthread to the appropriate event-type sets.
