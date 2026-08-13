@@ -229,6 +229,7 @@
   (:require [clojure.set :as set]
             [tech.thomascothran.pavlov.event :as e]
             [tech.thomascothran.pavlov.graph :as graph]
+            [tech.thomascothran.pavlov.model.check.livelock :as livelock]
             [tech.thomascothran.pavlov.model.check.liveness :as liveness])
   (:import [clojure.lang PersistentQueue]))
 
@@ -317,117 +318,6 @@
                {:path (mapv e/type path)
                 :state state}))))))
 
-(defn- nodes-reaching-terminal
-  "Find all nodes that can reach a terminal node.
-  Uses reverse reachability from terminal nodes.
-  Returns nil if computation fails (e.g., due to complex node IDs)."
-  [lts]
-  (try
-    (let [{:keys [edges]} lts
-          terminal (terminal-nodes lts)
-          ;; Build reverse adjacency: node -> nodes that have edges TO it
-          reverse-adj (reduce (fn [acc {:keys [from to]}]
-                                (update acc to (fnil conj #{}) from))
-                              {}
-                              edges)]
-      ;; BFS backwards from terminal nodes
-      (loop [can-reach terminal
-             frontier terminal
-             iterations 0]
-        (if (empty? frontier)
-          can-reach
-          (let [new-nodes (->> frontier
-                               (mapcat reverse-adj)
-                               (remove can-reach)
-                               set)]
-            (recur (into can-reach new-nodes) new-nodes (inc iterations))))))
-    (catch Throwable _e
-      ;; Return nil to signal failure - caller should handle gracefully
-      nil)))
-
-(defn- find-cycle-in-nodes
-  "Find a cycle in the given set of nodes using DFS.
-  Returns {:cycle-path [event-types] :cycle-events [events] :cycle-entry-node node-id} or nil."
-  [lts trapped-nodes]
-  (let [{:keys [edges root]} lts
-        ;; Build adjacency map for trapped nodes only
-        adjacency (reduce (fn [acc {:keys [from to event]}]
-                            (if (and (trapped-nodes from) (trapped-nodes to))
-                              (update acc from (fnil conj []) {:to to :event event})
-                              acc))
-                          {}
-                          edges)
-
-        ;; DFS with path tracking and depth limit
-        ;; path-events: vector of full events taken so far
-        ;; visited-in-path: map from node-id to index in path where we first visited it
-        max-depth (* 2 (count trapped-nodes)) ;; Limit depth to prevent stack overflow
-        dfs (fn dfs [node path-events visited-in-path visited-fully depth]
-              (cond
-                ;; Depth limit exceeded
-                (> depth max-depth)
-                nil
-
-                ;; Found a cycle!
-                (contains? visited-in-path node)
-                (let [cycle-start-idx (get visited-in-path node)
-                      cycle-events (subvec path-events cycle-start-idx)]
-                  {:cycle-path (mapv e/type cycle-events)
-                   :cycle-events cycle-events
-                   :cycle-entry-node node})
-
-                ;; Already explored this node fully
-                (visited-fully node)
-                nil
-
-                ;; Continue DFS
-                :else
-                (let [neighbors (get adjacency node [])
-                      current-idx (count path-events)]
-                  (some (fn [{:keys [to event]}]
-                          (dfs to
-                               (conj path-events event)
-                               (assoc visited-in-path node current-idx)
-                               (conj visited-fully node)
-                               (inc depth)))
-                        neighbors))))]
-
-    ;; Start DFS from root if it's trapped, otherwise from any trapped node
-    (cond
-      (trapped-nodes root)
-      (dfs root [] {} #{} 0)
-
-      (seq trapped-nodes)
-      (some (fn [start-node]
-              (dfs start-node [] {} #{} 0))
-            trapped-nodes)
-
-      :else
-      nil)))
-
-(defn- find-livelocks
-  "Find all livelocks in the LTS graph.
-  A livelock is a cycle where no node can reach a terminal state.
-  Returns a vector of livelock maps (without :type key)."
-  [lts config]
-  (when (not= false (:check-livelock? config))
-    ;; Early exit if graph is empty or has no edges
-    (when (and (seq (:nodes lts)) (seq (:edges lts)))
-      (when-let [can-reach-terminal (nodes-reaching-terminal lts)]
-        ;; Only proceed if nodes-reaching-terminal succeeded
-        (let [;; Trapped nodes = all nodes - can-reach-terminal
-              all-nodes (set (keys (:nodes lts)))
-              trapped-nodes (set/difference all-nodes can-reach-terminal)]
-
-          ;; If there are trapped nodes, look for cycles
-          ;; Note: We only return the first cycle found, but as a vector
-          ;; Future enhancement could find multiple distinct cycles
-          (when (seq trapped-nodes)
-            (when-let [{:keys [cycle-path cycle-entry-node]}
-                       (find-cycle-in-nodes lts trapped-nodes)]
-              [{:path (mapv e/type (find-path lts cycle-entry-node))
-                :cycle cycle-path}])))))))
-
 (defn- find-impossible-events
   "Return the subset of `:possible` events that do not appear on any explored edge."
   [lts config]
@@ -483,13 +373,7 @@
         truncated? (:truncated lts)
 
         ;; Collect all violations (each find-* returns a vector)
-        ;; Wrap livelock check in try-catch to handle edge cases like circular node IDs
-        livelocks (try
-                    (find-livelocks lts config)
-                    (catch StackOverflowError _e
-                      (throw (ex-info "livelock detection failed due to stack overflow. Possible circular node IDs."
-                                      {:lts lts
-                                       :config config}))))
+        livelocks (livelock/find-livelocks lts config)
         ;; Don't report liveness violations if truncated (likely false positives)
         liveness-violation  (when-not truncated?
                               (liveness/liveness-violation lts))

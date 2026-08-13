@@ -4,7 +4,6 @@
             [tech.thomascothran.pavlov.ai.agent.scenarios
              :as scenarios]
             [tech.thomascothran.pavlov.ai.agent.environment :as env]
-            [tech.thomascothran.pavlov.ai.event :as ae]
             [tech.thomascothran.pavlov.ai.agent.safety :as safety]
             [tech.thomascothran.pavlov.bthread]))
 
@@ -29,6 +28,8 @@
                       :environment-bthreads (env/make-bthreads)})]
     (def violations violations)
     (-> violations :liveness-violation :path-edges)
+    (-> violations :safety-violations count)
+    (keys violations)
     (when violations
       (tap> [::violations violations]))
     (is (not (boolean violations)))))
