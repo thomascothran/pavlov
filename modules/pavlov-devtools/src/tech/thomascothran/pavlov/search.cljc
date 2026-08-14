@@ -122,6 +122,14 @@
                    (assoc bid :bthreads (keys bthreads))
                    bid))))
 
+(defn- state-identifier
+  [wrapped]
+  (let [saved-states (get wrapped :saved-bthread-states)
+        bthread->bid (-> (get-in wrapped [:bprogram/state :bthread->bid])
+                         bids->hashable-bthread-bid)
+        last-event-terminal (get-in wrapped [:bprogram/state :last-event :terminal])]
+    (hasch/uuid [last-event-terminal saved-states bthread->bid])))
+
 (defn- compute-successor-templates
   "Compute path-independent successor templates for a wrapped state.
 
@@ -137,10 +145,14 @@
                                                bthread->bid)]
     (mapv (fn [event]
             (restore-bthread-states state saved-bthread-states)
-            (let [next-state (state/step state event)]
+            (let [next-state (state/step state event)
+                  next-saved-bthread-states (save-bthread-states next-state)]
               {:event event
                :next-state next-state
-               :next-saved-bthread-states (save-bthread-states next-state)}))
+               :next-saved-bthread-states next-saved-bthread-states
+               :next-identifier
+               (state-identifier {:bprogram/state next-state
+                                  :saved-bthread-states next-saved-bthread-states})}))
           branches)))
 
 (defn- materialize-successors
@@ -149,10 +161,12 @@
   (mapv (fn [successor-template]
           (let [event (:event successor-template)
                 next-state (:next-state successor-template)
-                next-saved-bthread-states (:next-saved-bthread-states successor-template)]
+                next-saved-bthread-states (:next-saved-bthread-states successor-template)
+                next-identifier (:next-identifier successor-template)]
             {:state {:bprogram/state next-state
                      :path (conj path event)
-                     :saved-bthread-states next-saved-bthread-states}
+                     :saved-bthread-states next-saved-bthread-states
+                     ::identifier next-identifier}
              :event event}))
         successor-templates))
 
@@ -163,13 +177,17 @@
   (let [initial-state (state/init all-bthreads)
         ;; Save bthread states AFTER init has advanced them
         saved-initial-states (save-bthread-states initial-state)
+        initial-identifier (state-identifier
+                            {:bprogram/state initial-state
+                             :saved-bthread-states saved-initial-states})
         successor-cache (atom {})]
     (reify StateNavigator
       (root [_]
         ;; Wrap state with path tracking and saved bthread states
         {:bprogram/state initial-state
          :path []
-         :saved-bthread-states saved-initial-states})
+         :saved-bthread-states saved-initial-states
+         ::identifier initial-identifier})
 
       (succ [this wrapped]
         (if (event/terminal? (get-in wrapped [:bprogram/state :last-event]))
@@ -183,10 +201,5 @@
             (materialize-successors path successor-templates))))
 
       (identifier [_ wrapped]
-        ;; Use saved states instead of live bthread states to avoid mutation issues
-        (let [saved-states (get wrapped :saved-bthread-states)
-              bthread->bid (-> (get-in wrapped
-                                       [:bprogram/state :bthread->bid])
-                               bids->hashable-bthread-bid)
-              last-event-terminal (get-in wrapped [:bprogram/state :last-event :terminal])]
-          (hasch/uuid [last-event-terminal saved-states bthread->bid]))))))
+        (or (::identifier wrapped)
+            (state-identifier wrapped))))))
