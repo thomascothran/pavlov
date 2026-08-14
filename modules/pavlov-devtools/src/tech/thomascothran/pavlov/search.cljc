@@ -5,7 +5,7 @@
             [tech.thomascothran.pavlov.bthread :as b]
             [tech.thomascothran.pavlov.bprogram.state :as state]
             [tech.thomascothran.pavlov.bid.proto :as bid]
-            [hasch.core :as hasch])
+            [tech.thomascothran.pavlov.search.interner :as interner])
   #?(:clj (:import [clojure.lang PersistentQueue])))
 
 ;; helper functions
@@ -111,10 +111,8 @@
                      (conj seen sid)
                      acc')))))))) ; finished
 
-(defn- bids->hashable-bthread-bid
-  "bthreads are not hashable. But we need to hash bids.
-
-  Remove the bthread itself and keep the bthread names"
+(defn- bids->state-key-bids
+  "Replace spawned bthread objects with their names for structural equality."
   [bids]
   (update-vals bids
                (fn [bid]
@@ -122,13 +120,20 @@
                    (assoc bid :bthreads (keys bthreads))
                    bid))))
 
-(defn- state-identifier
+(defn- wrapped->state-key
   [wrapped]
   (let [saved-states (get wrapped :saved-bthread-states)
         bthread->bid (-> (get-in wrapped [:bprogram/state :bthread->bid])
-                         bids->hashable-bthread-bid)
+                         bids->state-key-bids)
         last-event-terminal (get-in wrapped [:bprogram/state :last-event :terminal])]
-    (hasch/uuid [last-event-terminal saved-states bthread->bid])))
+    [last-event-terminal saved-states bthread->bid]))
+
+(defn- intern-identifier!
+  [interner-state wrapped]
+  (let [[updated-interner result]
+        (interner/intern @interner-state (wrapped->state-key wrapped))]
+    (vreset! interner-state updated-interner)
+    (:id result)))
 
 (defn- compute-successor-templates
   "Compute path-independent successor templates for a wrapped state.
@@ -136,7 +141,7 @@
   Templates cache the event and next scheduler snapshot, but not the caller's
   path, so the same semantic state can be revisited from multiple paths without
   corrupting navigation history."
-  [wrapped]
+  [interner-state wrapped]
   (let [saved-bthread-states (:saved-bthread-states wrapped)
         state (:bprogram/state wrapped)
         bthread->bid (get state :bthread->bid)
@@ -151,8 +156,10 @@
                :next-state next-state
                :next-saved-bthread-states next-saved-bthread-states
                :next-identifier
-               (state-identifier {:bprogram/state next-state
-                                  :saved-bthread-states next-saved-bthread-states})}))
+               (intern-identifier!
+                interner-state
+                {:bprogram/state next-state
+                 :saved-bthread-states next-saved-bthread-states})}))
           branches)))
 
 (defn- materialize-successors
@@ -177,7 +184,9 @@
   (let [initial-state (state/init all-bthreads)
         ;; Save bthread states AFTER init has advanced them
         saved-initial-states (save-bthread-states initial-state)
-        initial-identifier (state-identifier
+        interner-state (volatile! (interner/make))
+        initial-identifier (intern-identifier!
+                            interner-state
                             {:bprogram/state initial-state
                              :saved-bthread-states saved-initial-states})
         successor-cache (atom {})]
@@ -195,11 +204,13 @@
           (let [path (:path wrapped)
                 sid (identifier this wrapped)
                 successor-templates (or (get @successor-cache sid)
-                                        (let [templates (compute-successor-templates wrapped)]
+                                        (let [templates (compute-successor-templates
+                                                         interner-state
+                                                         wrapped)]
                                           (swap! successor-cache assoc sid templates)
                                           templates))]
             (materialize-successors path successor-templates))))
 
       (identifier [_ wrapped]
         (or (::identifier wrapped)
-            (state-identifier wrapped))))))
+            (intern-identifier! interner-state wrapped))))))
