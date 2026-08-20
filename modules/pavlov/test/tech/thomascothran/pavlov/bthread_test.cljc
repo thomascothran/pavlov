@@ -341,3 +341,23 @@
     (is (= {:wait-on #{:event-a}} bid1))
     (is (= {:request #{{:type :event-b}}} bid2))))
 
+(deftest repeatable-bids-test
+  (let [bthread (b/bids [{:request #{:a}}
+                         (fn [_event]
+                           {:request #{:b}})
+                         {:request #{:c}}]
+                        {:repeat true})
+        r1 (b/notify! bthread nil)
+        r2 (b/notify! bthread :a)
+        r3 (b/notify! bthread :b)
+        r4 (b/notify! bthread :c)
+        r5 (b/notify! bthread :a)
+        r6 (b/notify! bthread :b)
+        r7 (b/notify! bthread :c)]
+    (is (= {:request #{:a}} r1))
+    (is (= {:request #{:b}} r2))
+    (is (= {:request #{:c}} r3))
+    (is (= {:request #{:a}} r4))
+    (is (= {:request #{:b}} r5))
+    (is (= {:request #{:c}} r6))
+    (is (= {:request #{:a}} r7))))
