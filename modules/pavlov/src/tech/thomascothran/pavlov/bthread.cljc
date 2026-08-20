@@ -326,15 +326,24 @@
                {:request #{{:type :confirm
                             :order-id (:order-id event)}}})]))
   ```"
-  [xs]
-  (let [xs' (into [] xs)]
-    (step (fn [idx event]
-            (let [idx' (or idx 0)
-                  x (get xs' idx')
-                  bid (if (fn? x)
-                        (x event)
-                        x)]
-              [(inc idx') bid])))))
+  ([xs]
+   (bids xs nil))
+  ([xs config]
+   (let [repeat? (get config :repeat)
+         nxs (count xs)
+         xs' (into [] xs)]
+     (step (fn [idx event]
+             (let [rollover? (and repeat?
+                                  (= nxs idx))
+                   idx' (if rollover? 0 (or idx 0))
+                   x    (if rollover?
+                          (first xs')
+                          (get xs' idx'))
+                   bid  (if (fn? x)
+                          (x event)
+                          x)]
+
+               [(inc idx') bid]))))))
 
 (defn repeat
   "Create a bthread that returns the same bid repeatedly.
