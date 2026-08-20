@@ -345,7 +345,7 @@
          nxs (count xs)
          xs' (into [] xs)]
      (step (fn [idx event]
-             (let [rollover? (and repeat?
+             (let [rollover? (and (true? repeat?)
                                   (= nxs idx))
                    idx' (if rollover? 0 (or idx 0))
                    x    (if rollover?
