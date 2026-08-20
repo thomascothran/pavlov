@@ -325,6 +325,18 @@
              (fn [event]
                {:request #{{:type :confirm
                             :order-id (:order-id event)}}})]))
+
+  Provide the `:repeat` option to start the bids over. After the last
+  bid in `xs`, instead of closing the bthread, it starts over at the
+  first bid in xs.
+
+  Example:
+  ```clojure
+  (defn make-alternative-between-a-and-b-forever
+    []
+    (b/bids [{:request #{:a}}
+             {:request #{:b}}]
+            {:repeat true}))
   ```"
   ([xs]
    (bids xs nil))
