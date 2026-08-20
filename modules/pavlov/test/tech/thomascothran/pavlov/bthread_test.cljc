@@ -341,4 +341,3 @@
     (is (= {:wait-on #{:event-a}} bid1))
     (is (= {:request #{{:type :event-b}}} bid2))))
 
-;(deftest test-on-with-bthread-creation)
