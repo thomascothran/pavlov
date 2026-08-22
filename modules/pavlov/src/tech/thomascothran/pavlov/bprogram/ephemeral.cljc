@@ -185,15 +185,19 @@
 #?(:clj (defn- run-event-loop!
           [bprogram program-opts]
           (let [killed (get program-opts :killed)
+                stopped (get program-opts :stopped)
                 in-queue (get program-opts :in-queue)]
             (loop [next-event' (some-> program-opts
                                        (get :!state)
                                        deref
                                        (get :next-event))]
-              (when-not (realized? killed)
+              (when-not (or (realized? killed)
+                            (realized? stopped))
                 (when next-event'
                   (handle-event! bprogram program-opts next-event'))
-                (when-not (event/terminal? next-event')
+                (when-not (or (realized? killed)
+                              (realized? stopped)
+                              (event/terminal? next-event'))
                   (let [next-event (bprogram/pop in-queue)]
                     (when-not (= kill-signal next-event)
                       (recur next-event)))))))))

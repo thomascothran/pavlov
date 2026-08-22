@@ -176,6 +176,24 @@
     (is (= [{:type [1 1 :x]} {:type [0 0 :o]}]
            (butlast @!a)))))
 
+(deftest execute-exits-after-internally-selected-terminal-event
+  (let [popped (promise)
+        queue (reify bp/BProgramQueue
+                (conj [_ _event])
+                (pop [_]
+                  (deliver popped true)
+                  {:type :unexpected-pop
+                   :terminal true}))
+        terminal-event {:type :done
+                        :terminal true}
+        result @(bpe/execute!
+                 [[:driver (b/bids [{:request [:start]}
+                                    {:request [terminal-event]}])]]
+                 {:in-queue queue})]
+    (is (= terminal-event result))
+    (is (= ::not-called
+           (deref popped 100 ::not-called)))))
+
 (deftest test-sync-call
   (let [bthreads
         {:request-a
