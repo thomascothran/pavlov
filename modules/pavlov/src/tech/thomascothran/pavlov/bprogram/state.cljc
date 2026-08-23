@@ -1,5 +1,6 @@
 (ns tech.thomascothran.pavlov.bprogram.state
-  (:require [tech.thomascothran.pavlov.event :as event]
+  (:require [tech.thomascothran.pavlov.bid.proto :as bid]
+            [tech.thomascothran.pavlov.event :as event]
             [tech.thomascothran.pavlov.event.selection
              :as event-selection]
             [tech.thomascothran.pavlov.bprogram.notification :as notification]))
@@ -8,10 +9,12 @@
   "The winning bid will request a new event"
   [state]
   (let [bthreads-by-priority (get state :bthreads-by-priority)
-        bthreads->bid (get state :bthread->bid)]
+        bthreads->bid (get state :bthread->bid)
+        blocked-event-types (get state :blocks {})]
     (event-selection/prioritized-event
      bthreads-by-priority
-     bthreads->bid)))
+     bthreads->bid
+     blocked-event-types)))
 
 (defn- merge-event->bthreads
   [previous new]
@@ -76,18 +79,59 @@
       (update :requests merge-event->bthreads requests)
       (update :blocks merge-event->bthreads blocks)))
 
-(defn- remove-bthread-names-from-event-index
-  "Remove bthread names from an event index while preserving its shape.
+(defn- bid-events
+  "Read the events contributing to one index through the Bid protocol."
+  [bid index-key]
+  ((case index-key
+     :requests bid/request
+     :waits bid/wait-on
+     :blocks bid/block)
+   bid))
 
-  Event indexes track reachability into future steps, so lifecycle cleanup has
-  to prune names here as well as in the registry and active bid map."
-  [event->threads removed-bthread-names]
-  (into {}
-        (map (fn [[event bthreads]]
-               [event (->> bthreads
-                           (remove (or removed-bthread-names #{}))
-                           (into #{}))]))
-        event->threads))
+(defn- remove-bthread-from-event-type
+  "Remove one bthread from one event-type membership set.
+
+  Empty memberships are removed so the blocks index can also serve directly as
+  the set of currently blocked event types. Unaffected keys remain structurally
+  shared."
+  [event->bthreads event-type bthread-name]
+  (if-let [bthread-names (get event->bthreads event-type)]
+    (let [remaining (disj bthread-names bthread-name)]
+      (if (seq remaining)
+        (assoc event->bthreads event-type remaining)
+        (dissoc event->bthreads event-type)))
+    event->bthreads))
+
+(defn- remove-bthread-bids-from-event-index
+  "Remove names only from keys named by their old bids.
+
+  This is the incremental replacement for scanning and reconstructing every
+  key in an event index on each transition."
+  ([event->bthreads bthread->bid bthread-names index-key]
+   (remove-bthread-bids-from-event-index event->bthreads
+                                         bthread->bid
+                                         bthread-names
+                                         index-key
+                                         nil
+                                         false))
+  ([event->bthreads bthread->bid bthread-names index-key
+    cleared-event-type clear-event-type?]
+   (if (seq event->bthreads)
+     (reduce (fn [index bthread-name]
+               (if-let [old-bid (get bthread->bid bthread-name)]
+                 (reduce (fn [index requested-event]
+                           (let [event-type (event/type requested-event)]
+                             (if (and clear-event-type?
+                                      (= cleared-event-type event-type))
+                               index
+                               (remove-bthread-from-event-type
+                                index event-type bthread-name))))
+                         index
+                         (bid-events old-bid index-key))
+                 index))
+             event->bthreads
+             bthread-names)
+     event->bthreads)))
 
 (defn- update-bthread-registry
   "Merge newly available bthreads into the registry.
@@ -134,13 +178,19 @@
   [state retired-bthread-names]
   (let [retired-bthread-names (or retired-bthread-names #{})]
     (if (seq retired-bthread-names)
-      (-> state
-          (update :name->bthread #(apply dissoc % retired-bthread-names))
-          (update :bthread->bid #(apply dissoc % retired-bthread-names))
-          (update :bthreads-by-priority remove-bthread-names-from-priorities retired-bthread-names)
-          (update :waits remove-bthread-names-from-event-index retired-bthread-names)
-          (update :requests remove-bthread-names-from-event-index retired-bthread-names)
-          (update :blocks remove-bthread-names-from-event-index retired-bthread-names))
+      (let [bthread->bid (get state :bthread->bid)]
+        (-> state
+            (update :waits remove-bthread-bids-from-event-index
+                    bthread->bid retired-bthread-names :waits)
+            (update :requests remove-bthread-bids-from-event-index
+                    bthread->bid retired-bthread-names :requests)
+            (update :blocks remove-bthread-bids-from-event-index
+                    bthread->bid retired-bthread-names :blocks)
+            (update :name->bthread #(apply dissoc % retired-bthread-names))
+            (update :bthread->bid #(apply dissoc % retired-bthread-names))
+            (update :bthreads-by-priority
+                    remove-bthread-names-from-priorities
+                    retired-bthread-names)))
       state)))
 
 (defn- initialize-spawned-bthreads
@@ -159,7 +209,11 @@
           (notification-parent->child-bthread-names notification-results)
           retired-bthread-names
           (notification-retired-bthread-names notification-results)
+          spawned-bthread-names (into #{} (map first) spawned-bthreads)
           state (-> state
+                    ;; A spawn may intentionally replace an existing name. Remove
+                    ;; that prior lifecycle entry and only its indexed events.
+                    (deregister-bthread-names spawned-bthread-names)
                     (update-bthread-registry spawned-bthreads)
                     (update-bthread-priorities spawned-bthreads
                                                parent->child-bthreads)
@@ -191,6 +245,9 @@
 (defn- initial-state
   [named-bthreads]
   {:bthread->bid {}
+   :waits {}
+   :requests {}
+   :blocks {}
    :last-event nil
    :name->bthread (into {} named-bthreads)
    :bthreads-by-priority (initial-bthread-priorities named-bthreads)})
@@ -238,37 +295,52 @@
          (get state :requests)]))
 
 (defn- update-event-index
-  [event->threads event triggered-bthreads notification-index spawned-index]
-  (-> event->threads
-      (dissoc event)
-      (remove-bthread-names-from-event-index triggered-bthreads)
-      (merge-event->bthreads notification-index)
-      (cond-> (seq spawned-index)
-        (merge-event->bthreads spawned-index))))
+  [event->bthreads bthread->bid triggered-bthreads notification-index index-key
+   triggered-event-type clear-triggered-event-type?]
+  (let [event->bthreads (if clear-triggered-event-type?
+                          (dissoc event->bthreads triggered-event-type)
+                          event->bthreads)]
+    (cond-> (remove-bthread-bids-from-event-index
+             event->bthreads
+             bthread->bid
+             triggered-bthreads
+             index-key
+             triggered-event-type
+             clear-triggered-event-type?)
+      (seq notification-index)
+      (merge-event->bthreads notification-index))))
 
 (defn- next-event-indexes
-  "Build the step-time event indexes for the next state.
+  "Incrementally update only event keys affected by triggered bthreads.
 
-  The waits/requests/blocks indexes follow the same replacement pattern, so we
-  compute them together to keep step assembly focused on lifecycle phases rather
-  than three parallel map updates."
+  Old memberships come from the triggered bthreads' previous bids, replacement
+  memberships come from the notification delta, and every unrelated index key
+  remains structurally shared."
   [state event triggered-bthreads
    notification-waits notification-requests notification-blocks]
-  {:waits (update-event-index (get state :waits)
-                              event
-                              triggered-bthreads
-                              notification-waits
-                              nil)
-   :requests (update-event-index (get state :requests)
-                                 event
+  (let [bthread->bid (get state :bthread->bid)
+        triggered-event-type (event/type event)]
+    {:waits (update-event-index (get state :waits)
+                                bthread->bid
+                                triggered-bthreads
+                                notification-waits
+                                :waits
+                                triggered-event-type
+                                true)
+     :requests (update-event-index (get state :requests)
+                                   bthread->bid
+                                   triggered-bthreads
+                                   notification-requests
+                                   :requests
+                                   triggered-event-type
+                                   true)
+     :blocks (update-event-index (get state :blocks)
+                                 bthread->bid
                                  triggered-bthreads
-                                 notification-requests
-                                 nil)
-   :blocks (update-event-index (get state :blocks)
-                               event
-                               triggered-bthreads
-                               notification-blocks
-                               nil)})
+                                 notification-blocks
+                                 :blocks
+                                 triggered-event-type
+                                 false)}))
 
 (defn- assemble-next-state
   "Assemble the next program state from a step notification pass.

@@ -5,6 +5,7 @@
             [tech.thomascothran.pavlov.bid.defaults]
             [tech.thomascothran.pavlov.bthread.defaults]
             [tech.thomascothran.pavlov.bthread :as b]
+            [tech.thomascothran.pavlov.bid.proto :as bid]
             [tech.thomascothran.pavlov.event :as event]
             [tech.thomascothran.pavlov.event.selection :as selection]
             [tech.thomascothran.pavlov.bprogram.state :as s]
@@ -13,6 +14,14 @@
 (defn indexed-bthreads
   [event->bthreads]
   (into #{} (mapcat val) event->bthreads))
+
+(defrecord CustomBid [requested waited blocked]
+  bid/Bid
+  (request [_] requested)
+  (wait-on [_] waited)
+  (block [_] blocked)
+  (bthreads [_] nil)
+  (hot [_] nil))
 
 (deftest test-init
   (let [bid-a {:request #{{:type :a}}}
@@ -107,7 +116,8 @@
   (let [bthread-a (b/bids [{:request #{:a}}])
         state (s/init [[:bthread-a bthread-a]])
         next-state (s/step state {:type :a})]
-    (is (= #{} (get-in next-state [:requests :a]))))
+    (is (not (contains? (:requests next-state) :a))
+        "Empty event memberships should be removed."))
 
   (let [bthread-a (b/bids [{:request #{:a}}])
         bthread-b (b/bids [{:wait-on #{:a}}
@@ -116,9 +126,42 @@
                        [:bthread-b bthread-b]])
         next-state (s/step state {:type :a})]
     (is (not (= bthread-a bthread-b)))
-    (is (= #{} (get-in next-state [:requests :a])))
+    (is (not (contains? (:requests next-state) :a)))
     (is (= #{:bthread-b}
            (get-in next-state [:requests :b])))))
+
+(deftest incremental-step-updates-only-old-bid-event-keys
+  (let [worker (b/bids [{:request [:go :shared]
+                         :wait-on #{:old-wait}
+                         :block #{:old-block}}
+                        {:request [:new-request]
+                         :wait-on #{:new-wait}
+                         :block #{:new-block}}])
+        state (s/init [[:worker worker]
+                       [:shared-requester {:request [:shared]}]])
+        next-state (s/step state :go)]
+    (is (= #{:shared-requester} (get-in next-state [:requests :shared])))
+    (is (not (contains? (:waits next-state) :old-wait)))
+    (is (not (contains? (:blocks next-state) :old-block)))
+    (is (= #{:worker} (get-in next-state [:requests :new-request])))
+    (is (= #{:worker} (get-in next-state [:waits :new-wait])))
+    (is (= #{:worker} (get-in next-state [:blocks :new-block])))))
+
+(deftest unaffected-event-indexes-remain-structurally-shared
+  (let [state (s/init [[:driver {:request [:tick]}]
+                       [:parked {:wait-on #{:unrelated}}]
+                       [:blocker {:block #{:blocked}}]])
+        next-state (s/step state :tick)]
+    (is (identical? (:waits state) (:waits next-state)))
+    (is (identical? (:blocks state) (:blocks next-state)))))
+
+(deftest custom-bid-implementations-remain-indexable
+  (let [custom-bid (->CustomBid [:go] [:watched] [:blocked])
+        state (s/init [[:custom (b/step (fn [_ _] [nil custom-bid]))]])
+        next-state (s/step state :go)]
+    (is (= #{:custom} (get-in next-state [:requests :go])))
+    (is (= #{:custom} (get-in next-state [:waits :watched])))
+    (is (= #{:custom} (get-in next-state [:blocks :blocked])))))
 
 (deftest test-step-removes-terminated-bthreads
   (let [bthread-a (b/bids [{:request #{:a}}])
@@ -168,6 +211,16 @@
     (is (not (contains? (indexed-bthreads (:waits next-state)) :child)))
     (is (not (contains? (indexed-bthreads (:requests next-state)) :child)))
     (is (not (contains? (indexed-bthreads (:blocks next-state)) :child)))))
+
+(deftest respawning-a-child-name-removes-the-old-childs-index-entries
+  (let [old-child {:wait-on #{:old-event}}
+        new-child {:wait-on #{:new-event}}
+        parent {:request [:tick]
+                :bthreads {:child new-child}}
+        state (s/init [[:parent parent]
+                       [:child old-child]])]
+    (is (not (contains? (:waits state) :old-event)))
+    (is (= #{:child} (get-in state [:waits :new-event])))))
 
 (deftest respawning-same-child-name-does-not-duplicate-priority-entry
   (let [mk-child (fn [] (b/bids [{:wait-on #{:go}}]))

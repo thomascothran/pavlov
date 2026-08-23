@@ -61,10 +61,9 @@
     (if (seq event-types)
       (reduce (fn [state requested-event]
                 (update-in state [request-type
-                                  (if :requests
-                                    (event/type requested-event)
-                                    requested-event)]
-                           #(into #{bthread-name} %)))
+                                  (event/type requested-event)]
+                           (fnil conj #{})
+                           bthread-name))
               state
               event-types)
       state)))

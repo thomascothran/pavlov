@@ -35,8 +35,7 @@
   If the requests ordered sequence, they are priortized from highest
   to lowest priority. The highest priority event is selected. "
   (:require [tech.thomascothran.pavlov.bid.proto :as bid]
-            [tech.thomascothran.pavlov.event :as event]
-            [clojure.set :as set]))
+            [tech.thomascothran.pavlov.event :as event]))
 
 (defn- blocked
   [bthread->bids]
@@ -46,15 +45,28 @@
               (map event/type))
         bthread->bids))
 
-(defn- unblocked-requests
-  [blocked-events bid]
-  (set/difference (into #{}
-                        (map event/type)
-                        (bid/request bid))
-                  blocked-events))
+(defn- requested-event-unblocked?
+  [blocked-event-types requested-event]
+  (not (contains? blocked-event-types (event/type requested-event))))
+
 (defn- unblocked?
-  [blocked-events bid]
-  (seq (unblocked-requests blocked-events bid)))
+  [blocked-event-types bid]
+  (boolean
+   (some #(requested-event-unblocked? blocked-event-types %)
+         (bid/request bid))))
+
+(defn- first-unblocked-event
+  "Return a one-element marker containing the first unblocked event.
+
+  The marker distinguishes a requested nil/false event from no matching event
+  and lets prioritized-event stop without materializing candidate collections."
+  [blocked-event-types request]
+  (reduce (fn [_ requested-event]
+            (when (requested-event-unblocked? blocked-event-types
+                                              requested-event)
+              (reduced [requested-event])))
+          nil
+          request))
 
 ;; API functions
 
@@ -78,19 +90,25 @@
                      (blocked bthread->bid)))
 
   ([bthreads-by-priority bthread->bid blocked-event-types]
-   (cond->> (into []
-                  (comp (filter (unblocked-bthread? bthread->bid
-                                                    blocked-event-types))
-                        (map #(get bthread->bid %)))
-                  bthreads-by-priority)
-     (not (set? bthreads-by-priority))
-     (take 1))))
+   (let [unblocked-bid
+         (fn [bthread-name]
+           (let [bid (get bthread->bid bthread-name)]
+             (when (unblocked? blocked-event-types bid)
+               bid)))]
+     (if (set? bthreads-by-priority)
+       (into [] (keep unblocked-bid) bthreads-by-priority)
+       (if-some [bid (some unblocked-bid bthreads-by-priority)]
+         [bid]
+         [])))))
 
 (defn- prioritized-events-from-request
-  [request]
-  (if (set? request)
-    request
-    (take 1 request)))
+  [blocked-event-types request]
+  (let [unblocked-events (remove #(contains? blocked-event-types
+                                              (event/type %))
+                                 request)]
+    (if (set? request)
+      unblocked-events
+      (take 1 unblocked-events))))
 
 ;; ===========================|
 ;; event selection strategies |
@@ -104,17 +122,20 @@
   ([bthreads-by-priority bthread->bid blocked-event-types]
    (into []
          (comp (map bid/request)
-               (mapcat prioritized-events-from-request)
-               (remove (comp blocked-event-types event/type)))
+               (mapcat #(prioritized-events-from-request blocked-event-types %)))
          (prioritized-bids bthreads-by-priority
                            bthread->bid
                            blocked-event-types))))
 
 (defn prioritized-event
-  [bthreads-by-priority bthread->bid]
-  (let [blocked-event-types (blocked bthread->bid)]
-    (some->> (prioritized-bids bthreads-by-priority bthread->bid)
-             first
-             bid/request
-             (remove (comp blocked-event-types event/type))
-             first)))
+  ([bthreads-by-priority bthread->bid]
+   (prioritized-event bthreads-by-priority
+                      bthread->bid
+                      (blocked bthread->bid)))
+  ([bthreads-by-priority bthread->bid blocked-event-types]
+   (some-> (some (fn [bthread-name]
+                   (some->> (get bthread->bid bthread-name)
+                            bid/request
+                            (first-unblocked-event blocked-event-types)))
+                 bthreads-by-priority)
+           first)))

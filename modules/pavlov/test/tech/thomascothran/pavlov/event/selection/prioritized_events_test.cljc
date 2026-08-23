@@ -45,3 +45,17 @@
         events (sel/prioritized-events bthreads-by-priority
                                        bthread->bid)]
     (is (= [:d :g] events))))
+
+(deftest ordered-requests-skip-blocked-higher-priority-events
+  (let [bthreads-by-priority [:requester :blocker]
+        bthread->bid {:requester {:request [:blocked :allowed]}
+                      :blocker {:block [:blocked]}}]
+    (is (= [:allowed]
+           (sel/prioritized-events bthreads-by-priority bthread->bid)))
+    (is (= :allowed
+           (sel/prioritized-event bthreads-by-priority bthread->bid)))
+    (is (= :allowed
+           (sel/prioritized-event bthreads-by-priority
+                                  bthread->bid
+                                  #{:blocked}))
+        "The three-argument API reuses a blocked set computed by its caller.")))

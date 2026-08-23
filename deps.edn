@@ -17,6 +17,7 @@
                      org.clojure/clojure {:mvn/version "1.12.1"}
                      thheller/shadow-cljs {:mvn/version "3.3.6"}
                      etaoin/etaoin {:mvn/version "1.1.43"}
-                     com.clojure-goes-fast/clj-async-profiler {:mvn/version "1.8.0"}}
+                     com.clojure-goes-fast/clj-async-profiler {:mvn/version "1.8.0"}
+                     criterium/criterium {:mvn/version "0.5.243-ALPHA"}}
         :extra-paths ["dev"]
         :jvm-opts ["-Djdk.attach.allowAttachSelf"]}}}

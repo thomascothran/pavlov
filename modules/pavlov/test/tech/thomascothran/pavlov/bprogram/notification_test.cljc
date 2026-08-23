@@ -8,6 +8,14 @@
             [tech.thomascothran.pavlov.bprogram.state :as state]
             [tech.thomascothran.pavlov.bprogram.notification :as notification]))
 
+(deftest indexing-a-bid-preserves-existing-event-members
+  (is (= {:requests {:go #{:existing :new}}}
+         (notification/index-bid-events
+          {:requests {:go #{:existing}}}
+          :new
+          {:request [:go]}
+          :requests))))
+
 (deftest bthread-requesting-and-waiting-on-an-event-is-notified-once
   (let [worker (b/step
                 (fn [notification-count event]
