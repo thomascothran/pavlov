@@ -1,5 +1,6 @@
 (ns tech.thomascothran.pavlov.bthread-test
   (:require #?(:clj [clojure.test :refer [deftest is testing]]
+               :squint [cljs.test :refer [deftest is testing]]
                :cljs [cljs.test :refer-macros [deftest is testing]])
             [tech.thomascothran.pavlov.bthread :as b]
             [tech.thomascothran.pavlov.bthread.defaults]))
@@ -39,12 +40,13 @@
           fn-bthread (b/bids [bid-fn])
           literal-bthread (b/bids [{:request #{:test-event1}}])]
       (is (= {:request #{:test-event1}}
-             (b/notify! fn-bthread nil)
+             (b/notify! fn-bthread nil))
+          "Function bid initialization")
+      (is (= {:request #{:test-event1}}
              (b/notify! literal-bthread nil))
-          "Initialization")
-      (is (= nil
-             (b/notify! fn-bthread {:type :test-event})
-             (b/notify! literal-bthread {:type :test-event}))))))
+          "Literal bid initialization")
+      (is (nil? (b/notify! fn-bthread {:type :test-event})))
+      (is (nil? (b/notify! literal-bthread {:type :test-event}))))))
 
 (deftest test-bids-with-mixed-sequence
   (testing "bids accepts a mix of functions and literal bids"
@@ -54,22 +56,14 @@
           literal-bthread (b/bids [{:request #{:event-a}}
                                    {:request #{:event-b}}
                                    {:request #{:event-c}}])]
-      (is (= {:request #{:event-a}}
-             (b/notify! fn-bthread nil)
-             (b/notify! literal-bthread nil))
-          "First bid (from function)")
-      (is (= {:request #{:event-b}}
-             (b/notify! fn-bthread nil)
-             (b/notify! literal-bthread nil))
-          "Second bid (literal)")
-      (is (= {:request #{:event-c}}
-             (b/notify! fn-bthread nil)
-             (b/notify! literal-bthread nil))
-          "Third bid (from function)")
-      (is (= nil
-             (b/notify! fn-bthread nil)
-             (b/notify! literal-bthread nil))
-          "Sequence exhausted"))))
+      (doseq [[expected message]
+              [[{:request #{:event-a}} "First bid (from function)"]
+               [{:request #{:event-b}} "Second bid (literal)"]
+               [{:request #{:event-c}} "Third bid (from function)"]]]
+        (is (= expected (b/notify! fn-bthread nil)) message)
+        (is (= expected (b/notify! literal-bthread nil)) message))
+      (is (nil? (b/notify! fn-bthread nil)) "Function sequence exhausted")
+      (is (nil? (b/notify! literal-bthread nil)) "Literal sequence exhausted"))))
 
 (deftest test-bids-function-returning-nil
   (testing "function returning nil behaves like nil item in sequence"
@@ -292,9 +286,9 @@
 
         results (mapv #(b/notify! bthread {:type %}) event-set)
         last-bid (b/notify! bthread {:type :d})]
-    (is (= [{:wait-on #{:a :b :c}}
-            {:wait-on #{:a :b :c}}
-            [{:type :c} {:type :b} {:type :a}]]
+    (is (= (conj (vec (repeat (dec (count event-set))
+                             {:wait-on event-set}))
+                 (mapv (fn [event-type] {:type event-type}) event-set))
            results))
     (is (nil? last-bid))))
 
@@ -328,18 +322,23 @@
              (b/notify! bthread :a)))
       (is (nil? (b/notify! bthread :b))))))
 
-(deftest simple-thread-test
-  (let [bthread
-        (b/thread [prev-state _event]
-          :pavlov/init
-          [prev-state {:wait-on #{:event-a}}]
+#?(:squint
+   ;; The b/thread macro is deliberately deferred from the initial Squint port.
+   nil
 
-          :event-a
-          [prev-state {:request #{{:type :event-b}}}])
-        bid1 (b/notify! bthread nil)
-        bid2 (b/notify! bthread {:type :event-a})]
-    (is (= {:wait-on #{:event-a}} bid1))
-    (is (= {:request #{{:type :event-b}}} bid2))))
+   :default
+   (deftest simple-thread-test
+     (let [bthread
+           (b/thread [prev-state _event]
+             :pavlov/init
+             [prev-state {:wait-on #{:event-a}}]
+
+             :event-a
+             [prev-state {:request #{{:type :event-b}}}])
+           bid1 (b/notify! bthread nil)
+           bid2 (b/notify! bthread {:type :event-a})]
+       (is (= {:wait-on #{:event-a}} bid1))
+       (is (= {:request #{{:type :event-b}}} bid2)))))
 
 (deftest repeatable-bids-test
   (let [bthread (b/bids [{:request #{:a}}

@@ -3,7 +3,7 @@
 
 (extend-protocol event/Event
   #?(:clj clojure.lang.Keyword
-     :squint String
+     :squint string
      :cljs Keyword)
   (type [event] event)
   (terminal? [event]
@@ -15,7 +15,7 @@
           (terminal? [event] (:terminal event)))
 
    :squint (extend-protocol event/Event
-             js/Object
+             object
              (type [event] (get event :type))
              (terminal? [event] (get event :terminal)))
 

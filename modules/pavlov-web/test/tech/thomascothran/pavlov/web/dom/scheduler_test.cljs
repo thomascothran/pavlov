@@ -1,5 +1,5 @@
 (ns tech.thomascothran.pavlov.web.dom.scheduler-test
-  (:require [cljs.test :refer-macros [deftest is]]
+  (:require [cljs.test :refer [deftest is]]
             [tech.thomascothran.pavlov.web.dom.scheduler :as scheduler]))
 
 (defn- make-fake-timeouts
@@ -147,3 +147,80 @@
            @!submitted))
     (is (= 2
            (count @!scheduled)))))
+
+(deftest throttle-buckets-distinguish-different-dom-elements
+  (let [{:keys [!scheduled set-timeout! clear-timeout!]} (make-fake-timeouts)
+        !submitted (atom [])
+        first-element #js {}
+        second-element #js {}
+        schedule! (scheduler/make-event-scheduler {:set-timeout! set-timeout!
+                                                    :clear-timeout! clear-timeout!})
+        translator (fn [native-event _context]
+                     {:type :dom/input :value (.-value native-event)})
+        submit! #(swap! !submitted conj %)
+        params (fn [element value]
+                 {:native-event #js {:value value}
+                  :context {:dom/event-name "input"
+                            :matched-el element
+                            :pavlov-input-throttle-ms "10"}
+                  :translator translator
+                  :submit! submit!})]
+    (schedule! (params first-element "first"))
+    (schedule! (params second-element "second"))
+    (is (= 2 (count @!scheduled)))
+    (is (= [{:type :dom/input :value "first"}
+            {:type :dom/input :value "second"}]
+           @!submitted))))
+
+(deftest throttle-buckets-distinguish-different-events-on-the-same-element
+  (let [{:keys [!scheduled set-timeout! clear-timeout!]} (make-fake-timeouts)
+        !submitted (atom [])
+        element #js {}
+        schedule! (scheduler/make-event-scheduler {:set-timeout! set-timeout!
+                                                    :clear-timeout! clear-timeout!})
+        translator (fn [_native-event context]
+                     {:type (keyword "dom" (:dom/event-name context))})
+        submit! #(swap! !submitted conj %)]
+    (schedule! {:native-event #js {}
+                :context {:dom/event-name "input"
+                          :matched-el element
+                          :pavlov-input-throttle-ms "10"}
+                :translator translator
+                :submit! submit!})
+    (schedule! {:native-event #js {}
+                :context {:dom/event-name "click"
+                          :matched-el element
+                          :pavlov-click-throttle-ms "10"}
+                :translator translator
+                :submit! submit!})
+    (is (= 2 (count @!scheduled)))
+    (is (= [{:type :dom/input}
+            {:type :dom/click}]
+           @!submitted))))
+
+(deftest replacing-one-elements-debounce-does-not-clear-another-elements-timer
+  (let [{:keys [!scheduled !cleared set-timeout! clear-timeout!]} (make-fake-timeouts)
+        !submitted (atom [])
+        first-element #js {}
+        second-element #js {}
+        schedule! (scheduler/make-event-scheduler {:set-timeout! set-timeout!
+                                                    :clear-timeout! clear-timeout!})
+        translator (fn [native-event _context]
+                     {:type :dom/input :value (.-value native-event)})
+        submit! #(swap! !submitted conj %)
+        params (fn [element value]
+                 {:native-event #js {:value value}
+                  :context {:dom/event-name "input"
+                            :matched-el element
+                            :pavlov-input-debounce-ms "10"}
+                  :translator translator
+                  :submit! submit!})]
+    (schedule! (params first-element "first-old"))
+    (schedule! (params second-element "second"))
+    (schedule! (params first-element "first-latest"))
+    (is (= [:timer-1] @!cleared))
+    ((:f (second @!scheduled)))
+    ((:f (nth @!scheduled 2)))
+    (is (= [{:type :dom/input :value "second"}
+            {:type :dom/input :value "first-latest"}]
+           @!submitted))))

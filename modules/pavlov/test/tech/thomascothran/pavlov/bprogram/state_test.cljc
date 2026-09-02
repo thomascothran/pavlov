@@ -125,7 +125,7 @@
         state (s/init [[:bthread-a bthread-a]
                        [:bthread-b bthread-b]])
         next-state (s/step state {:type :a})]
-    (is (not (= bthread-a bthread-b)))
+    (is (not (identical? bthread-a bthread-b)))
     (is (not (contains? (:requests next-state) :a)))
     (is (= #{:bthread-b}
            (get-in next-state [:requests :b])))))

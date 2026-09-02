@@ -1,0 +1,6 @@
+{:paths ["src"
+         "../../modules/pavlov-web/src"
+         "../../modules/pavlov/src"]
+ :output-dir "out/squint-js"
+ :extension "js"
+ :main [pavlov-web-example.client.entry]}

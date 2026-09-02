@@ -1,0 +1,18 @@
+{
+  "name": "pavlov-web-example",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev:squint": "vite",
+    "build:squint": "vite build",
+    "squint:compile": "rm -rf out/squint-js && squint compile",
+    "test:browser:squint": "npm run build:squint && node browser-smoke.mjs"
+  },
+  "dependencies": {
+    "squint-cljs": "0.14.208"
+  },
+  "devDependencies": {
+    "puppeteer-core": "^24.37.2",
+    "vite": "^8.0.14"
+  }
+}

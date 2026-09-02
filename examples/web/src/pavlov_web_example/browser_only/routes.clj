@@ -7,5 +7,8 @@
   [["/browser-only"
     {:get (fn [req]
             (handlers/browser-only-shell req))}]
+   ["/browser-only-squint"
+    {:get (fn [req]
+            (handlers/browser-only-shell (assoc req :pavlov/compiler :squint)))}]
    ["/browser-only/ws/"
     {:get websocket/handler}]])

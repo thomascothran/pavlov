@@ -1,5 +1,5 @@
 (ns tech.thomascothran.pavlov.web.server.websocket-test
-  (:require [cljs.test :refer-macros [deftest is]]
+  (:require [cljs.test :refer [deftest is]]
             [tech.thomascothran.pavlov.bthread :as b]
             [tech.thomascothran.pavlov.web.server :as server]
             [tech.thomascothran.pavlov.web.server.websocket :as websocket]))

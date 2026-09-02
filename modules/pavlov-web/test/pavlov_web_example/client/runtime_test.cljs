@@ -1,5 +1,5 @@
 (ns pavlov-web-example.client.runtime-test
-  (:require [cljs.test :refer-macros [async deftest is]]
+  (:require [cljs.test :refer [async deftest is]]
             [tech.thomascothran.pavlov.bprogram :as bp]
             [tech.thomascothran.pavlov.bthread :as b]
             [pavlov-web-example.client.runtime :as runtime]

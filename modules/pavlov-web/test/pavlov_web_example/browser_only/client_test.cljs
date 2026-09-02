@@ -1,8 +1,8 @@
 (ns pavlov-web-example.browser-only.client-test
-  (:require [cljs.test :refer-macros [async deftest is]]
+  (:require [cljs.test :refer [async deftest is]]
             [pavlov-web-example.browser-only.client :as client]
             [tech.thomascothran.pavlov.bprogram :as bp]
-            [tech.thomascothran.pavlov.web.dom :as dom]
+            [tech.thomascothran.pavlov.web.dom.interop :as interop]
             ["jsdom" :refer [JSDOM]]))
 
 (defn- after-ticks
@@ -84,14 +84,14 @@
 
 (defn- grid-row-order
   [document]
-  (->> (array-seq (.querySelectorAll document "#telemetry-grid-body tr"))
+  (->> (interop/collection-seq (.querySelectorAll document "#telemetry-grid-body tr"))
        (map (fn [row]
               (.-textContent (.-firstElementChild row))))
        vec))
 
 (defn- visible-grid-row-order
   [document]
-  (->> (array-seq (.querySelectorAll document "#telemetry-grid-body tr"))
+  (->> (interop/collection-seq (.querySelectorAll document "#telemetry-grid-body tr"))
        (remove #(.-hidden %))
        (map (fn [row]
               (.-textContent (.-firstElementChild row))))
@@ -192,120 +192,96 @@
 
 (deftest init-wires-visible-initialize-button-click-to-request-server-send-event-without-browser-websocket-bridge
   (async done
-         (let [real-submit-event! bp/submit-event!
-               real-subscribe! bp/subscribe!
-               !events (atom [])
-               !program (atom nil)]
-           (with-redefs [bp/submit-event!
-                         (fn [program event]
-                           (when (not= program @!program)
-                             (reset! !program program)
-                             (real-subscribe! program
-                                              ::capture
-                                              (fn [selected-event _]
-                                                (swap! !events conj selected-event))))
-                           (real-submit-event! program event))]
-             (with-browser-only-dom
-               (fn [document window]
-                 (let [initialize-button (first (array-seq (.querySelectorAll document "nav button")))
-                       real-global-websocket (.-WebSocket js/global)
-                       real-window-websocket (.-WebSocket window)
-                       restore-websocket! (fn []
-                                            (set! (.-WebSocket js/global) real-global-websocket)
-                                            (set! (.-WebSocket window) real-window-websocket))]
-                   (set! (.-WebSocket js/global) js/undefined)
-                   (set! (.-WebSocket window) js/undefined)
-                   (try
-                     (client/init!)
-                     (.dispatchEvent initialize-button (new (.-Event window) "click" #js {:bubbles true}))
-                     (after-ticks 6
-                                  (fn []
-                                    (is (some #(= :browser-only/initialize-clicked (:type %))
-                                              @!events))
-                                    (is (some #(= {:type :pavlov.web.server/send-event
-                                                   :event {:type :browser-only/initialize-clicked}}
-                                                  (select-keys % [:type :event]))
-                                              @!events))
-                                    (restore-websocket!)
-                                    (when-let [program @!program]
-                                      (bp/stop! program))
-                                    (done)))
-                     (catch :default error
-                       (restore-websocket!)
-                       (throw error))))))))))
+         (with-browser-only-dom
+           (fn [document window]
+             (let [!events (atom [])
+                   initialize-button (first (interop/collection-seq (.querySelectorAll document "nav button")))
+                   lifecycle (client/init! {:make-connection (fn [_]
+                                                               {:start! (fn [] nil)
+                                                                :cleanup! (fn [] nil)})})
+                   program (:program lifecycle)]
+               (bp/subscribe! program
+                              ::capture
+                              (fn [selected-event _]
+                                (swap! !events conj selected-event)))
+               (.dispatchEvent initialize-button (new (.-Event window) "click" #js {:bubbles true}))
+               (after-ticks 6
+                            (fn []
+                              (is (some #(= :browser-only/initialize-clicked (:type %))
+                                        @!events))
+                              (is (some #(= {:type :pavlov.web.server/send-event
+                                             :event {:type :browser-only/initialize-clicked}}
+                                            (select-keys % [:type :event]))
+                                        @!events))
+                              (bp/stop! program)
+                              (done))))))))
 
 (deftest init-gates-browser-websocket-send-on-actual-open-before-sending-encoded-initialize-event
   (async done
-         (let [real-submit-event! bp/submit-event!
-               !submitted-events (atom [])]
-           (with-redefs [bp/submit-event!
-                         (fn [program event]
-                           (swap! !submitted-events conj event)
-                           (real-submit-event! program event))]
-             (with-browser-only-dom
-               (fn [document window]
-                 (let [initialize-button (.querySelector document "#browser-only-initialize-button")
-                       real-global-websocket (.-WebSocket js/global)
-                       real-window-websocket (.-WebSocket window)
-                       !socket (atom nil)
-                       !sent-payloads (atom [])
-                       fake-websocket-constructor (fn [_url _protocols]
-                                                    (let [socket (js-obj)]
-                                                      (aset socket "send"
-                                                            (fn [payload]
-                                                              (swap! !sent-payloads conj payload)))
-                                                      (reset! !socket socket)
-                                                      socket))
-                       restore-websocket! (fn []
-                                            (set! (.-WebSocket js/global) real-global-websocket)
-                                            (set! (.-WebSocket window) real-window-websocket))]
-                   (set! (.-WebSocket js/global) fake-websocket-constructor)
-                   (set! (.-WebSocket window) fake-websocket-constructor)
-                   (try
-                     (client/init!)
-                     (.dispatchEvent initialize-button (new (.-Event window) "click" #js {:bubbles true}))
-                     (after-ticks 6
-                                  (fn []
-                                    (is (not-any? #(= :pavlov.web.server/connected (:type %))
-                                                  @!submitted-events)
-                                        "init! should not submit connected before websocket onopen")
-                                    (is (= []
-                                           @!sent-payloads)
-                                        "click before websocket onopen should not send")
-                                    (when-let [onopen (some-> @!socket .-onopen)]
-                                      (onopen))
-                                    (after-ticks 6
-                                                 (fn []
-                                                   (is (= [(pr-str {:type :browser-only/initialize-clicked})]
-                                                          @!sent-payloads)
-                                                       "eligible initialize send should flush after websocket onopen")
-                                                   (restore-websocket!)
-                                                   (done)))))
-                     (catch :default error
-                       (restore-websocket!)
-                       (throw error))))))))))
+         (let [!submitted-events (atom [])]
+           (with-browser-only-dom
+             (fn [document window]
+               (let [initialize-button (.querySelector document "#browser-only-initialize-button")
+                     real-global-websocket (.-WebSocket js/global)
+                     real-window-websocket (.-WebSocket window)
+                     !socket (atom nil)
+                     !sent-payloads (atom [])
+                     fake-websocket-constructor (fn [_url _protocols]
+                                                  (let [socket (js-obj)]
+                                                    (aset socket "send"
+                                                          (fn [payload]
+                                                            (swap! !sent-payloads conj payload)))
+                                                    (reset! !socket socket)
+                                                    socket))
+                     restore-websocket! (fn []
+                                          (set! (.-WebSocket js/global) real-global-websocket)
+                                          (set! (.-WebSocket window) real-window-websocket))]
+                 (set! (.-WebSocket js/global) fake-websocket-constructor)
+                 (set! (.-WebSocket window) fake-websocket-constructor)
+                 (try
+                   (client/init! {:submit-event! (fn [program event]
+                                                   (swap! !submitted-events conj event)
+                                                   (bp/submit-event! program event))})
+                   (.dispatchEvent initialize-button (new (.-Event window) "click" #js {:bubbles true}))
+                   (after-ticks 6
+                                (fn []
+                                  (is (not-any? #(= :pavlov.web.server/connected (:type %))
+                                                @!submitted-events)
+                                      "init! should not submit connected before websocket onopen")
+                                  (is (= [] @!sent-payloads)
+                                      "click before websocket onopen should not send")
+                                  (when-let [onopen (some-> @!socket .-onopen)]
+                                    (onopen))
+                                  (after-ticks 6
+                                               (fn []
+                                                 (is (= [(pr-str {:type :browser-only/initialize-clicked})]
+                                                        @!sent-payloads)
+                                                     "eligible initialize send should flush after websocket onopen")
+                                                 (restore-websocket!)
+                                                 (done)))))
+                   (catch :default error
+                     (restore-websocket!)
+                     (throw error)))))))))
 
 (deftest init-unwraps-server-event-received-into-contained-dom-op-event
   (async done
          (let [!submit! (atom nil)]
-           (with-redefs [dom/attach-dom-events!
-                         (fn [{:keys [submit!]}]
-                           (reset! !submit! submit!))]
-             (with-browser-only-dom
-               (fn [document _window]
-                 (let [initialize-button (first (array-seq (.querySelectorAll document "nav button")))]
-                   (client/init!)
-                   (@!submit! {:type :pavlov.web.server/event-received
-                               :event {:type :pavlov.web.dom/op
-                                       :selector "nav button"
-                                       :kind :set
-                                       :member "textContent"
-                                       :value "initialized"}})
-                   (after-ticks 4
-                                (fn []
-                                  (is (= "initialized"
-                                         (.-textContent initialize-button)))
-                                  (done))))))))))
+           (with-browser-only-dom
+             (fn [document _window]
+               (let [initialize-button (first (interop/collection-seq (.querySelectorAll document "nav button")))]
+                 (client/init! {:attach-dom-events! (fn [{:keys [submit!]}]
+                                                     (reset! !submit! submit!))})
+                 (@!submit! {:type :pavlov.web.server/event-received
+                             :event {:type :pavlov.web.dom/op
+                                     :selector "nav button"
+                                     :kind :set
+                                     :member "textContent"
+                                     :value "initialized"}})
+                 (after-ticks 4
+                              (fn []
+                                (is (= "initialized"
+                                       (.-textContent initialize-button)))
+                                (done)))))))))
 
 (deftest init-starts-browser-websocket-bridge-and-delivers-inbound-dom-op-to-visible-initialize-button
   (async done

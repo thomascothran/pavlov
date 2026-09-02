@@ -169,14 +169,15 @@
             [tech.thomascothran.pavlov.event.proto :as event-proto]
             [tech.thomascothran.pavlov.bid.proto :as bid-proto]
             [tech.thomascothran.pavlov.defaults])
-  #?(:squint nil
+  #?(:squint (:refer-clojure :exclude [])
      :cljs (:require-macros [tech.thomascothran.pavlov.bthread])))
 
 (defn notify!
   "Notify a bthread of an event and receive its next bid.
 
   Returns the bid map with `:pavlov/bthread` metadata attached, or nil
-  if the bthread has terminated.
+  if the bthread has terminated. Squint returns the bid unchanged because
+  attaching metadata to native JavaScript values can discard their prototype.
 
   NOTE: This is primarily for REPL exploration and testing. In production,
   the bprogram handles notification automatically.
@@ -189,8 +190,9 @@
   (b/notify! my-bthread {:type :b}) ;=> nil
   ```"
   [bthread event]
-  (some-> (proto/notify! bthread event)
-          (vary-meta assoc :pavlov/bthread bthread)))
+  #?(:squint (proto/notify! bthread event)
+     :default (some-> (proto/notify! bthread event)
+                      (vary-meta assoc :pavlov/bthread bthread))))
 
 (defn state
   "Get the current internal state of a bthread.
@@ -230,6 +232,12 @@
 (defn- default-label
   [bthread]
   (proto/state bthread))
+
+(defn- throwable->data
+  [error]
+  #?(:squint {:message (ex-message error)
+              :data (ex-data error)}
+     :default (Throwable->map error)))
 
 (defn step
   "Create a bthread from a step function for full state control.
@@ -287,7 +295,7 @@
                                    (event-proto/type event)))
                     {:request #{{:type error-event-type
                                  :event event
-                                 :error (Throwable->map e)
+                                 :error (throwable->data e)
                                  :invariant-violated true
                                  :terminal true}}})))))))))
 

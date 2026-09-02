@@ -1,7 +1,14 @@
 {
   "name": "pavlov-web",
   "version": "1.0.0",
+  "scripts": {
+    "squint:compile": "rm -rf out/squint-js && squint compile",
+    "test:squint": "npm run squint:compile && node out/squint-js/pavlov_web_runner.mjs"
+  },
   "dependencies": {
     "jsdom": "^29.0.0"
+  },
+  "devDependencies": {
+    "squint-cljs": "0.14.208"
   }
 }

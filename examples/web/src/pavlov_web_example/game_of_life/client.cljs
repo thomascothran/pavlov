@@ -3,23 +3,28 @@
 
 (def page-id :game-of-life)
 
-(defn init! []
-  (runtime/init! {:ws-path "/game-of-life/ws/"
-                  :heartbeat-interval-ms 20000
-                  :make-program (fn [{:keys [query-selector submit! transport bridge-bthread]}]
-                                  (runtime/make-bridged-program!
-                                   {:query-selector query-selector
-                                    :submit! submit!
-                                    :transport transport
-                                    :bridge-bthread bridge-bthread
-                                    :forwarded-events #{:game-of-life/cell-clicked
-                                                        :game-of-life/start-clicked
-                                                        :game-of-life/pause-clicked
-                                                        :game-of-life/reset-clicked}
-                                    :forwarded-event->server-event
-                                    (fn [event]
-                                      (select-keys event [:type :pavlov-row :pavlov-col]))
-                                    :page-bthreads []}))}))
+(defn init!
+  ([]
+   (init! {}))
+  ([opts]
+   (runtime/init!
+    (merge {:ws-path "/game-of-life/ws/"
+            :heartbeat-interval-ms 20000
+            :make-program (fn [{:keys [query-selector submit! transport bridge-bthread]}]
+                            (runtime/make-bridged-program!
+                             {:query-selector query-selector
+                              :submit! submit!
+                              :transport transport
+                              :bridge-bthread bridge-bthread
+                              :forwarded-events #{:game-of-life/cell-clicked
+                                                  :game-of-life/start-clicked
+                                                  :game-of-life/pause-clicked
+                                                  :game-of-life/reset-clicked}
+                              :forwarded-event->server-event
+                              (fn [event]
+                                (select-keys event [:type :pavlov-row :pavlov-col]))
+                              :page-bthreads []}))}
+           opts))))
 
 (defn mounted?
   []

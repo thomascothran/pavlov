@@ -1,7 +1,8 @@
 (ns tech.thomascothran.pavlov.web.dom-test
-  (:require [cljs.test :refer-macros [deftest is]]
+  (:require [cljs.test :refer [deftest is]]
             [tech.thomascothran.pavlov.bthread :as b]
             [tech.thomascothran.pavlov.web.dom :as dom]
+            [tech.thomascothran.pavlov.web.dom.interop :as interop]
             ["jsdom" :refer [JSDOM]]))
 
 (defn- make-fake-timeouts
@@ -41,6 +42,11 @@
 
 (deftest dom-namespace-loads
   (is true))
+
+(deftest browser-collection-conversion-preserves-order-and-handles-nil
+  (is (nil? (interop/collection-seq nil)))
+  (is (= ["first" "second"]
+         (vec (interop/collection-seq (js/Set. #js ["first" "second"]))))))
 
 (deftest make-dom-op-bthread-sets-input-value-property
   (let [document (-> (JSDOM. "<input id=\"search\" value=\"before\">")
@@ -85,7 +91,7 @@
                         :kind :reorder-children
                         :child-ids ["row-1" "row-2"]})
     (is (= ["row-1" "row-2"]
-           (->> (array-seq (.querySelectorAll tbody "tr"))
+           (->> (interop/collection-seq (.querySelectorAll tbody "tr"))
                 (map #(.getAttribute % "id")))))))
 
 (deftest make-dom-op-bthread-runs-multiple-dom-ops-from-batched-event

@@ -48,3 +48,4 @@ devenv.local.nix
 resources/public/js/cljs-runtime/
 resources/public/js/main.js
 resources/public/js/manifest.edn
+resources/public/js-squint/

@@ -1,4 +1,5 @@
-(ns tech.thomascothran.pavlov.web.dom.event-translators)
+(ns tech.thomascothran.pavlov.web.dom.event-translators
+  (:require [tech.thomascothran.pavlov.web.dom.interop :as interop]))
 
 (defn- element-identity
   [element]
@@ -56,7 +57,7 @@
                    (assoc acc name (.-value element))
                    acc)))
              {}
-             (array-seq (.-elements form)))
+             (interop/collection-seq (.-elements form)))
      :clj
      (throw (ex-info "serialize-form-values is only available in cljs"
                      {:translator `serialize-form-values}))))
@@ -168,7 +169,7 @@
 (defn- data-transfer-types
   [data-transfer]
   #?(:cljs
-     (when-let [types (some-> data-transfer .-types array-seq seq)]
+     (when-let [types (some-> data-transfer .-types interop/collection-seq seq)]
        (vec types))
      :clj
      (throw (ex-info "data-transfer-types is only available in cljs"
@@ -177,7 +178,7 @@
 (defn- data-transfer-items
   [data-transfer]
   #?(:cljs
-     (when-let [items (some-> data-transfer .-items array-seq seq)]
+     (when-let [items (some-> data-transfer .-items interop/collection-seq seq)]
        (mapv (fn [item]
                {:kind (.-kind item)
                 :type (.-type item)})

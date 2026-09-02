@@ -7,5 +7,8 @@
   [["/game-of-life"
     {:get (fn [req]
             (handlers/game-of-life-shell req))}]
+   ["/game-of-life-squint"
+    {:get (fn [req]
+            (handlers/game-of-life-shell (assoc req :pavlov/compiler :squint)))}]
    ["/game-of-life/ws/"
     {:get websocket/handler}]])

@@ -1,11 +1,10 @@
 {
   "dependencies": {
-    "squint-cljs": "^0.10.186"
-  },
-  "devDependencies": {
-    "vitest": "^2.1.6"
+    "squint-cljs": "0.14.208"
   },
   "scripts": {
-    "squint-tests": "vitest"
+    "squint:compile": "rm -rf out/squint-js && squint compile",
+    "test:squint": "npm run squint:compile && node out/squint-js/pavlov_squint_runner.mjs",
+    "squint-tests": "npm run test:squint"
   }
 }

@@ -26,7 +26,8 @@
      "."]))
 
 (defn- shell
-  [{:keys [height width]}]
+  [{:keys [height width script-src script-type]
+    :or {script-src "/js/main.js?v=snazzy-demo-1"}}]
   [:html {:class "dark" :lang "en"}
    [:head
     [:meta {:charset "utf-8"}]
@@ -102,10 +103,10 @@
         [:p [:span {:class "text-tertiary"} "INFO:"] " BACKEND STATE OWNS GENERATIONS."]
         [:p [:span {:class "text-tertiary"} "INFO:"] " CELL CLICKS FORWARD OVER PAVLOV EVENTS."]
         [:p [:span {:class "text-secondary"} "WARN:"] " DOM CLASSES ARE SERVER-MANAGED."]]]]]
-    [:script {:src "/js/main.js?v=snazzy-demo-1"}]]])
+    [:script (cond-> {:src script-src}
+               script-type (assoc :type script-type))]]])
 
 (defn render-page
-  [{:keys [height width]}]
+  [options]
   (str "<!DOCTYPE html>\n\n"
-       (chassis/html (shell {:height height
-                             :width width}))))
+       (chassis/html (shell options))))

@@ -78,18 +78,23 @@
 
   Builds the app program, delegates websocket lifecycle/bridge wiring to
   `:make-connection`, starts that connection, attaches DOM events, and returns
-  the manager cleanup handle. Encoding/decoding defaults remain example
-  serialization policy; lifecycle defaults remain with the connection manager."
+  the program, submit, transport, and cleanup handles. `:submit-event!` and
+  `:attach-dom-events!` are injectable host seams. Encoding/decoding defaults
+  remain example serialization policy; lifecycle defaults remain with the
+  connection manager."
   [{:keys [make-program make-connection root query-selector ws-path encode decode
-           page-bthreads forwarded-events forwarded-event->server-event]
+           page-bthreads forwarded-events forwarded-event->server-event
+           submit-event! attach-dom-events!]
     :as opts
     :or {root js/document
          query-selector #(.querySelectorAll js/document %)
-         make-connection websocket-connection/make-browser-websocket-connection!}}]
+         make-connection websocket-connection/make-browser-websocket-connection!
+         submit-event! bp/submit-event!
+         attach-dom-events! dom/attach-dom-events!}}]
   (log "init! ws-path=" ws-path)
   (let [!program (atom nil)
         submit! #(when-let [program @!program]
-                   (bp/submit-event! program %))
+                   (submit-event! program %))
         connection (make-connection (with-supplied-manager-lifecycle-options
                                       {:ws-path ws-path
                                        :submit! submit!
@@ -107,6 +112,9 @@
     (when-let [start! (:start! connection)]
       (start!))
     (log "attaching DOM events")
-    (dom/attach-dom-events! {:root root
-                             :submit! submit!})
-    {:cleanup! (:cleanup! connection)}))
+    (attach-dom-events! {:root root
+                         :submit! submit!})
+    {:program program
+     :submit! submit!
+     :transport (:transport connection)
+     :cleanup! (:cleanup! connection)}))

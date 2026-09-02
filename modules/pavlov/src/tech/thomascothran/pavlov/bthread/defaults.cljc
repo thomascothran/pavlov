@@ -9,7 +9,7 @@
           (set-state [_this serialized] serialized))
 
    :squint (extend-protocol bthread/BThread
-             js/Object
+             object
              (notify! [this _event] this)
              (state [this] this)
              (label [this] this)

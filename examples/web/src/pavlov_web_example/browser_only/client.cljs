@@ -26,17 +26,22 @@
                                    :value (status-text event)}}}))]]
         (datagrid.in-memory/make-bthreads)))
 
-(defn init! []
-  (runtime/init! {:ws-path "/browser-only/ws/"
-                  :heartbeat-interval-ms 20000
-                  :make-program (fn [{:keys [query-selector submit! transport bridge-bthread]}]
-                                  (runtime/make-bridged-program!
-                                   {:query-selector query-selector
-                                    :submit! submit!
-                                    :transport transport
-                                    :bridge-bthread bridge-bthread
-                                    :forwarded-events #{:browser-only/initialize-clicked}
-                                    :page-bthreads (make-page-bthreads)}))}))
+(defn init!
+  ([]
+   (init! {}))
+  ([opts]
+   (runtime/init!
+    (merge {:ws-path "/browser-only/ws/"
+            :heartbeat-interval-ms 20000
+            :make-program (fn [{:keys [query-selector submit! transport bridge-bthread]}]
+                            (runtime/make-bridged-program!
+                             {:query-selector query-selector
+                              :submit! submit!
+                              :transport transport
+                              :bridge-bthread bridge-bthread
+                              :forwarded-events #{:browser-only/initialize-clicked}
+                              :page-bthreads (make-page-bthreads)}))}
+           opts))))
 
 (defn mounted?
   []

@@ -1,5 +1,28 @@
 (ns tech.thomascothran.pavlov.web.fetch
-  (:require [tech.thomascothran.pavlov.bthread :as b]))
+  (:require [tech.thomascothran.pavlov.bthread :as b]
+            [tech.thomascothran.pavlov.web.dom.interop :as interop]))
+
+#?(:cljs
+   (defn- headers->map
+     [headers]
+     (let [entries (cond
+                     (nil? headers) nil
+                     (fn? (.-entries headers)) (.entries headers)
+                     :else (js/Object.entries headers))]
+       (reduce (fn [acc entry]
+                 (assoc acc (aget entry 0) (aget entry 1)))
+               {}
+               (interop/collection-seq entries)))))
+
+#?(:squint
+   (defn- json->data
+     [value]
+     ;; Squint already represents parsed JSON as its native map/vector data.
+     value)
+   :cljs
+   (defn- json->data
+     [value]
+     (js->clj value :keywordize-keys true)))
 
 #?(:cljs
    (defn- resolved-response-event
@@ -8,8 +31,8 @@
       :request/id id
       :status (.-status response)
       :ok (.-ok response)
-      :headers (js->clj (.-headers response))
-      :body (js->clj body :keywordize-keys true)}))
+      :headers (headers->map (.-headers response))
+      :body (json->data body)}))
 
 #?(:cljs
    (defn- rejected-fetch-event

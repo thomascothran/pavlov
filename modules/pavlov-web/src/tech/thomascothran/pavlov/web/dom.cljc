@@ -3,6 +3,7 @@
             [tech.thomascothran.pavlov.event :as event]
             [tech.thomascothran.pavlov.web.dom.op :as dom-op]
             [tech.thomascothran.pavlov.web.dom.event-translators :as event-translators]
+            [tech.thomascothran.pavlov.web.dom.interop :as interop]
             [tech.thomascothran.pavlov.web.dom.scheduler :as scheduler]))
 
 (def built-in-default-translators
@@ -88,7 +89,7 @@
                    (assoc acc (keyword attr-name) (.-value attr))
                    acc)))
              {}
-             (array-seq (.-attributes element)))))
+             (interop/collection-seq (.-attributes element)))))
 
 #?(:cljs
    (defn- child-dom-value
@@ -117,7 +118,7 @@
      [attr-prefix root-node matched-el]
      (when-let [selector (.getAttribute matched-el (capture-selector-attr-name attr-prefix))]
        (->> (.querySelectorAll root-node selector)
-            array-seq
+            interop/collection-seq
             (mapv #(child-context attr-prefix %))))))
 
 (defn default-resolve-from-attributes

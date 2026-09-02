@@ -1,12 +1,16 @@
 (ns tech.thomascothran.pavlov.bid.defaults
-  (:require [tech.thomascothran.pavlov.bid.proto :as proto]
-            [clojure.set :as set]))
+  (:require [tech.thomascothran.pavlov.bid.proto :as proto]))
+
+(defn- waited-events
+  [bid]
+  (reduce disj
+          (get bid :wait-on #{})
+          (get bid :request #{})))
 
 #?(:clj (extend-protocol proto/Bid
           clojure.lang.APersistentMap
           (request [this] (get this :request #{}))
-          (wait-on [this] (-> (get this :wait-on #{})
-                              (set/difference (get this :request #{}))))
+          (wait-on [this] (waited-events this))
           (block [this] (get this :block #{}))
           (bthreads [this] (get this :bthreads))
           (hot [this] (get this :hot)))
@@ -14,8 +18,7 @@
    :squint (extend-protocol proto/Bid
              object
              (request [this] (get this :request #{}))
-             (wait-on [this] (-> (get this :wait-on #{})
-                                 (set/difference (get this :request #{}))))
+             (wait-on [this] (waited-events this))
              (block [this] (get this :block #{}))
              (bthreads [this] (get this :bthreads))
              (hot [this] (get this :hot)))
@@ -24,16 +27,14 @@
 
            cljs.core.PersistentArrayMap
            (request [this] (get this :request #{}))
-           (wait-on [this] (-> (get this :wait-on #{})
-                               (set/difference (get this :request #{}))))
+           (wait-on [this] (waited-events this))
            (block [this] (get this :block #{}))
            (bthreads [this] (get this :bthreads))
            (hot [this] (get this :hot))
 
            cljs.core.PersistentHashMap
            (request [this] (get this :request #{}))
-           (wait-on [this] (-> (get this :wait-on #{})
-                               (set/difference (get this :request #{}))))
+           (wait-on [this] (waited-events this))
            (block [this] (get this :block #{}))
            (bthreads [this] (get this :bthreads))
            (hot [this] (get this :hot))))

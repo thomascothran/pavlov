@@ -1,7 +1,8 @@
 (ns tech.thomascothran.pavlov.web.dom.op
   "Private DOM op implementation namespace. This namespace is intended for use
   only by `tech.thomascothran.pavlov.web.dom`."
-  (:require [tech.thomascothran.pavlov.event :as event]))
+  (:require [tech.thomascothran.pavlov.event :as event]
+            [tech.thomascothran.pavlov.web.dom.interop :as interop]))
 
 #?(:cljs
    (defn- log
@@ -21,7 +22,7 @@
 #?(:cljs
    (defn- reorder-children!
      [dom-node child-ids]
-     (let [children (array-seq (.-children dom-node))
+     (let [children (interop/collection-seq (.-children dom-node))
            children-by-id (reduce (fn [acc child]
                                     (let [child-id (.-id child)]
                                       (if (seq child-id)
@@ -38,7 +39,7 @@
    (defn- query-dom-nodes
      [query-selector selector]
      (if selector
-       (array-seq (query-selector selector))
+       (interop/collection-seq (query-selector selector))
        [])))
 
 #?(:cljs

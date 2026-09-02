@@ -15,6 +15,14 @@
     (is (str/starts-with? content-type "text/html"))
     (is (str/includes? body "id=\"browser-only-initialize-button\""))))
 
+(deftest squint-routes-load-the-module-bundle-without-the-shadow-bundle
+  (doseq [uri ["/browser-only-squint" "/game-of-life-squint"]]
+    (let [{:keys [status body]} (response-for uri)]
+      (is (= 200 status))
+      (is (str/includes? body "type=\"module\""))
+      (is (str/includes? body "/js-squint/main.js"))
+      (is (not (str/includes? body "/js/main.js"))))))
+
 (deftest browser-only-websocket-route-exposes-ring-websocket-listener
   (let [response (response-for "/browser-only/ws/")
         listener (:ring.websocket/listener response)]

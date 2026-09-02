@@ -1,5 +1,5 @@
 (ns tech.thomascothran.pavlov.web.fetch-test
-  (:require [cljs.test :refer-macros [async deftest is testing]]
+  (:require [cljs.test :refer [async deftest is]]
             [tech.thomascothran.pavlov.bprogram.proto :as bp]
             [tech.thomascothran.pavlov.bthread :as b]
             [tech.thomascothran.pavlov.web.fetch :as fetch]))
@@ -22,7 +22,7 @@
   [{:keys [status ok headers body-json]}]
   #js {:status status
        :ok ok
-       :headers (clj->js headers)
+       :headers (js/Headers. (clj->js headers))
        :json (fn []
                (js/Promise.resolve (js/JSON.parse body-json)))})
 
