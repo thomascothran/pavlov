@@ -11,38 +11,6 @@ Pavlov is an opinionated [behavioral programming](https://cacm.acm.org/research/
 | skills | pre-alpha | [![Clojars Project](https://img.shields.io/clojars/v/tech.thomascothran/pavlov-skills.svg)](https://clojars.org/tech.thomascothran/pavlov-skills) |
 | web | pre-alpha | [![Clojars Project](https://img.shields.io/clojars/v/tech.thomascothran/pavlov-web.svg)](https://clojars.org/tech.thomascothran/pavlov-web) |
 
-## Experimental Squint support
-
-Pavlov core and the browser-facing parts of Pavlov Web can be compiled with
-[Squint](https://github.com/squint-cljs/squint). The implementation and tests
-are shared with full ClojureScript; Squint-specific files only configure test
-and ESM entrypoints.
-
-```bash
-cd modules/pavlov
-npm ci && npm run test:squint
-
-cd ../pavlov-web
-npm ci && npm run test:squint
-
-cd ../../examples/web
-npm ci && npm run build:squint
-```
-
-The example server exposes the Squint bundle at `/browser-only-squint` and
-`/game-of-life-squint`; the original Shadow CLJS pages remain at
-`/browser-only` and `/game-of-life`. Squint consumes Pavlov source roots rather
-than Clojars JARs. A consuming monorepo can configure paths directly:
-
-```clojure
-{:paths ["src"
-         "../pavlov/modules/pavlov/src"
-         "../pavlov/modules/pavlov-web/src"]}
-```
-
-Support remains experimental and currently inherits Pavlov core's primitive
-string/keyword bthread-name and event-type profile. Collection-valued names or
-event types and the `b/thread` macro are not yet guaranteed under Squint.
 
 Behavioral programming uses a basic unit called a bthread (for "behavioral thread"). Bthreads encapsulate behaviors.  They park until events to which they are subscribed occur. Bthreads communicate exclusively via queues.
 
@@ -555,19 +523,38 @@ Here is an example of how the tap publisher can be used with [portal](https://gi
 - append only programming. This is enabled by the ability of a bthread to block another bthread.
 - behavioral programming lends itself to model checking - without the need to write TLA+
 
-## Squint support (experimental - use at your own risk)
+## Experimental Squint support
 
-Pavlov core has an initial [Squint](https://github.com/squint-cljs/squint) compatibility profile. It supports the core scheduler, bthreads, protocol implementations, and ephemeral programs when bthread names and event types are strings/keywords (keywords compile to strings in Squint).
-
-Collection-valued names/event types and the `b/thread` macro are not supported yet. Squint's native JavaScript data structures (specifically maps and sets) do not provide Clojure structural key/member semantics for separately allocated objects and arrays.
-
-Run the shared Squint tests with:
+Pavlov core and the browser-facing parts of Pavlov Web can be compiled with
+[Squint](https://github.com/squint-cljs/squint). The implementation and tests
+are shared with full ClojureScript; Squint-specific files only configure test
+and ESM entrypoints.
 
 ```bash
 cd modules/pavlov
-npm install
-npm run test:squint
+npm ci && npm run test:squint
+
+cd ../pavlov-web
+npm ci && npm run test:squint
+
+cd ../../examples/web
+npm ci && npm run build:squint
 ```
+
+The example server exposes the Squint bundle at `/browser-only-squint` and
+`/game-of-life-squint`; the original Shadow CLJS pages remain at
+`/browser-only` and `/game-of-life`. Squint consumes Pavlov source roots rather
+than Clojars JARs. A consuming monorepo can configure paths directly:
+
+```clojure
+{:paths ["src"
+         "../pavlov/modules/pavlov/src"
+         "../pavlov/modules/pavlov-web/src"]}
+```
+
+Support remains experimental and currently inherits Pavlov core's primitive
+string/keyword bthread-name and event-type profile. Collection-valued names or
+event types and the `b/thread` macro are not yet guaranteed under Squint.
 
 
 ## Further Reading
