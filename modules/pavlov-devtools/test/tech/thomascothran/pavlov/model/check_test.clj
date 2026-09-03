@@ -427,6 +427,24 @@
           (is (seq (:cycle livelock))
               "Cycle should not be empty"))))))
 
+(deftest scenario-cycle-is-visible-to-model-checker
+  (testing "the model checker discovers a scenario's behavioral cycle"
+    (let [result
+          (check/check
+           {:bthreads
+            {:scenario
+             (b/scenario
+              [{:request #{:ping}}
+               (fn [context]
+                 (let [state (get context :state)]
+                   {:bid {:request #{:pong}}
+                    :state state
+                    :next-step :first}))]
+              {:initial-state :stable})}
+            :check-livelock? true})]
+      (is (= #{:ping :pong}
+             (-> result :livelocks first :cycle set))))))
+
 (deftest livelock-after-events
   (testing "Livelock after executing some events should report both path and cycle"
     ;; Use b/step to create a proper state machine that:

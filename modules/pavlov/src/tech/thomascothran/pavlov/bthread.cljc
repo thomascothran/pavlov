@@ -47,6 +47,7 @@
    | Constructor   | Use Case                                    |
    |---------------|---------------------------------------------|
    | `bids`        | Finite sequence of scripted bids (supports dynamic fns) |
+   | `scenario`    | Stateful sequence with dynamic cursor control |
    | `on`          | React to exactly one event type             |
    | `after-all`   | Coordinate multiple prerequisites           |
    | `request-each`| Request remaining events until all selected |
@@ -74,6 +75,20 @@
             (fn [event]
               {:request #{{:type :order/confirm
                            :order-id (:order-id event)}}})])
+   ```
+
+   **Use `scenario`** when a scripted sequence needs private state or dynamic
+   cursor control:
+   ```clojure
+   (b/scenario
+     [{:wait-on #{:order/placed}}
+      (fn [context]
+        (let [event (get context :event)
+              state (get context :state)]
+          {:bid {:request #{{:type :order/confirm
+                             :order-id (:order-id event)}}}
+           :state (assoc state :order-id (:order-id event))}))]
+     {:initial-state {}})
    ```
 
    **Use `on`** when you need stateless reactions to a single event type:
@@ -364,6 +379,98 @@
                           x)]
 
                [(inc idx') bid]))))))
+
+(defn- scenario-function-result
+  [result cursor scenario-state]
+  (let [next-step-present? (contains? result :next-step)
+        next-step (get result :next-step)
+        next-cursor
+        (if next-step-present?
+          (case next-step
+            :current cursor
+            :first 0
+            (throw (ex-info "A scenario function's :next-step must be :current or :first"
+                            {:next-step next-step
+                             :cursor cursor})))
+          (inc cursor))
+        bid (get result :bid)]
+    (when (and (nil? bid) next-step-present?)
+      (throw (ex-info "A terminating scenario bid cannot specify :next-step"
+                      {:next-step next-step
+                       :cursor cursor})))
+    [{:cursor next-cursor
+      :scenario-state (if (contains? result :state)
+                        (get result :state)
+                        scenario-state)}
+     bid]))
+
+(defn scenario
+  "Create a stateful bthread from a finite sequence of scenario steps.
+
+  A step may be a literal bid or a function. Literal bids preserve the local
+  scenario state and advance to the following step. Functions receive:
+
+    `{:event selected-event :state current-scenario-state}`
+
+  A function must return a result map containing `:bid`. It may also contain:
+
+  - `:state` - the next local state. When omitted, the current state is kept.
+    Key presence is significant, so `:state nil` explicitly clears the state.
+  - `:next-step` - cursor control for the next notification. `:current` repeats
+    the current step and `:first` returns to the first step. When omitted, the
+    cursor advances to the following step.
+
+  A nil bid terminates the bthread. A terminating result cannot also specify
+  `:next-step`. Cursor movement never invokes another step immediately.
+
+  Options:
+  - `:initial-state` - any immutable value supplied to the first function step
+  - `:label` - a function `(fn [bthread] -> label)` for debugging, as in `step`
+
+  The serializable bthread state has the shape:
+
+    `{:cursor next-step-index :scenario-state local-state}`
+
+  Example:
+  ```clojure
+  (b/scenario
+   [{:wait-on #{:order/placed}}
+    (fn [context]
+      (let [event (get context :event)
+            state (get context :state)]
+        {:bid {:request #{{:type :payment/requested
+                           :order-id (:order-id event)}}}
+         :state (assoc state :order-id (:order-id event))}))
+    (fn [context]
+      (let [state (get context :state)]
+        {:bid {:request #{{:type :workflow/completed
+                           :order-id (:order-id state)}}}
+         :next-step :first}))]
+   {:initial-state {}})
+  ```"
+  ([xs]
+   (scenario xs nil))
+  ([xs config]
+   (let [steps (into [] xs)
+         initial-state (get config :initial-state)]
+     (step
+      (fn [internal-state event]
+        (let [internal-state (or internal-state
+                                 {:cursor 0
+                                  :scenario-state initial-state})
+              cursor (get internal-state :cursor)
+              scenario-state (get internal-state :scenario-state)
+              scenario-step (get steps cursor)]
+          (if (fn? scenario-step)
+            (scenario-function-result
+             (scenario-step {:event event
+                             :state scenario-state})
+             cursor
+             scenario-state)
+            [{:cursor (inc cursor)
+              :scenario-state scenario-state}
+             scenario-step])))
+      config))))
 
 (defn repeat
   "Create a bthread that returns the same bid repeatedly.

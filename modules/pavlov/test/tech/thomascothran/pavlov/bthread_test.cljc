@@ -96,6 +96,122 @@
 (comment
   (test-bids-with-function))
 
+(deftest test-scenario-state-passing
+  (let [scenario
+        (b/scenario
+         [{:wait-on #{:order/placed}}
+          (fn [context]
+            (let [event (get context :event)
+                  state (get context :state)]
+              {:bid {:request #{{:type :payment/requested
+                                 :order-id (:order-id event)}}}
+               :state (assoc state :order-id (:order-id event))}))
+          (fn [context]
+            (let [state (get context :state)]
+              {:bid {:request #{{:type :workflow/completed
+                                 :order-id (:order-id state)
+                                 :status (:status state)}}}}))]
+         {:initial-state {:status :new}})]
+    (is (= {:wait-on #{:order/placed}}
+           (b/notify! scenario nil)))
+    (is (= {:request #{{:type :payment/requested :order-id 42}}}
+           (b/notify! scenario {:type :order/placed :order-id 42})))
+    (is (= {:request #{{:type :workflow/completed
+                        :order-id 42
+                        :status :new}}}
+           (b/notify! scenario {:type :payment/completed})))
+    (is (nil? (b/notify! scenario {:type :workflow/completed})))))
+
+(deftest test-scenario-state-preservation-and-clearing
+  (let [scenario
+        (b/scenario
+         [(fn [_]
+            {:bid {:request #{:a}}
+             :state {:value 1}})
+          (fn [_]
+            {:bid {:request #{:b}}})
+          (fn [context]
+            (let [state (get context :state)]
+              {:bid {:request #{{:type :observed :state state}}}
+               :state nil}))
+          (fn [context]
+            (let [state (get context :state)]
+              {:bid {:request #{{:type :observed-cleared-state
+                                 :state state}}}}))])]
+    (is (= {:request #{:a}}
+           (b/notify! scenario nil)))
+    (is (= {:request #{:b}}
+           (b/notify! scenario :a)))
+    (is (= {:request #{{:type :observed :state {:value 1}}}}
+           (b/notify! scenario :b))
+        "An absent :state preserves the scenario state")
+    (is (= {:request #{{:type :observed-cleared-state :state nil}}}
+           (b/notify! scenario :observed))
+        "A present nil :state clears the scenario state")))
+
+(deftest test-scenario-next-step-current
+  (let [scenario
+        (b/scenario
+         [(fn [context]
+            (let [state (get context :state)
+                  invocation (inc (or state 0))]
+              (cond-> {:bid {:request #{{:type :tick
+                                         :invocation invocation}}}
+                       :state invocation}
+                (< invocation 2) (assoc :next-step :current))))
+          {:request #{:done}}])]
+    (is (= {:request #{{:type :tick :invocation 1}}}
+           (b/notify! scenario nil)))
+    (is (= {:request #{{:type :tick :invocation 2}}}
+           (b/notify! scenario {:type :tick})))
+    (is (= {:request #{:done}}
+           (b/notify! scenario {:type :tick})))))
+
+(deftest test-scenario-next-step-first
+  (let [scenario
+        (b/scenario
+         [{:request #{:start}}
+          (fn [context]
+            (let [state (get context :state)]
+              {:bid {:request #{{:type :restart :state state}}}
+               :state :retained
+               :next-step :first}))]
+         {:initial-state :initial})]
+    (is (= {:request #{:start}}
+           (b/notify! scenario nil)))
+    (is (= {:request #{{:type :restart :state :initial}}}
+           (b/notify! scenario :start)))
+    (is (= {:request #{:start}}
+           (b/notify! scenario :restart)))
+    (is (= {:request #{{:type :restart :state :retained}}}
+           (b/notify! scenario :start)))))
+
+(deftest test-scenario-termination
+  (testing "a literal nil bid terminates"
+    (let [scenario (b/scenario [nil {:request #{:unreachable}}])]
+      (is (nil? (b/notify! scenario nil)))))
+  (testing "a function may return a terminating bid"
+    (let [scenario (b/scenario [(fn [_]
+                                  {:bid nil
+                                   :state :finished})])]
+      (is (nil? (b/notify! scenario nil))))))
+
+(defn- scenario-error-event
+  [result]
+  (let [scenario (b/scenario [{:wait-on #{:go}}
+                              (constantly result)])]
+    (b/notify! scenario nil)
+    (-> (b/notify! scenario :go) :request first)))
+
+(deftest test-scenario-next-step-validation
+  (doseq [invalid-result [{:bid {:request #{:a}} :next-step :elsewhere}
+                          {:bid nil :next-step :current}
+                          {:bid nil :next-step :first}]]
+    (let [error-event (scenario-error-event invalid-result)]
+      (is (= ::b/unhandled-step-fn-error (:type error-event)))
+      (is (:invariant-violated error-event))
+      (is (:terminal error-event)))))
+
 (deftest test-repeat
   (let [bthread (b/repeat {:request #{:test}})
         _ (doseq [_ (range 3)]
