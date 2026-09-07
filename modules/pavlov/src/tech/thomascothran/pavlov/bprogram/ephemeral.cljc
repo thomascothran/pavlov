@@ -115,6 +115,7 @@
 #?(:cljs
    (defn deliver
      [m v]
+     (reset! (get m :realized?) true)
      ((get m :resolve) v)))
 
 (defn- set-stopped!
@@ -136,40 +137,51 @@
                        (vreset! resolve resolve')
                        (vreset! reject reject')))
         :resolve @resolve
-        :reject @reject})))
+        :reject @reject
+        :realized? (atom false)})))
+
+(defn- stopped?
+  [program-opts]
+  (boolean
+   (some (fn [k]
+           #?(:clj (realized? (get program-opts k))
+              :cljs @(get-in program-opts [k :realized?])))
+         [:killed :stopped])))
 
 (defn- handle-event!
   [bprogram program-opts event]
   (loop [event' event
          subscriber-requested-events' []]
-    (let [!state (get program-opts :!state)
-          publisher (get program-opts :publisher)
-          state @!state
-          next-state (reset! !state (state/step state event'))
-          next-event (get next-state :next-event)
-          terminate? (event/terminal? event')
-          recur? (and next-event (not terminate?))
+    (when-not (stopped? program-opts)
+      (let [!state (get program-opts :!state)
+            publisher (get program-opts :publisher)
+            state @!state
+            next-state (reset! !state (state/step state event'))
+            next-event (get next-state :next-event)
+            terminate? (event/terminal? event')
+            recur? (and next-event (not terminate?))
 
-          notification-result
-          (pub/notify! publisher event' bprogram)
+            notification-result
+            (pub/notify! publisher event' bprogram)
 
-          subscriber-requested-events
-          (when event
-            (into []
+            subscriber-requested-events
+            (into subscriber-requested-events'
                   (comp (map :event)
                         (filter identity))
-                  notification-result))]
+                  notification-result)]
 
-      (cond recur?
-            (recur next-event (into subscriber-requested-events
-                                    subscriber-requested-events'))
+        (cond (stopped? program-opts)
+              nil
 
-            terminate?
-            (set-stopped! program-opts event')
+              recur?
+              (recur next-event subscriber-requested-events)
 
-            :else
-            (doseq [requested-event subscriber-requested-events']
-              (bprogram/submit-event! bprogram requested-event))))))
+              terminate?
+              (set-stopped! program-opts event')
+
+              :else
+              (doseq [requested-event subscriber-requested-events]
+                (bprogram/submit-event! bprogram requested-event)))))))
 
 #?(:clj
    (defn- submit-event!

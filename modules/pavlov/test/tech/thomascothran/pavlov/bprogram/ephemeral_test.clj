@@ -6,7 +6,10 @@
             [tech.thomascothran.pavlov.bprogram.proto :as bp]
             [tech.thomascothran.pavlov.bprogram :as bprogram]
             [tech.thomascothran.pavlov.bprogram.ephemeral :as bpe]
-            [tech.thomascothran.pavlov.event :as event]))
+            [tech.thomascothran.pavlov.event :as event]
+            [tech.thomascothran.pavlov.bprogram.state :as state]
+            [tech.thomascothran.pavlov.event.publisher.defaults :as publisher])
+  (:import [java.util.concurrent LinkedBlockingQueue]))
 
 (deftest subscriber-should-receive-event-after-bthread-executes
   (let [!stack (atom [])
@@ -428,3 +431,52 @@
              result))
       (is (= [:start :start :child]
              (map event/type @!events))))))
+
+(deftest initialization-errors-are-terminal
+  (let [result (deref (bpe/execute!
+                       [[:broken (b/step (fn [_ _] (throw (ex-info "init failed" {:stage :init}))))]
+                        [:done (b/bids [{:request #{{:type :done :terminal true}}}])]])
+                      1000 :timeout)]
+    (is (= ::b/unhandled-step-fn-error (:type result)))
+    (is (true? (:terminal result)))
+    (is (true? (:invariant-violated result)))
+    (is (= {:stage :init} (get-in result [:error :data])))))
+
+(deftest kill-stops-the-current-internal-event-chain
+  ;; Run the real event loop synchronously so assertions happen after it exits,
+  ;; with no timing-based assertion or runaway background thread. Ten requests
+  ;; bound the broken implementation; kill should stop it after just one.
+  (let [seen (atom [])
+        opts {:!state (atom (state/init {:loop (b/repeat 10 {:request #{:tick}})}))
+              :in-queue (LinkedBlockingQueue.)
+              :stopped (promise) :killed (promise)}
+        opts (assoc opts :publisher
+                    (publisher/make-publisher!
+                      {:subscribers {:kill (fn [e _]
+                                             (swap! seen conj e)
+                                             (when (= 1 (count @seen))
+                                               (bpe/kill! opts)))}}))]
+    (#'bpe/run-event-loop! nil opts)
+    (is (= {:type :pavlov/kill :terminal true} @(:stopped opts)))
+    (is (= [:tick] @seen))
+    (is (= 3 (b/state (get-in @(:!state opts) [:name->bthread :loop])))
+        "No further bthread steps should run after kill")))
+
+(deftest subscriber-replies-survive-quiescence-and-preserve-order
+  (doseq [requests [[:start] [:start :middle :last]]]
+    (let [seen (atom [])
+          reply-types (mapv #(keyword (str (name %) "-reply")) requests)
+          completed (promise)
+          program (bpe/make-program!
+                    {:producer (b/bids (mapv #(hash-map :request #{%}) requests))}
+                    {:subscribers
+                     {:reply (fn [e _]
+                               (if (some #{e} requests)
+                                 {:event (keyword (str (name e) "-reply"))}
+                                 (when (some #{e} reply-types)
+                                   (when (= (count requests) (count (swap! seen conj e)))
+                                     (deliver completed true)))))}})]
+      (try
+        (is (= true (deref completed 1000 :timeout)) (str "Replies to " requests))
+        (is (= reply-types @seen))
+        (finally (bp/kill! program))))))
