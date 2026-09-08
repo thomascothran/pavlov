@@ -164,9 +164,15 @@
       (update state
               :bthreads-by-priority
               (fn [bthreads-by-priority]
-                (-> bthreads-by-priority
-                    (remove-bthread-names-from-priorities spawned-bthread-names)
-                    (splice-bthread-priorities parent->child-bthreads)))))
+                (into (if (sequential? bthreads-by-priority) [] #{})
+                      (distinct)
+                      (-> bthreads-by-priority
+                          ;; Keep spawning parents as priority anchors, including
+                          ;; a parent that replaces itself under the same name.
+                          (remove-bthread-names-from-priorities
+                           (reduce disj spawned-bthread-names
+                                   (keys parent->child-bthreads)))
+                          (splice-bthread-priorities parent->child-bthreads))))))
     state))
 
 (defn- deregister-bthread-names
@@ -194,12 +200,12 @@
       state)))
 
 (defn- initialize-spawned-bthreads
-  "Recursively initialize spawned bthreads and fold them into scheduler state.
+  "Retire old instances and recursively initialize their spawned replacements.
 
-  Spawned bthreads can themselves spawn descendants before the next event is
-  selected. This helper walks that tree, registers the live bthreads, and then
-  removes any spawned bthreads that terminated during initialization."
-  [state spawned-bthreads parent->child-bthreads]
+  Compute child priorities while parent anchors still exist, then remove old
+  lifecycle entries before registering children. Retirement applies only to the
+  notification pass that produced it, never to a replacement in a later pass."
+  [state spawned-bthreads parent->child-bthreads retired-bthread-names]
   (if (seq spawned-bthreads)
     (let [notification-results (notification/notify-bthreads!
                                 {:name->bthread spawned-bthreads})
@@ -207,23 +213,26 @@
           (notification-spawned-name->bthread notification-results)
           next-parent->child-bthreads
           (notification-parent->child-bthread-names notification-results)
-          retired-bthread-names
+          next-retired-bthread-names
           (notification-retired-bthread-names notification-results)
           spawned-bthread-names (into #{} (map first) spawned-bthreads)
+          retired-bthread-names (set retired-bthread-names)
+          priorities (:bthreads-by-priority
+                      (update-bthread-priorities state spawned-bthreads
+                                                 parent->child-bthreads))
           state (-> state
-                    ;; A spawn may intentionally replace an existing name. Remove
-                    ;; that prior lifecycle entry and only its indexed events.
-                    (deregister-bthread-names spawned-bthread-names)
+                    (deregister-bthread-names
+                     (into retired-bthread-names spawned-bthread-names))
                     (update-bthread-registry spawned-bthreads)
-                    (update-bthread-priorities spawned-bthreads
-                                               parent->child-bthreads)
+                    (assoc :bthreads-by-priority
+                           (remove-bthread-names-from-priorities
+                            priorities
+                            (reduce disj retired-bthread-names spawned-bthread-names)))
                     (merge-notification-results
                      (notification-index-delta notification-results)))]
-      (-> (initialize-spawned-bthreads state
-                                       next-spawned-bthreads
-                                       next-parent->child-bthreads)
-          (deregister-bthread-names retired-bthread-names)))
-    state))
+      (recur state next-spawned-bthreads next-parent->child-bthreads
+             next-retired-bthread-names))
+    (deregister-bthread-names state retired-bthread-names)))
 
 (defn- update-bthread-bids
   "Rebuild the active bid map for the next state.
@@ -259,13 +268,11 @@
 
 (defn- initialize-startup-bthreads
   [state notification-results]
-  (let [spawned-bthreads (notification-spawned-name->bthread notification-results)]
-    (if (seq spawned-bthreads)
-      (initialize-spawned-bthreads state
-                                   spawned-bthreads
-                                   (notification-parent->child-bthread-names
-                                    notification-results))
-      state)))
+  (initialize-spawned-bthreads
+   state
+   (notification-spawned-name->bthread notification-results)
+   (notification-parent->child-bthread-names notification-results)
+   (notification-retired-bthread-names notification-results)))
 
 (defn- with-next-event
   [state]
@@ -279,7 +286,6 @@
     (-> state
         (merge-initial-notification-results notification-results)
         (initialize-startup-bthreads notification-results)
-        (deregister-bthread-names (notification-retired-bthread-names notification-results))
         with-next-event)))
 
 (defn- triggered-bthreads
@@ -379,8 +385,8 @@
                :blocks blocks
                :bthread->bid next-bthread->bid)]
     (-> next-state
-        (initialize-spawned-bthreads spawned-bthreads parent->child-bthreads)
-        (deregister-bthread-names retired-bthreads)
+        (initialize-spawned-bthreads spawned-bthreads parent->child-bthreads
+                                     retired-bthreads)
         with-next-event)))
 
 (defn step

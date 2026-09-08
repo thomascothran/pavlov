@@ -255,3 +255,27 @@
                        [:bid-b bid-b]])
         next-state (s/step state {:type :a})]
     (is (= :a (:next-event next-state)))))
+
+(deftest retiring-a-name-does-not-retire-its-replacement
+  (doseq [ordered? [true false]]
+    (let [replacement (b/bids [{:request #{:new-work}}])
+          bthreads [[:spawner (b/bids [{:wait-on #{:replace}}
+                                     {:bthreads {:worker replacement}}])]
+                    [:worker (b/bids [{:wait-on #{:replace} :block #{:new-work}}])]]
+          next-state (s/step (s/init (if ordered? bthreads (into {} bthreads))) :replace)]
+      (is (= :new-work (:next-event next-state)))
+      (is (identical? replacement (get-in next-state [:name->bthread :worker])))
+      (is (= {:new-work #{:worker}} (:requests next-state)))
+      (is (empty? (:blocks next-state)))
+      (is (= #{:worker} (set (:bthreads-by-priority next-state)))))))
+
+(deftest self-replacement-keeps-its-priority
+  (doseq [startup? [true false]]
+    (let [replacement (b/bids [{:request #{:new-work}}])
+          spawn {:bthreads {:worker replacement}}
+          initial (s/init [[:worker (b/bids (if startup? [spawn] [{:wait-on #{:replace}} spawn]))]
+                               [:other {:request #{:other}}]])
+          next-state (if startup? initial (s/step initial :replace))]
+      (is (= :new-work (:next-event next-state)))
+      (is (= [:worker :other] (:bthreads-by-priority next-state)))
+      (is (identical? replacement (get-in next-state [:name->bthread :worker]))))))
