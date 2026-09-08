@@ -181,6 +181,7 @@
 
   (:refer-clojure :exclude [repeat])
   (:require [tech.thomascothran.pavlov.bthread.proto :as proto]
+            [tech.thomascothran.pavlov.event :as event]
             [tech.thomascothran.pavlov.event.proto :as event-proto]
             [tech.thomascothran.pavlov.bid.proto :as bid-proto]
             [tech.thomascothran.pavlov.defaults])
@@ -305,9 +306,7 @@
                 bid)
               (catch #?(:clj Throwable :cljs :default) e
                 (let [error-event-type ::unhandled-step-fn-error]
-                  (when (and event
-                             (not= error-event-type
-                                   (event-proto/type event)))
+                  (when-not (= error-event-type (event/type event))
                     {:request #{{:type error-event-type
                                  :event event
                                  :error (throwable->data e)
@@ -321,9 +320,16 @@
   the sequence is exhausted, then returns nil (terminating the bthread).
 
   Items in `xs` may be:
-  - Bid maps (e.g., `{:request #{:event-a}}`)
-  - Bthreads (including nested `bids` calls)
+  - Bid values, usually maps (e.g., `{:request #{:event-a}}`)
   - Functions `(fn [event] -> bid)` for dynamic computation
+
+  Bthread instances, including nested `bids` calls, are not valid sequence
+  items. To create child bthreads, return a bid containing `:bthreads`,
+  keyed by child name. Those children may spawn further children in their bids:
+
+  ```clojure
+  (b/bids [{:bthreads {:child (b/bids [{:request #{:child-event}}])}}])
+  ```
 
   The sequence is fully realized in memory.
 
@@ -506,8 +512,10 @@
            finite-step-fn)]
      (step step-fn))))
 
-(defn on
-  "Create a bthread that reacts to exactly one event type.
+(defn ^:deprecated on
+  "Deprecated. Use `scenario` instead.
+
+  Create a bthread that reacts to exactly one event type.
 
   When `event-type` is selected, `f` is called with the event and should
   return a bid. The bthread automatically continues waiting on `event-type`
@@ -542,8 +550,10 @@
                                           event-type)}]
               [:initialized new-bid])))))
 
-(defn on-any
-  "bthread that reacts to any of the members of the `event-types` set
+(defn ^:deprecated on-any
+  "Deprecated. Use `scenario` instead.
+
+  bthread that reacts to any of the members of the `event-types` set
 
   Example:
   ```clojure
@@ -680,8 +690,10 @@
                    [state' (f selected-events')]
                    [state' (request-each-bid remaining')]))))))))
 
-(defn round-robin
-  "Create a bthread that cycles through sub-bthreads in order.
+(defn ^:deprecated round-robin
+  "Deprecated. Use `scenario` instead.
+
+  Create a bthread that cycles through sub-bthreads in order.
 
   On each notification, asks the next bthread in sequence for its bid.
   Cycles back to the first bthread after reaching the end.
@@ -740,7 +752,7 @@
         default-case (when (odd? (count (rest forms)))
                        (last (rest forms)))]
     `(step (fn ~binding-vector
-             (let [event-type# (get ~event :type)]
+             (let [event-type# (event/type ~event)]
                (case event-type#
                  nil ~init-case
                  ~@cases

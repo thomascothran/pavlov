@@ -3,7 +3,8 @@
                :squint [cljs.test :refer [deftest is testing]]
                :cljs [cljs.test :refer-macros [deftest is testing]])
             [tech.thomascothran.pavlov.bthread :as b]
-            [tech.thomascothran.pavlov.bthread.defaults]))
+            [tech.thomascothran.pavlov.bthread.defaults]
+            [tech.thomascothran.pavlov.event.proto :as event-proto]))
 
 (deftest test-serde-on-maps
   (let [bthread {:name :test-bthread
@@ -476,3 +477,21 @@
     (is (= {:request #{:b}} r5))
     (is (= {:request #{:c}} r6))
     (is (= {:request #{:a}} r7))))
+
+#?(:squint nil
+   :default
+   (deftest thread-dispatches-through-the-event-protocol
+     (doseq [event [:go {:type :go}
+                   (reify event-proto/Event
+                     (type [_] :go)
+                     (terminal? [_] false))]]
+       (let [bt (b/thread [s e] :pavlov/init [0 {:wait-on #{:go}}]
+                  :go [(inc s) {:request #{:done}}])]
+         (b/notify! bt nil)
+         (is (= {:request #{:done}} (b/notify! bt event)))
+         (is (= 1 (b/state bt)))))))
+
+#?(:clj
+   (deftest superseded-constructors-are-deprecated
+     (doseq [constructor [#'b/on #'b/on-any #'b/round-robin]]
+       (is (true? (:deprecated (meta constructor)))))))
