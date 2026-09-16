@@ -546,6 +546,7 @@
                   new-bid {:request new-requests
                            :block new-blocks
                            :bthreads new-bthreads
+                           :hot (bid-proto/hot bid)
                            :wait-on (conj (or new-waits #{})
                                           event-type)}]
               [:initialized new-bid])))))
@@ -578,6 +579,7 @@
                   new-bid {:request new-requests
                            :block new-blocks
                            :bthreads new-bthreads
+                           :hot (bid-proto/hot bid)
                            :wait-on (into event-types new-waits)}]
               [prev-state new-bid])))))
 
@@ -721,7 +723,9 @@
   ;=> {:wait-on #{:cold-water} :block #{:hot-water}}
   ```"
   [bthreads]
-  (let [bthread-count (count bthreads)
+  (let [bthreads (vec bthreads)
+        initial-child-states (mapv proto/state bthreads)
+        bthread-count (count bthreads)
         step-fn (fn [state event]
                   (let [idx (get state :idx 0)
                         active-bthread (nth bthreads idx)
@@ -729,8 +733,21 @@
                         current-bid (notify! active-bthread event)]
                     [{:idx next-idx
                       :bid-states (mapv proto/state bthreads)} ;; helps w/lasso detection
-                     current-bid]))]
-    (step step-fn)))
+                     current-bid]))
+        delegate (step step-fn)]
+    (reify proto/BThread
+      (state [_] (proto/state delegate))
+      (label [_] (proto/label delegate))
+      (notify! [_ event] (proto/notify! delegate event))
+      (set-state [_ serialized]
+        ;; A nil outer snapshot represents the children at construction.
+        (doseq [[child child-state]
+                (map vector bthreads
+                     (if (nil? serialized)
+                       initial-child-states
+                       (:bid-states serialized)))]
+          (proto/set-state child child-state))
+        (proto/set-state delegate serialized)))))
 
 (defn- thread*
   [forms]

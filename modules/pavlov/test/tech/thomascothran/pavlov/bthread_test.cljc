@@ -344,6 +344,7 @@
     (is (= {:wait-on #{:test-event}
             :request #{:test-event-received}
             :bthreads nil
+            :hot nil
             :block #{}}
            bid))))
 
@@ -375,11 +376,13 @@
     (is (= {:wait-on #{:a :b}
             :request #{:c}
             :bthreads nil
+            :hot nil
             :block #{}}
            bid-a))
     (is (= {:wait-on #{:a :b}
             :request #{:c}
             :bthreads nil
+            :hot nil
             :block #{}}
            bid-c))))
 
@@ -404,7 +407,7 @@
         results (mapv #(b/notify! bthread {:type %}) event-set)
         last-bid (b/notify! bthread {:type :d})]
     (is (= (conj (vec (repeat (dec (count event-set))
-                             {:wait-on event-set}))
+                              {:wait-on event-set}))
                  (mapv (fn [event-type] {:type event-type}) event-set))
            results))
     (is (nil? last-bid))))
@@ -482,9 +485,9 @@
    :default
    (deftest thread-dispatches-through-the-event-protocol
      (doseq [event [:go {:type :go}
-                   (reify event-proto/Event
-                     (type [_] :go)
-                     (terminal? [_] false))]]
+                    (reify event-proto/Event
+                      (type [_] :go)
+                      (terminal? [_] false))]]
        (let [bt (b/thread [s e] :pavlov/init [0 {:wait-on #{:go}}]
                   :go [(inc s) {:request #{:done}}])]
          (b/notify! bt nil)
@@ -495,3 +498,34 @@
    (deftest superseded-constructors-are-deprecated
      (doseq [constructor [#'b/on #'b/on-any #'b/round-robin]]
        (is (true? (:deprecated (meta constructor)))))))
+
+(deftest deprecated-reactors-preserve-hot
+  (doseq [make-thread [#(b/on :a %) #(b/on-any #{:a :b} %)]
+          hot [true false nil]]
+    (let [thread (make-thread (constantly {:hot hot :request #{:done}
+                                           :wait-on #{:extra} :block #{:blocked}
+                                           :bthreads {:child {:request #{:child}}}}))]
+      (b/notify! thread nil)
+      (let [bid (b/notify! thread :a)]
+        (is (= hot (:hot bid)))
+        (is (= #{:done} (:request bid)))
+        (is (contains? (:wait-on bid) :a))
+        (is (contains? (:wait-on bid) :extra))
+        (is (= #{:blocked} (:block bid)))
+        (is (= {:child {:request #{:child}}} (:bthreads bid)))))))
+
+(deftest round-robin-restores-children
+  (doseq [advance-before-save [0 1 2 3]]
+    (let [children [(b/bids [{:request #{:a}} {:request #{:c}}])
+                    (b/bids [{:request #{:b}} {:request #{:d}}])]
+          thread (b/round-robin children)
+          advance #(vector (b/notify! thread :tick) (b/state thread))]
+      (dotimes [_ advance-before-save] (advance))
+      (let [saved (b/state thread)
+            child-states (mapv b/state children)
+            expected (mapv (fn [_] (advance)) (range 6))]
+        (is (= saved (b/set-state thread saved)))
+        (is (= child-states (mapv b/state children))
+            "Restoration immediately rewinds every child")
+        (is (= expected (mapv (fn [_] (advance)) (range 6)))
+            "Replay preserves bids, child snapshots, and termination")))))
