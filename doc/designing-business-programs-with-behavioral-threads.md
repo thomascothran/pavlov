@@ -37,12 +37,12 @@ Let's take two bthreads:
 
 (defn make-bthread-a
   []
-  ;; b/bids creates a bthread that requests the bids in the vector
-  (b/bids [{:request #{:event-1 :event-2}}])) ;; <- non-deterministic
+  ;; b/scenario creates a bthread that advances through the bids in order
+  (b/scenario [{:request #{:event-1 :event-2}}])) ;; <- non-deterministic
 
 (defn make-bthread-b
   []
-  (b/bids [{:request [:event-3 :event-4]}])) ;; <- ordered priority
+  (b/scenario [{:request [:event-3 :event-4]}])) ;; <- ordered priority
 
 (defn make-bthreads-with-priority
   []
@@ -98,7 +98,9 @@ Other business rules regard necessary relationships between events:
 
 ### Domain Rules Bthreads
 
-Let's create our domain rules bthreads.
+Let's create our domain rules bthreads with `b/scenario`. Each scenario advances
+through a sequence of bids as its requested or waited-on events occur, and
+terminates when the sequence is exhausted.
 
 ```clojure
 (ns demo.bank.domain
@@ -108,13 +110,13 @@ Let's create our domain rules bthreads.
 
 (defn make-request-cip-verification-bthread
   []
-  (b/bids [{:wait-on #{:application-submitted}}
-           {:request #{{:type :request-cip-verification}}}]))
+  (b/scenario [{:wait-on #{:application-submitted}}
+               {:request #{{:type :request-cip-verification}}}]))
 
 (defn make-request-ofac-screening-bthread
   []
-  (b/bids [{:wait-on #{:application-submitted}}
-           {:request #{{:type :ofac-screening-requested}}}]))
+  (b/scenario [{:wait-on #{:application-submitted}}
+               {:request #{{:type :ofac-screening-requested}}}]))
 ```
 
 When an application is submitted, then we request CIP verification and OFAC screening. We need to decline the application if either returns a negative result:
@@ -122,15 +124,13 @@ When an application is submitted, then we request CIP verification and OFAC scre
 ```clojure
 (defn make-cip-failure-rule-bthread
   []
-  (b/on :cip-failed
-        (constantly
-         {:request #{{:type :application-declined}}})))
+  (b/scenario [{:wait-on #{:cip-failed}}
+               {:request #{{:type :application-declined}}}]))
 
 (defn make-ofac-hit-rule-bthread
   []
-  (b/on :ofac-hit
-        (constantly
-         {:request #{{:type :application-declined}}})))
+  (b/scenario [{:wait-on #{:ofac-hit}}
+               {:request #{{:type :application-declined}}}]))
 ```
 
 We can't forget to request our initial deposit:
@@ -138,7 +138,7 @@ We can't forget to request our initial deposit:
 ```clojure
 (defn make-request-initial-deposit-bthread
   []
-  (b/bids [{:request #{{:type :initial-deposit-requested}}}]))
+  (b/scenario [{:request #{{:type :initial-deposit-requested}}}]))
 ```
 
 But wait! Don't we have rules about when to request that deposit?
@@ -151,13 +151,13 @@ So we add separate rules:
 ```clojure
 (defn make-block-deposit-until-cip-verified
   []
-  (b/bids [{:block #{:initial-deposit-requested}
-            :wait-on #{:cip-verified}}]))
+  (b/scenario [{:block #{:initial-deposit-requested}
+                :wait-on #{:cip-verified}}]))
 
 (defn make-block-opening-until-ofac-cleared
   []
-  (b/bids [{:block #{:initial-deposit-requested}
-            :wait-on #{:ofac-clear}}]))
+  (b/scenario [{:block #{:initial-deposit-requested}
+                :wait-on #{:ofac-clear}}]))
 ```
 
 We *block* the request for an initial deposit until the CIP verification event and OFAC clearance event occurs. The bank policy could change to permit requesting the initial deposit before the OFAC screen clears, so long as the account is not opened first.
@@ -169,8 +169,8 @@ We need a few more business rules:
 ```clojure
 (defn make-open-on-funding-bthread
   []
-  (b/bids [{:wait-on #{:initial-deposit-paid}}
-           {:request #{{:type :account-opened}}}]))
+  (b/scenario [{:wait-on #{:initial-deposit-paid}}
+               {:request #{{:type :account-opened}}}]))
 ```
 
 Now, we want to verify our system is correct. For that, we will need a few more bthreads.
@@ -185,10 +185,10 @@ Crucially, this lets us introduce branches:
 (defn make-environment-bthreads
   []
   {::application-submitted
-   (b/bids [{:request #{{:type :application-submitted}}}])
+   (b/scenario [{:request #{{:type :application-submitted}}}])
 
    ::pay-deposit
-   (b/bids [{:request #{{:type :initial-deposit-paid}}}])})
+   (b/scenario [{:request #{{:type :initial-deposit-paid}}}])})
 ```
 
 We request events that happen when the customer submits their application and when they pay the initial deposit.
@@ -265,10 +265,10 @@ For example, we might have a rule that says that an account should not be opened
 ```clojure
 (defn make-account-opening-requires-ofac-screening-bthread
   []
-  (b/bids [{:wait-on #{:account-opened}}
-           {:wait-on #{:ofac-clear}
-            :request #{{:type :account-opened
-                        :invariant-violated true}}}]))
+  (b/scenario [{:wait-on #{:account-opened}}
+               {:wait-on #{:ofac-clear}
+                :request #{{:type :account-opened
+                            :invariant-violated true}}}]))
 ```
 
 This bthread can be read as:
@@ -315,10 +315,10 @@ We're going to wrap our bthreads into function calls to construct the domain, en
 (defn make-environment-bthreads-v1
   []
   {::application-submitted
-   (b/bids
+   (b/scenario
     [{:request #{{:type :application-submitted}}}])
    ::pay-deposit
-   (b/bids [{:request #{{:type :initial-deposit-paid}}}])})
+   (b/scenario [{:request #{{:type :initial-deposit-paid}}}])})
 
 (defn safety-bthreads-v1
   []
