@@ -35,9 +35,9 @@
 
    ```clojure
    {:request #{:start}
-    :bthreads {:child (b/bids [{:wait-on #{:start}}
-                               {:request #{{:type :done
-                                            :terminal true}}}])}}
+    :bthreads {:child (b/scenario [{:wait-on #{:start}}
+                                  {:request #{{:type :done
+                                               :terminal true}}}])}}
    ```
 
    ## Available Bthread Constructors
@@ -63,22 +63,22 @@
 
    ## Choosing a Constructor
 
-   **Use `bids`** for scripted sequences - the most common pattern. Items can
-   be literal bid maps or functions that compute bids dynamically from events:
+   **Use `scenario`** for scripted sequences - the most common pattern. Items can
+   be literal bid maps or functions that receive context and return a result
+   containing `:bid`:
    ```clojure
    ;; Static sequence
-   (b/bids [{:request #{:step-1}}
-            {:request #{:step-2}}])
+   (b/scenario [{:request #{:step-1}}
+                {:request #{:step-2}}])
 
-   ;; Dynamic - functions receive the event and return a bid
-   (b/bids [{:wait-on #{:order/placed}}
-            (fn [event]
-              {:request #{{:type :order/confirm
-                           :order-id (:order-id event)}}})])
+   ;; Dynamic - functions receive context and return a result containing :bid
+   (b/scenario [{:wait-on #{:order/placed}}
+                (fn [{:keys [event]}]
+                  {:bid {:request #{{:type :order/confirm
+                                     :order-id (:order-id event)}}}})])
    ```
 
-   **Use `scenario`** when a scripted sequence needs private state or dynamic
-   cursor control:
+   Scenarios also support private state and dynamic cursor control:
    ```clojure
    (b/scenario
      [{:wait-on #{:order/placed}}
@@ -156,9 +156,9 @@
    (require '[tech.thomascothran.pavlov.bprogram.ephemeral :as bpe])
 
    (defn make-order-workflow []
-     (b/bids [{:wait-on #{:order/placed}}
-              {:request #{{:type :payment/charge}}}
-              {:wait-on #{:payment/success :payment/failure}}]))
+     (b/scenario [{:wait-on #{:order/placed}}
+                  {:request #{{:type :payment/charge}}}
+                  {:wait-on #{:payment/success :payment/failure}}]))
 
    (defn make-shipping-trigger []
      (b/on :payment/success
@@ -200,7 +200,7 @@
 
   Example:
   ```clojure
-  (def my-bthread (b/bids [{:request #{:a}} {:request #{:b}}]))
+  (def my-bthread (b/scenario [{:request #{:a}} {:request #{:b}}]))
   (b/notify! my-bthread nil)        ;=> {:request #{:a}}
   (b/notify! my-bthread {:type :a}) ;=> {:request #{:b}}
   (b/notify! my-bthread {:type :b}) ;=> nil
