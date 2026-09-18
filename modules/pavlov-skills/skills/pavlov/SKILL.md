@@ -35,7 +35,6 @@ Pavlov is a Clojure and ClojureScript behavioral programming library inspired by
 (require '[clojure.java.io :as io])
 
 (slurp (io/resource "tech/thomascothran/pavlov-skills/doc/README.md"))
-(slurp (io/resource "tech/thomascothran/pavlov-skills/doc/what-is-a-bthread.md"))
 ```
 
 ## Test examples (concrete)

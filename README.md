@@ -103,7 +103,7 @@ These three things form the basic semantics of a behavioral program. Bthreads co
 
 When an event occurs, all bthreads that have either requested that event or are waiting on that event submit their next bid. All other bthreads remained parked. (You can have many parked bthreads - they are cheap.)
 
-For a deeper introduction to the lifecycle of bthreads and how bids work, see [What is a bthread?](./doc/what-is-a-bthread.md). To explore groups of bthreads interactively, see [Navigating Behavioral Programs](./doc/navigating-bprograms.md).
+To explore groups of bthreads interactively, see [Navigating Behavioral Programs](./doc/navigating-bprograms.md).
 
 Bthreads are composed together into behavioral programs. These can be long-running in event-driven systems. Or they can be invoked as a synchronous function (as we did above with `bpe/execute!`.
 
