@@ -1,6 +1,18 @@
 # Pavlov: Behavioral Programming for Clojure
 
-Pavlov is an opinionated [behavioral programming](https://cacm.acm.org/research/behavioral-programming/#R26) library for Clojure(Script). Behavioral programming was invented by David Harel, who also invented statecharts. It has a solid theoretical foundation and is extremely simple by design.
+Pavlov is an opinionated [behavioral programming](https://cacm.acm.org/research/behavioral-programming/#R26) library for Clojure(Script). Behavioral programming was invented by David Harel, who also invented statecharts. It has a solid theoretical foundation and radically simple in principle.
+
+Pavlov differs from existing behavioral programming libraries in the following ways:
+
+- Pavlov takes a functional, data-first approach, rather than the imperative style used by [BPjs](https://bpjs.readthedocs.io/en/latest/BPjsTutorial/hello-world.html#hello-block-world)
+- Pavlov encourages [scenario-based programming](https://link.springer.com/book/10.1007/978-3-642-19029-2) and [statecharts](https://www.sciencedirect.com/science/article/pii/0167642387900359) as the go-to defaults for bthreads
+
+## Design Goals
+
+1. *Zero core dependencies*. Pavlov's core has 0 dependencies. Pavlov devtools has dependencies, but is used only during development and testing
+2. *Cross Platform* - JVM, CLJS, Squint, and Babashka Support
+3. *First class model checking*. Pavlov's programs can be used by its model checker - for free. No translating between TLA+, Spin, etc.
+4. *Interactive program inspection*. Support `nav` so that tools like `portal` to inspect execution branches of a behavioral program.
 
 ## Modules
 
@@ -12,46 +24,134 @@ Pavlov is an opinionated [behavioral programming](https://cacm.acm.org/research/
 | web | pre-alpha | [![Clojars Project](https://img.shields.io/clojars/v/tech.thomascothran/pavlov-web.svg)](https://clojars.org/tech.thomascothran/pavlov-web) |
 
 
-Behavioral programming uses a basic unit called a bthread (for "behavioral thread"). Bthreads encapsulate behaviors.  They park until events to which they are subscribed occur. Bthreads communicate exclusively via queues.
+## Getting Started
+Pavlov encourages you to program in scenarios, and pavlov composes them for you. Let's take a simple, canonical example using an industrial process. You need three parts hot water and three parts cold water.
 
-Bthreads are composed together into behavioral programs. These can be long-running in event-driven systems. Or they can be invoked as a synchronous function. The bprogram's queue can be treated as an implementation detail - and a behavioral program can be called just like a synchronous function.
+First, we need some bthreads. Behavioral programming uses a basic unit called a bthread (for "behavioral thread"). Bthreads encapsulate behaviors.  They park until events to which they are subscribed occur.
 
-Pavlov's implementation of behavioral programming:
+Bthreads are composed in a behavioral program. Here is a simple example:
 
-- Is navigable via `nav`. Use portal for point and click navigation of the branching execution paths of a program. As you navigate, the program state automatically resets.
-- Comes with model checking (for free). Use a model checker to drive development. Given a set of behaviors, specify the valid final events and safety properties, and the model checker will walk you (or an LLM) through writing the application.
-- Enables durable programs - programs that serialize to disk.
+```clojure
+(ns water-controls.app
+  (:require [tech.thomascothran.pavlov.bthread :as b]
+            [tech.thomascothran.pavlov.bprogram :as bp]
+            [tech.thomascothran.pavlov.bprogram.ephemeral :as bpe]))
 
-## Design Goals
+;; bthreads are stateful, so always use a constructor
+(defn hot-water
+  []
+  (b/scenario [{:request #{:hot-water}}
+               {:request #{:hot-water}}
+               {:request #{:hot-water}}])
 
-1. *Zero prod dependencies*. Pavlov's core has 0 dependencies. Pavlov devtools has dependencies, but is used only during development and testing
-2. *CLJS Support*. Pavlov runs on both the JVM and the browser.
-3. *Model-check-driven-development*. Describe what scenarios you want to support and the properties of your program, and the model checker will walk you through the implementation.
-4. *Bprograms as data*. Use tools like `portal` to inspect execution branches of a behavioral program.
+(defn cold-water
+  []
+  (b/scenario [{:request #{:cold-water}}
+               {:request #{:cold-water}}
+               {:request #{:cold-water}}])
+
+@(bpe/execute! {:bthreads {:hot-water (hot-water)
+                           :cold-water (cold-water)}
+                :subscribers {:logger println})
+
+;; :hot-water
+;; :hot-water
+;; :hot-water
+;; :cold-water
+;; :cold-water
+;; :cold-water
+```
+
+Simple enough. But what if you get a new business rule: hot and cold water must alternate. Filling a tank with all hot water will damage it. And the temperature should be as consistent as possible.
+
+Usually, you need to add modify the existing code to add this new requirement. But with behavioral programming, you can use an *append only* programming style:
+
+```clojure
+(defn interleave-hot-and-cold
+  []
+  (b/scenario [{:wait-on #{:cold-water}
+                :block #{:hot-water}} ;; <- block :hot-water until :cold-water
+               {:wait-on #{:hot-water}
+                :block #{:cold-water}
+                :next-step :first}]) ;; <- causes the scenario to restart at the top
+
+
+@(bpe/execute! {:bthreads {:hot-water (hot-water)
+                           :cold-water (cold-water)
+                           :interleave-hot-and-cold    ;; only change to
+                           (interleave-hot-and-cold)}  ;; existing code
+                :subscribers {:logger println})
+
+;; :cold-water
+;; :hot-water
+;; :cold-water
+;; :hot-water
+;; :cold-water
+;; :hot-water
+```
+
+What's this `:request`, `:wait-on`, and `:block` stuff all about?
 
 ## Bthreads
-
-In BP, a unit of application behavior is a bthread. Bthreads can run in parallel and park until an event they are interested in occurs. Bthreads are assembled into a pub-sub system—a bprogram. Each bprogram can:
+Bthreads are assembled into a pub-sub system—a bprogram. Each bthread can:
 
 1. Request events
 2. Wait on events
 3. Block events
 
-Bprograms do this by returning a bid when they are either initialized or notified of an event to which they are subscribed.
+These three things form the basic semantics of a behavioral program. Bthreads communicate what they want to do (or not do) with the `:request`, `:wait-on`, and `:block` keys in a map.
 
-Events may come from an external process. This can be anything: not only a bid from a bthread, but a user action in a UI, an event from a Kafka queue, an HTTP request, etc.
-
-When an event occurs, all bthreads that have either requested that event or are waiting on that event submit their next bid.
+When an event occurs, all bthreads that have either requested that event or are waiting on that event submit their next bid. All other bthreads remained parked. (You can have many parked bthreads - they are cheap.)
 
 For a deeper introduction to the lifecycle of bthreads and how bids work, see [What is a bthread?](./doc/what-is-a-bthread.md). To explore groups of bthreads interactively, see [Navigating Behavioral Programs](./doc/navigating-bprograms.md).
 
+Bthreads are composed together into behavioral programs. These can be long-running in event-driven systems. Or they can be invoked as a synchronous function (as we did above with `bpe/execute!`.
+
+### Scenario
+The vast majority of the time, you will only need the `scenario` bthread constructor. A scenario is just a linear sequence.
+
+We already saw this example:
+
+```clojure
+(defn hot-water
+  []
+  (b/scenario [{:request #{:hot-water}}
+               {:request #{:hot-water}}
+               {:request #{:hot-water}}])
+```
+
+We call the map with the `:request`, `:wait-on`, or `:block` keys a bid.
+
+But `scenario` can also take a function:
+
+```clojure
+(defn hot-water
+  []
+  (b/scenario [(fn [{_ :event, state :state}]
+                 {:bid {:request #{:hot-water}}
+                  :state (update state :ounces inc)})
+               (fn [{_ :event, state :state}]
+                 {:bid {:request #{:hot-water}}
+                  :state (update state :ounces inc)})
+               (fn [{_ :event, state :state}]
+                 {:bid {:request #{:hot-water}}
+                  :state (update state :ounces inc)})]
+              {:initial-state {:ounces 0}})
+```
+
+Because events can be maps, they can carry more information, such as the temperature of the water. The function also receives internal state, and can update that state by setting a `:state` value in the bid.
+
+Because `scenario` is linear, it reads a lot like a test scenario. This is intentional!
+
 ## Bprograms
+Bthreads are assembled into bprograms. The main purpose of a behavioral program is to select the next event, and notify all bthreads subscribed to that event type. Bthreads only subscribe to events if they request them or are waiting on them.
 
-The bprogram will select the next event based on the bids. Any event that is blocked by any bthread will never be selected.
+To run an ephemeral bprogram, use one of the two main API functions in `tech.thomascothran.pavlov.bprogram.ephemeral`:
 
-This means bthreads can block events requested by other bthreads.
+- `execute!`: returns a promise that is delivered when the bprogram terminates with the value of the terminal event. It allows you to call a bprogram like a function
+- `make-program!`: returns the bprogram itself. This lets you send it new events from the outside (i.e,. not from bthreads).
 
-The main purpose of a behavioral program is to select the next event, and notify all bthreads subscribed to that event type. Bthreads only subscribe to events if they request them or are waiting on them.
+Bprograms have a simple algorithm for selecting the next event.
 
 ### Event Selection Rules
 
@@ -72,42 +172,7 @@ This means that when an event is submitted to the bprogram, bids will be request
 
 At that point in time, the next external event will be processed.
 
-## Simple Example
-
-Let's suppose we have an industrial process which should have the following behaviors:
-
-1. 3 units of hot water should be added
-2. 3 units of cold water should be added
-3. The addition of hot and cold water should be interleaved to control the overall temperature.
-
-```clojure
-(ns water-controls.app
-  (:require [tech.thomascothran.pavlov.bthread :as b]
-            [tech.thomascothran.pavlov.bprogram :as bp]
-            [tech.thomascothran.pavlov.bprogram.ephemeral :as bpe]))
-
-(defn log-step [event program]
-  (println "selected" event)
-  (println "bids" (bp/bthread->bids program))
-  (println "---"))
-
-@(bpe/execute!
-   [[:add-hot (b/repeat 3 {:request #{:add-hot-water}})]
-    [:add-cold (b/repeat 3 {:request #{:add-cold-water}})]
-    [:alternator
-     (b/round-robin
-       [(b/repeat {:wait-on #{:add-cold-water}
-                   :block #{:add-hot-water}})
-        (b/repeat {:wait-on #{:add-hot-water}
-                   :block #{:add-cold-water}})])]]
-   {:subscribers {:logger log-step}
-    :kill-after 50}) ;; if program has not exited by 50 ms, kill it
-;; => prints each selected event with its active bids
-;; => {:type :tech.thomascothran.pavlov.bprogram.ephemeral/deadlock,
-;;     :terminal true}
-```
-
-## Creating bthreads
+## Bthreads can spawn other bthreads
 
 Bthreads are stateful. They can run in parallel and be parked when they are waiting on events.
 
@@ -116,48 +181,32 @@ The bid a bthread produces can request events, wait on events, or block events i
 Bids may also spawn child bthreads via `:bthreads`. Spawned bthreads are keyed by name and initialized with `nil`. If spawned during init, they can observe the first event; if spawned in response to an event, they only observe subsequent events.
 
 ```clojure
-(require '[tech.thomascothran.pavlov.bthread :as b])
 
-(def parent
-  (b/bids [{:request #{:start}
-            :bthreads {:child (b/bids [{:wait-on #{:start}}
-                                       {:request #{{:type :done
-                                                    :terminal true}}}])}}]))
+(b/scenario [{:request #{:a}
+              :bthreads {:child (b/bids [{:request #{:b}}])}}])
 ```
 
-### `on`
+## Bthread constructors
+`scenario` is the default way to create bthreads, and will be likely be the best choice 90% of the bthreads you need. However, in some cases, a different constructor can be useful
 
-`on` takes an event type and a function of an event to a bid.
-
-For example:
+### Literal map
+This is a bthread that always requests `:fireworks`
 
 ```clojure
-(require '[next.jdbc.sql :as sql])
-(require '[tech.thomascothran.pavlov.bthread :as b])
-
-(defn create-account!
-  [db-conn {:keys [account]}]
-  (sql/insert! db-conn :account account)
-  {:request #{{:event-type :account-created}}})
-
-(def make-create-account-bthread
-  [db-conn]
-  (b/on :create-account create-account!))
+{:request #{:fireworks}}
 ```
 
-When the `:create-account` event is selected, the create account bthread is notified, record is inserted, and the `:account-created` event is requested.
+### `repeat`
+If you want to set the fireworks off 10,000 times, you can use `repeat`:
 
-The function passed to `on` should not throw an error. If an error is thrown:
-
-- it will be caught,
-- an event of type `:tech.thomascothran.pavlov.bthread/unhandled-step-fn-error` will be requested
-- that event will terminate the program (unless it is blocked)
+```clojure
+(b/repeat
+  10000
+  {:request #{:fireworks}})     ;; <- this event is requested 10000 times
+```
 
 ### `after-all`
-
-Use `after-all` when you want to coordinate several prerequisites and only continue once they have all happened. This is especially helpful when distinct systems (or bthreads) each publish their own completion events but downstream work must begin only after every prerequisite event has been selected—for example, waiting for both payment authorization and packaging to finish before marking an order ready to ship.
-
-`after-all` takes a set of event types and a function `f`. The bthread waits on every event type in the set, in any order. Once each event type has been seen, `f` is invoked with a vector of the events in the order they arrived; the value returned by `f` becomes the next bid. After the bid from `f` is emitted, the bthread terminates and ignores further notifications.
+Use `after-all` when you want to wait on a set of prior events, regardless of the order they occur in.
 
 ```clojure
 (require '[tech.thomascothran.pavlov.bthread :as b])
@@ -188,103 +237,8 @@ Use `after-all` when you want to coordinate several prerequisites and only conti
 
 In this example the `:order/ready` event is only requested after both upstream events have run, regardless of which one arrives first.
 
-### Sequence Bthreads
-
-`b/bids` creates a bthread from a finite sequence. Items in the sequence may be:
-- Bid maps (bthreads)
-- Functions that take an event and return a bid: `(fn [event] -> bid)`
-
-For example, with literal bids:
-
-```clojure
-(b/bids
- [{:wait-on #{:good-morning}
-   :block #{:good-evening}}
-  {:wait-on #{:good-evening}
-   :block #{:good-morning}}])
-```
-
-Or with functions that can compute bids dynamically based on the event:
-
-```clojure
-(b/bids
- [{:wait-on #{:order-placed}}
-  (fn [event]
-    {:request #{{:type :send-confirmation
-                 :order-id (:order-id event)}}})])
-```
-
-This will return a bid for each item, then the bthread will be deregistered.
-
-Note that `b/bids` fully realizes any sequence in memory!
-
-There are several other ways to work with sequences. A map literal representing a bid is a bthread that will always return itself.
-
-```clojure
-{:request #{:fireworks}}  ;; Fireworks are always fun
-```
-
-If you want to set the fireworks off 10,000 times, you can use `repeat`:
-
-```clojure
-(b/repeat
-  10000
-  {:request #{:fireworks}})     ;; <- this event is requested
-```
-
-You can also create a bthread that notifies bthreads in round-robin fashion.
-
-```clojure
-(b/round-robin
- [{:wait-on #{:good-morning}
-   :block #{:good-evening}}
-  {:wait-on #{:good-evening}
-   :block #{:good-morning}}])
-```
-
-### General Purpose Bthreads with `b/thread`
-
-`b/thread` is a macro that makes creating bthreads both easy and expressive, and prevents mistakes that are easy to make.
-
-```clojure
-(require '[tech.thomascothran.pavlov.bthread :as b])
-
-(b/thread [prev-state event] ;; must be a vector of 2, destructuring not supported
-  :pavlov/init         ;; <- always required in the first position to initialize bthread
-  [{:initialized true} ;; <- initialized bthread state
-   {:wait-on #{:launch-rocket}}] ;; <- bid, wait until someone
-                                 ;; wants to fire missiles
-
-  :launch-rocket ;; when this event occurs, execute form
-  (let [result (rocket-api/launch!)] ;; do something
-    [prev-state                      ;; return previous state and bid
-     {:request #{{:type :rocket-launched
-                  :result result}}}])
-
-  ;; if bthread notified of any other event, then return the previous
-  ;; state and this bid.
-  [prev-state {:wait-on #{:launch-rocket}}])
-```
-
-You will notice that the structure of `b/thread` is similar to using `defn` with `case`. The `[prev-state event]` form binds `prev-state` to the bthread's previous state. `event` is bound to the event about which the bthread is being notified.
-
-The rest of the body of `b/thread` is similar to a `case` statement, switching on the type of an event (`:fire-missiles` in the example above).
-
-Similar to `case`, a final form may be provided, which is a default if none of the events match. If no default value is provided, the bthread's state will not change, but it will not subscribe to any events -- meaning it is permanently parked.
-
-Each form must return a tuple of the next state and a bid.
-
-`b/thread` helps avoid some beginner traps with behavioral programming. For examples, see the [decision record on the b/thread macro](./doc/design/003_bthread-macro.md).
-
-If you prefer not to use a macro, use the step functions.
-
-#### Errors in `b/thread` execution
-
-You should not throw an error inside of `b/thread`. If an error occurs, it will be caught, and a `:tech.thomascothran.pavlov.bthread/unhandled-step-fn-error` event will be emitted, terminating the program.
-
 ### Step Functions
-
-The low-level, general purpose way to create a bthread is to use a step function.
+The low-level, general purpose way to create a bthread is to use a step function. You should rarely need this. Most higher level functions are implemented with the `step` constructor under the hood.
 
 A step function takes its previous state and an event, and returns its next state and a bid.
 
@@ -338,7 +292,7 @@ Bthreads, bids, and behavioral programs are all protocols, allowing you to exten
 
 ## Recipes
 
-### Request a simple event
+### Request an event once
 
 The simplest way to specify an event to request the name of the event:
 
@@ -352,7 +306,7 @@ Perhaps you just want to request `:a` once.
 
 
 ```clojure
-(b/bids [{:request #{:a}}]) ;; => the event is the same as {:type :a}
+(b/scenario [{:bid {:request #{{:type :a}}}}])
 ```
 
 This bthread requests an event of type `:a` once. Then the bthread terminates.
@@ -370,23 +324,13 @@ For example:
 
 All bthreads that subscribe to `:submit` events now have access to the form data as well.
 
-### Compound events
-
-Events need not be a keyword, or even an atomic type.
-
-For example, if you are playing tic tac toe, you may have `:x` select the center of the board:
-
-```clojure
-{:type [1 1 :x]}
-```
-
 ### Block until
 
 Combine `:wait` and `:block`:
 
 ```clojure
-(b/bids [{:wait-on #{:b}
-          :block #{:c}}])
+(b/scenario [{:bid {:wait-on #{:b}
+                    :block #{:c}}])
 ```
 
 Event `:c` is blocked until `:b` occurs. Then the bthread terminates
@@ -396,13 +340,15 @@ Event `:c` is blocked until `:b` occurs. Then the bthread terminates
 Combine `:wait-on` and `:request`:
 
 ```clojure
-(def bthread-one
-  (b/bids [{:wait-on #{:b}
-            :request #{:a}}]))
+(defn bthread-one
+  []
+  (b/scenario [{:bid {:wait-on #{:b}
+                      :request #{:a}}}]))
 
-(def bthread-two
-  (b/bids [{:block #{:a}
-            :wait-on #{:c}}]))
+(defn bthread-two
+  []
+  (b/bids [{:bid {:block #{:a}
+                  :wait-on #{:c}}}]))
 ```
 
 `bthread-two` blocks event `:a`.
@@ -421,22 +367,9 @@ When `:c` occurs, close the program.
           :type :finis}])
 ```
 
-## BPrograms
-
-To run an ephemeral bprogram, use one of the two main API functions in `tech.thomascothran.pavlov.bprogram.ephemeral`:
-
-- `execute!`: returns a promise that is delivered when the bprogram terminates with the value of the terminal event. It allows you to call a bprogram like a function
-- `make-program!`: returns the bprogram itself. This lets you send it new events, for example, with your subscribers.
-
-An ephemeral bprogram is distinguished from a durable bprogram. Bprograms are implemented in terms of the BProgram protocol.
-
-It has two arities, one that takes only a sequence of bthreads, and the other that takes bthreads and a map of options.
-
-The most common items in the options map will be `:subscribers`. `:subscribers` is a map of the subscriber name to the subscriber function. Subscribers are invoked when the bprogram emits an event. These are invoked synchronously.
-
 ## Subscribers
 
-Subscribers are functions that are called on every event. They are useful for logging and development tools.
+Subscribers are functions that are called on every event. They are useful for logging and development tools. They may also be used for IO when you want to keep the bprogram itself pure. (However, depending on the use case, IO in bthreads can be fine.)
 
 Subscribers may be passed in when the bprogram is created:
 
