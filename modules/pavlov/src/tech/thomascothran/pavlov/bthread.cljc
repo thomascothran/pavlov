@@ -433,10 +433,6 @@
   - `:initial-state` - any immutable value supplied to the first function step
   - `:label` - a function `(fn [bthread] -> label)` for debugging, as in `step`
 
-  The serializable bthread state has the shape:
-
-    `{:cursor next-step-index :scenario-state local-state}`
-
   Example:
   ```clojure
   (b/scenario
