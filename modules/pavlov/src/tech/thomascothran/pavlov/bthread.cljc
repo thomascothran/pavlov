@@ -31,115 +31,38 @@
     :block   #{:dangerous-operation}}     ; prevent this while active
    ```
 
-   Spawn child bthreads by returning `:bthreads` on a bid:
+  The bthread is notified for its next bid when an event of the type
+  it has requested or waited upon occurs.
 
-   ```clojure
-   {:request #{:start}
-    :bthreads {:child (b/scenario [{:wait-on #{:start}}
+  Spawn child bthreads by returning `:bthreads` on a bid:
+
+  ```clojure
+  {:request #{:start}
+   :bthreads {:child (b/scenario [{:wait-on #{:start}}
                                   {:request #{{:type :done
                                                :terminal true}}}])}}
-   ```
+  ```
 
-   ## Available Bthread Constructors
+  ## Available Bthread Constructors
 
-   Pavlov provides several constructors for common patterns:
+  `scenario` is the bthread constructor that will be appropriate the
+  vast majority of the time. However, there are cases when you might
+  use other bthread constructors:
 
-   | Constructor   | Use Case                                    |
-   |---------------|---------------------------------------------|
-   | `bids`        | Finite sequence of scripted bids (supports dynamic fns) |
-   | `scenario`    | Stateful sequence with dynamic cursor control |
-   | `on`          | React to exactly one event type             |
-   | `after-all`   | Coordinate multiple prerequisites           |
-   | `request-each`| Request remaining events until all selected |
-   | `repeat`      | Repeat a bid n times or forever             |
-   | `round-robin` | Cycle through bthreads in order             |
-   | `thread`      | Declarative branching on event types (macro)|
-   | `step`        | Full control with state management          |
 
-   A plain map is also a valid bthread that always returns itself:
+  | Constructor   | Use Case                                    |
+  |---------------|---------------------------------------------|
+  | `scenario`    | Stateful sequence with dynamic cursor control |
+  | `after-all`   | Coordinate multiple prerequisites           |
+  | `request-each`| Request remaining events until all selected |
+  | `repeat`      | Repeat a bid n times or forever             |
+  | `round-robin` | Cycle through bthreads in order             |
+  | `step`        | Full control with state management          |
+
+   A plain map is also a valid bthread that always has the same bid (itself!):
    ```clojure
    {:request #{:heartbeat}}  ; Always requests :heartbeat
    ```
-
-   ## Choosing a Constructor
-
-   **Use `scenario`** for scripted sequences - the most common pattern. Items can
-   be literal bid maps or functions that receive context and return a result
-   containing `:bid`:
-   ```clojure
-   ;; Static sequence
-   (b/scenario [{:request #{:step-1}}
-                {:request #{:step-2}}])
-
-   ;; Dynamic - functions receive context and return a result containing :bid
-   (b/scenario [{:wait-on #{:order/placed}}
-                (fn [{:keys [event]}]
-                  {:bid {:request #{{:type :order/confirm
-                                     :order-id (:order-id event)}}}})])
-   ```
-
-   Scenarios also support private state and dynamic cursor control:
-   ```clojure
-   (b/scenario
-     [{:wait-on #{:order/placed}}
-      (fn [context]
-        (let [event (get context :event)
-              state (get context :state)]
-          {:bid {:request #{{:type :order/confirm
-                             :order-id (:order-id event)}}}
-           :state (assoc state :order-id (:order-id event))}))]
-     {:initial-state {}})
-   ```
-
-   **Use `on`** when you need stateless reactions to a single event type:
-   ```clojure
-   (b/on :invoice/received
-         (fn [event]
-           {:request #{{:type :invoice/processed
-                        :id (:invoice/id event)}}}))
-   ```
-
-   **Use `after-all`** when waiting for multiple prerequisites:
-   ```clojure
-   (b/after-all #{:payment/authorized :packing/completed}
-                (fn [events] {:request #{{:type :order/ready}}}))
-   ```
-
-   **Use `repeat`** for repetitive behavior:
-   ```clojure
-   (b/repeat 3 {:request #{:ping}})  ; Request :ping 3 times
-   (b/repeat {:request #{:heartbeat}}) ; Forever
-   ```
-
-   **Use `round-robin`** to cycle through behaviors:
-   ```clojure
-   (b/round-robin
-     [{:block #{:cold-water} :wait-on #{:hot-water}}
-      {:block #{:hot-water} :wait-on #{:cold-water}}])
-   ```
-
-   **Use `thread`** for complex branching with state:
-   ```clojure
-   (b/thread [state event]
-     :pavlov/init
-     [{:count 0} {:wait-on #{:increment :decrement}}]
-
-     :increment
-     [(update state :count inc) {:wait-on #{:increment :decrement}}]
-
-     :decrement
-     [(update state :count dec) {:wait-on #{:increment :decrement}}])
-   ```
-
-   **Use `step`** when you need full control:
-   ```clojure
-   (b/step (fn [state event]
-             (if (nil? event)
-               [0 {:wait-on #{:tick}}]
-               [(inc state) {:wait-on #{:tick}}])))
-   ```
-
-   Generally, prefer the higher-level constructors instead of `thread` or `step`.
 
    ## Important Notes
 
@@ -148,29 +71,6 @@
    - `notify!` is for REPL/testing only; bprograms call it internally
    - Errors in bthreads emit `:tech.thomascothran.pavlov.bthread/unhandled-step-fn-error`. You should catch your own errors and not rely on this
    - Return `nil` from a bid to terminate and deregister the bthread
-
-   ## Example: Complete Workflow
-
-   ```clojure
-   (require '[tech.thomascothran.pavlov.bthread :as b])
-   (require '[tech.thomascothran.pavlov.bprogram.ephemeral :as bpe])
-
-   (defn make-order-workflow []
-     (b/scenario [{:wait-on #{:order/placed}}
-                  {:request #{{:type :payment/charge}}}
-                  {:wait-on #{:payment/success :payment/failure}}]))
-
-   (defn make-shipping-trigger []
-     (b/on :payment/success
-           (fn [event]
-             {:request #{{:type :shipping/initiate
-                          :order-id (:order-id event)}}})))
-
-   @(bpe/execute!
-     [[:order-workflow (make-order-workflow)]
-      [:shipping (make-shipping-trigger)]]
-     {:kill-after 100})
-   ```
 
    ## Related namespaces and functions
    - `tech.thomascothran.pavlov.graph/->lts`: create a graph representation of the state space of a group of bthreads
@@ -344,7 +244,7 @@
                  {:request #{:step-2}}
                  {:request #{:step-3}}]))
   (let [workflow (make-workflow)]
-    (b/notify! workflow nil)           ;=> {:request #{:step-1}}
+    (b/notify! workflow nil)              ;=> {:request #{:step-1}}
     (b/notify! workflow {:type :step-1})) ;=> {:request #{:step-2}}
   ```
 
