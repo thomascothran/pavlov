@@ -105,6 +105,10 @@ When an event occurs, all bthreads that have either requested that event or are 
 
 For a deeper introduction to the lifecycle of bthreads and how bids work, see [What is a bthread?](./doc/what-is-a-bthread.md). To explore groups of bthreads interactively, see [Navigating Behavioral Programs](./doc/navigating-bprograms.md).
 
+For state machines with guarded transitions, hierarchy, or parallel regions,
+see the optional [clj-statecharts integration](./doc/clj-statecharts.md).
+It keeps bids in the chart definition and adds no default dependencies.
+
 Bthreads are composed together into behavioral programs. These can be long-running in event-driven systems. Or they can be invoked as a synchronous function (as we did above with `bpe/execute!`.
 
 ### Scenario

@@ -9,7 +9,8 @@
                       lambdaisland/kaocha {:mvn/version "1.91.1392"}
                       org.clojure/math.combinatorics {:mvn/version "0.3.0"}}
          :exec-fn kaocha.runner/exec-fn}
-  :dev {:extra-deps {org.clojure/clojurescript {:mvn/version "1.12.134"}
+  :dev {:extra-deps {clj-statecharts/clj-statecharts {:mvn/version "0.1.7"}
+                     org.clojure/clojurescript {:mvn/version "1.12.134"}
                      nrepl/nrepl {:mvn/version "1.2.0"}
                      info.sunng/ring-jetty9-adapter {:mvn/version "0.39.0"}
                      cider/piggieback {:mvn/version "0.4.2"}
@@ -18,5 +19,5 @@
                      etaoin/etaoin {:mvn/version "1.1.43"}
                      com.clojure-goes-fast/clj-async-profiler {:mvn/version "1.8.0"}
                      criterium/criterium {:mvn/version "0.5.243-ALPHA"}}
-        :extra-paths ["dev"]
+        :extra-paths ["dev" "modules/pavlov/test-integration"]
         :jvm-opts ["-Djdk.attach.allowAttachSelf"]}}}
