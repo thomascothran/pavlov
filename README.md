@@ -1,11 +1,11 @@
 # Pavlov: Behavioral Programming for Clojure
 
-Pavlov is an opinionated [behavioral programming](https://cacm.acm.org/research/behavioral-programming/#R26) library for Clojure(Script). Behavioral programming was invented by David Harel, who also invented statecharts. It has a solid theoretical foundation and radically simple in principle.
+Pavlov is an opinionated [behavioral programming](https://cacm.acm.org/research/behavioral-programming/#R26) library for Clojure(Script). Behavioral programming was invented by David Harel. It has a solid theoretical foundation and is radically simple in principle.
 
 Pavlov differs from existing behavioral programming libraries in the following ways:
 
 - Pavlov takes a functional, data-first approach, rather than the imperative style used by [BPjs](https://bpjs.readthedocs.io/en/latest/BPjsTutorial/hello-world.html#hello-block-world)
-- Pavlov encourages [scenario-based programming](https://link.springer.com/book/10.1007/978-3-642-19029-2) and [statecharts](https://www.sciencedirect.com/science/article/pii/0167642387900359) as the go-to defaults for bthreads
+- Pavlov encourages [scenario-based programming](https://link.springer.com/book/10.1007/978-3-642-19029-2) as the go-to default for bthreads
 
 ## Design Goals
 
