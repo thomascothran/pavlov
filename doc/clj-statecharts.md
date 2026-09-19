@@ -1,16 +1,14 @@
 # clj-statecharts integration
 
-`tech.thomascothran.pavlov.clj-statecharts` adapts
-[clj-statecharts](https://github.com/lucywang000/clj-statecharts) to Pavlov.
-It is an optional namespace. Pavlov's core dependency manifest and ordinary
-bthread namespace do not depend on clj-statecharts. Applications using this
-integration must add:
+Use [clj-statecharts](https://github.com/lucywang000/clj-statecharts) charts as
+Pavlov bthreads through `tech.thomascothran.pavlov.clj-statecharts`.
+This integration is experimental and its functionality is alpha.
+
+To use it, add this optional dependency to your application:
 
 ```clojure
 clj-statecharts/clj-statecharts {:mvn/version "0.1.7"}
 ```
-
-This repository includes it only in the `:dev` alias.
 
 ## Bids live in the chart
 
@@ -65,27 +63,14 @@ chart state (including `:_state` and the application's context fields).
   )
 ```
 
-`b/notify!` is for illustration; a bprogram normally handles notification.
+Add `(job-worker)` to a bprogram just as you would any other bthread.
+`b/notify!` above lets you explore the chart in the REPL; a bprogram normally
+handles notification.
 An environment handler performs the work requested by `:job/execute` and supplies
 `:job/completed`. Requests remain offered until a transition or context update
 removes them. A globally blocked request cannot advance the chart.
 
-## How the adapter works
-
-1. Strip `::sc/bid` from a copy of the definition and compile that copy with
-   `fsm/machine`. Keep the original definition for bid lookup.
-2. Initialize the chart or feed it a selected Pavlov event using `fsm/transition`.
-3. After assignments and eventless transitions finish, identify active states.
-4. Evaluate their bid definitions against the resulting state, combine them,
-   and return the bid to Pavlov.
-
-`sc/state->bid` is the general lookup function. It accepts the original chart
-definition and the runtime state; applications do not implement it themselves.
-`b/state` returns the runtime chart state and `b/set-state` restores it. A nil
-notification recomputes a restored chart's bid without rerunning entry actions.
-`sc/bthread` also accepts the usual `b/step` options, such as `:label`.
-
-## Composition and scope
+## Combining state bids
 
 - The root, active ancestors, and all active parallel regions contribute bids.
   Parallel definitions use clj-statecharts' `:regions` key.
@@ -100,22 +85,31 @@ notification recomputes a restored chart's bid without rerunning entry actions.
   semantics: they are not state-scoped actors or automatically cancelled on exit.
 - Nil/missing state bids contribute nothing; they do not terminate the chart.
   A configuration with no requests, waits, or blocks has no further activity in
-  a Pavlov program. There is no additional final/history-state implementation.
-- Pure `fsm/assign` actions execute normally. All guards, actions, and bid
-  functions must be pure; external effects belong to environment event handlers.
-- `:after` and `:scheduler` are rejected. Supply timer events through the
-  environment. Transient states crossed by `:always` do not submit bids.
-- The adapter uses the library's transition semantics, not a separate SCXML or
-  XState implementation. Non-map events are normalized using Pavlov's event
-  protocol; the original value is available as `::sc/event` to chart functions.
+  a Pavlov program.
 
-## Development tests
+## Actions, timers, and eventless transitions
 
-The optional CLJ/CLJS tests live in `modules/pavlov/test-integration`, on the
-`:dev` classpath, so the default core test suite needs no optional dependency.
-In a REPL started with `:dev`, run:
+Use pure `fsm/assign` actions to update context. Guards, actions, and bid
+functions must be pure. To trigger external work, request an event and let an
+environment handler perform the effect, as with `:job/execute` above.
 
-```clojure
-(require 'tech.thomascothran.pavlov.clj-statecharts-test :reload)
-(clojure.test/run-tests 'tech.thomascothran.pavlov.clj-statecharts-test)
-```
+Supply timer events through the environment; `:after` and `:scheduler` are not
+supported. For eventless transitions, bids reflect the state reached after the
+`:always` transitions finish. A transient state cannot request work and expect
+it to execute before its eventless transition leaves that state.
+
+Chart transitions follow clj-statecharts 0.1.7 semantics. Its unsupported
+features, including history and final/done states, are not added by this
+integration.
+
+## Inspecting and restoring a chart
+
+Use `(b/state worker)` to inspect the active state and context. To inspect its
+bid, call `(sc/state->bid job-chart (b/state worker))` after initialization.
+`b/set-state` restores a saved runtime state. A subsequent nil notification
+returns its bid without rerunning entry actions.
+
+`sc/bthread` accepts the usual `b/step` options, such as `:label`, as a second
+argument. Chart functions receive map events with their payload intact. For
+non-map Pavlov events, `:type` is the event's Pavlov type and `::sc/event` holds
+the original value.
