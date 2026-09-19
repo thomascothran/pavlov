@@ -18,7 +18,7 @@ A bthread is always invoked through `tech.thomascothran.pavlov.bthread/notify!`.
 
 However, `notify!` is very useful at the REPL and in tests.
 
-The behavioral program will first call uses a `nil` event so the bthread can initialize its state and announce the events it cares about: events that are either requested or waited on. Afterwards the bthread is only reactivated when the behavioral program dispatches an event that matches one of the event types it waited on or requested.
+The behavioral program first notifies a bthread with a `nil` event so it can initialize its state and announce the events it cares about: events that are either requested or waited on. Afterwards the bthread is only reactivated when the behavioral program dispatches an event that matches one of the event types it waited on or requested.
 
 Each time the bthread runs it returns a *bid*, a map that can contain any combination of:
 
@@ -30,11 +30,13 @@ Each time the bthread runs it returns a *bid*, a map that can contain any combin
 Spawned bthreads are initialized with `nil`. If they are spawned during startup they can observe the first event; if they are spawned in response to an event they will only observe subsequent events.
 
 ```clojure
-(def parent
-  (b/bids [{:request #{:start}
-            :bthreads {:child (b/bids [{:wait-on #{:start}}
-                                       {:request #{{:type :done
-                                                    :terminal true}}}])}}]))
+(defn make-parent
+  []
+  (b/scenario
+   [{:request #{:start}
+     :bthreads {:child (b/scenario [{:wait-on #{:start}}
+                                    {:request #{{:type :done
+                                                 :terminal true}}}])}}]))
 ```
 
 The behavioral program collects the bids from every active bthread, filters out any events that are currently blocked, and then selects the highest-priority unblocked event. Bthreads have priority amongst themselves when they are in an ordered collection:
@@ -56,11 +58,13 @@ Bthreads that supplied an *ordered* request collection (typically a vector or li
 The first selected bthread with an unblocked request will result in one of its requested events being selected. If the request is unordered (a set), one of the requested events is selected non-deterministically. If the request is ordered (a vector or list), the first unblocked event in the request is selected.
 
 ```clojure
-(def bthread-a
-  (b/bids [{:request #{{:type :a1} {:type :at}}}]))  ;; event selected non-deterministically
+(defn make-bthread-a
+  []
+  (b/scenario [{:request #{{:type :a1} {:type :a2}}}]))  ;; selected non-deterministically
 
-(def bthread-b
-  (b/bids [{:request [{:type :b1} {:type :b2}]}])) ;; :b1 has priority over :b2
+(defn make-bthread-b
+  []
+  (b/scenario [{:request [{:type :b1} {:type :b2}]}])) ;; :b1 has priority over :b2
 ```
 
 ## The step function is the core
@@ -75,34 +79,38 @@ There are convenience functions to create bthreads which have some nice advantag
 ```clojure
 (require '[tech.thomascothran.pavlov.bthread :as b])
 
-(def three-ticks
-  (b/step (fn [state _event]
-            (cond
-              (nil? state)
-              [0 {:wait-on #{:tick}}]
+(defn make-three-ticks
+  []
+  (b/step
+   (fn [state _event]
+     (cond
+       (nil? state)
+       [0 {:wait-on #{:tick}}]
 
-              (< state 2)
-              [(inc state) {:wait-on #{:tick}}]
+       (= state :finished)
+       [:finished nil]
 
-              (= state :finished)
-              [:finished nil]
+       (< state 2)
+       [(inc state) {:wait-on #{:tick}}]
 
-              :else
-              [:finished {:request #{{:type :counter/done}}}]])))
+       :else
+       [:finished {:request #{{:type :counter/done
+                               :terminal true}}}]))))
 ```
 
 Stepping the bthread at the REPL shows the complete lifecycle:
 
 ```clojure
-[(b/notify! three-ticks nil)
- (b/notify! three-ticks {:type :tick})
- (b/notify! three-ticks {:type :tick})
- (b/notify! three-ticks {:type :tick})
- (b/notify! three-ticks {:type :tick})]
+(let [three-ticks (make-three-ticks)]
+  [(b/notify! three-ticks nil)
+   (b/notify! three-ticks {:type :tick})
+   (b/notify! three-ticks {:type :tick})
+   (b/notify! three-ticks {:type :tick})
+   (b/notify! three-ticks {:type :counter/done})])
 ;; => [{:wait-on #{:tick}}
 ;;     {:wait-on #{:tick}}
 ;;     {:wait-on #{:tick}}
-;;     {:request #{{:type :counter/done}}}
+;;     {:request #{{:type :counter/done, :terminal true}}}
 ;;     nil]
 ```
 
@@ -110,57 +118,11 @@ On initialization the bthread announces that it cares about `:tick`. After three
 
 ## Helper constructors
 
-Writing step functions directly is flexible but verbose. Pavlov provides convenience constructors that build common bthread patterns on top of `step`. This not only reduces boilerplate but also makes your intent clearer.
+Writing step functions directly is flexible but verbose. Pavlov provides convenience constructors that build common bthread patterns on top of `step`. For new scripted behavior, prefer `b/scenario`.
 
-### `b/bids` — finite scripted behavior
+### `b/scenario` — scripted behavior
 
-Use `b/bids` when you want to replay a finite sequence of bids. The bthread walks the sequence once and removes itself when the sequence is exhausted.
-
-Items in the sequence may be:
-
-- Bid values, usually maps
-- Functions of event to bid: `(fn [event] -> bid)`
-
-Functions are detected with `fn?` and called with the current event, allowing bids to be computed dynamically.
-
-Bthread instances, including nested `b/bids` calls, are not valid sequence items. To create child bthreads, return a bid with a `:bthreads` map keyed by child name. Those children can create further children by returning their own bids with `:bthreads`:
-
-```clojure
-(b/bids [{:bthreads {:child (b/bids [{:request #{:child-event}}])}}])
-```
-
-```clojure
-(def staged-requests
-  (b/bids
-   [{:request #{:prep/begin}}
-    {:request #{:prep/finish}}
-    {:request #{:ship}}]))
-
-[(b/notify! staged-requests nil)
- (b/notify! staged-requests {:type :prep/begin})
- (b/notify! staged-requests {:type :prep/finish})
- (b/notify! staged-requests {:type :ship})]
-;; => [{:request #{:prep/begin}}
-;;     {:request #{:prep/finish}}
-;;     {:request #{:ship}}
-;;     nil]
-```
-
-You can also mix literal bids with functions that compute bids from event data:
-
-```clojure
-(def order-flow
-  (b/bids
-   [{:wait-on #{:order/placed}}
-    (fn [event]
-      {:request #{{:type :order/confirm
-                   :order-id (:order-id event)}}})]))
-```
-
-### `b/scenario` — stateful scripted behavior
-
-Use `b/scenario` when steps need private state or need to repeat the current
-step or return to the first one. Literal bid steps preserve state and advance.
+Use `b/scenario` for linear behavior. The bthread walks its steps in order and removes itself when the sequence is exhausted. Literal bid steps preserve state and advance.
 Function steps receive `{:event event :state state}` and return a result map:
 
 ```clojure
@@ -189,12 +151,37 @@ The cursor and local state are both included in `b/state`, so state restoration
 and model checking can distinguish scenario positions. Keep changing state
 bounded in repeating scenarios to avoid an unbounded model-checking state space.
 
+A scenario without function steps is simply a finite sequence of bids:
+
+```clojure
+(defn make-staged-requests
+  []
+  (b/scenario [{:request #{:prep/begin}}
+               {:request #{:prep/finish}}
+               {:request #{:ship}}]))
+
+(let [staged-requests (make-staged-requests)]
+  [(b/notify! staged-requests nil)
+   (b/notify! staged-requests {:type :prep/begin})
+   (b/notify! staged-requests {:type :prep/finish})
+   (b/notify! staged-requests {:type :ship})])
+;; => [{:request #{:prep/begin}}
+;;     {:request #{:prep/finish}}
+;;     {:request #{:ship}}
+;;     nil]
+```
+
+### `b/bids` — finite bid sequences
+
+Existing code may use `b/bids` for finite sequences. Its function steps receive the selected event directly and return a bid directly, while `b/scenario` function steps receive a context map and return a result map containing `:bid`. Prefer `b/scenario` in new code so state and cursor control can be added without changing constructors.
+
 ### `b/after-all` — wait for several prerequisites
 
 `b/after-all` coordinates independent event sources. It waits until every event type in the provided set has occurred (in any order) before forwarding to the supplied function.
 
 ```clojure
-(def ready-when-packed
+(defn make-ready-when-packed
+  []
   (b/after-all #{:payment/authorized :packing/completed}
                (fn [events]
                  (let [order-id (->> events (keep :order/id) first)]
@@ -202,10 +189,11 @@ bounded in repeating scenarios to avoid an unbounded model-checking state space.
                                 :order/id order-id
                                 :sources (mapv :type events)}}}))))
 
-[(b/notify! ready-when-packed nil)
- (b/notify! ready-when-packed {:type :packing/completed :order/id 42})
- (b/notify! ready-when-packed {:type :payment/authorized :order/id 42})
- (b/notify! ready-when-packed {:type :extra :order/id 42})]
+(let [ready-when-packed (make-ready-when-packed)]
+  [(b/notify! ready-when-packed nil)
+   (b/notify! ready-when-packed {:type :packing/completed :order/id 42})
+   (b/notify! ready-when-packed {:type :payment/authorized :order/id 42})
+   (b/notify! ready-when-packed {:type :order/ready :order/id 42})])
 ;; => [{:wait-on #{:packing/completed :payment/authorized}}
 ;;     {:wait-on #{:packing/completed :payment/authorized}}
 ;;     {:request #{{:type :order/ready,
