@@ -276,11 +276,17 @@
   (require '[tech.thomascothran.pavlov.bthread :as b])
   (require '[tech.thomascothran.pavlov.bprogram.ephemeral :as bpe])
   (require '[tech.thomascothran.pavlov.bprogram.proto :as bp])
+  (require '[tech.thomascothran.pavlov.event :as e])
 
   (def program
     (bpe/make-program!
-      [[:greeter (b/on :greet
-                       (fn [e] {:request #{{:type :greeted}}}))]]
+      [[:greeter
+        (b/scenario
+         [(fn [{:keys [event]}]
+            {:bid (cond-> {:wait-on #{:greet}}
+                    (= :greet (e/type event))
+                    (assoc :request #{{:type :greeted}}))
+             :next-step :current})])]]
       {:subscribers {:logger (fn [e _] (println \"Event:\" e))}}))
 
   (bp/submit-event! program {:type :greet})

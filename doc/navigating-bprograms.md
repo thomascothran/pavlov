@@ -153,7 +153,7 @@ Tip: If you want a single bthread to offer multiple alternatives at once, use a 
 
 - Discover and require:
   - `tech.thomascothran.pavlov.nav` (entry points: `root`, `to`, `follow`)
-  - `tech.thomascothran.pavlov.bthread` (helpers: `scenario`, `on`, `thread`, etc.)
+  - `tech.thomascothran.pavlov.bthread` (construct bthreads with `scenario`)
   - `tech.thomascothran.pavlov.event` (use `e/type` to read event types)
 - Construct bthreads from examples or tests
 - Build a navigable with `pnav/root`

@@ -99,19 +99,24 @@ Add all your scenario completion events to `:possible`, and use `:hot true` wher
 Once the positive scenarios are modeled, add safety bthreads that emit `:invariant-violated true` for forbidden states (e.g., "no negative payment").
 
 ```clojure
+(require '[tech.thomascothran.pavlov.event :as e])
+
 (defn no-negative-payment
   []
-  (b/on :order/paid
-        (fn [{:keys [amount] :as _event}]
-           (if (and (number? amount)
-                    (neg? amount))
-             {:request #{{:type ::negative-payment-violation
-                          :amount amount
-                          :invariant-violated true}}}
-             {}))))
+  (b/scenario
+   [(fn [{:keys [event]}]
+      (let [amount (:amount event)]
+        {:bid (cond-> {:wait-on #{:order/paid}}
+                (and (= :order/paid (e/type event))
+                     (number? amount)
+                     (neg? amount))
+                (assoc :request #{{:type ::negative-payment-violation
+                                   :amount amount
+                                   :invariant-violated true}}))
+         :next-step :current}))]))
 ```
 
-`b/on` does not require history. Other bthread constructors may be useful depending on the circumstances. Generally, keep these small and targeted to a single violation.
+This scenario needs no private state. It keeps waiting for `:order/paid` and repeats its function with `:next-step :current`, so valid payments do not stop it from checking later ones. Keep safety scenarios small and targeted to a single violation.
 
 ### 4) Iterate with the model checker
 
