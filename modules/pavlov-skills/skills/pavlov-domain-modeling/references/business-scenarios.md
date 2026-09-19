@@ -17,26 +17,26 @@ Model the main business behavior as separate linear scenario bthreads. Give each
 
 (defn- make-color-foo-happy-path
   []
-  (b/bids [{:wait-on #{:workflow/initialize-workflow-a}}
-           (fn [{foo-id :foo/id}]
-             {:request #{{:type :foo/find
-                          :foo/id foo-id}}})
-           {:wait-on #{:foo/found}}
-           (fn [{foo-id :foo/id}]
-             {:request #{{:type :foo/colorize
-                          :foo/id foo-id}}})
-           {:wait-on #{:foo/colored}}
-           {:request #{{:type :your.domain.scenarios/workflow-a-complete}}}]))
+  (b/scenario [{:wait-on #{:workflow/initialize-workflow-a}}
+               (fn [{{foo-id :foo/id} :event}]
+                 {:bid {:request #{{:type :foo/find
+                                    :foo/id foo-id}}}})
+               {:wait-on #{:foo/found}}
+               (fn [{{foo-id :foo/id} :event}]
+                 {:bid {:request #{{:type :foo/colorize
+                                    :foo/id foo-id}}}})
+               {:wait-on #{:foo/colored}}
+               {:request #{{:type :your.domain.scenarios/workflow-a-complete}}}]))
 
 (defn- make-foo-not-found
   []
-  (b/bids [{:wait-on #{:workflow/initialize-workflow-a}}
-           (fn [{foo-id :foo/id}]
-             {:request #{{:type :foo/find
-                          :foo/id foo-id}}})
-           {:wait-on #{:foo/not-found}}
-           {:request #{{:type :your.domain.scenarios/workflow-a-aborted
-                        :reason :foo-not-found}}}]))
+  (b/scenario [{:wait-on #{:workflow/initialize-workflow-a}}
+               (fn [{{foo-id :foo/id} :event}]
+                 {:bid {:request #{{:type :foo/find
+                                    :foo/id foo-id}}}})
+               {:wait-on #{:foo/not-found}}
+               {:request #{{:type :your.domain.scenarios/workflow-a-aborted
+                            :reason :foo-not-found}}}]))
 
 (defn make-bthreads
   []

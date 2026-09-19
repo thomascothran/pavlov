@@ -51,7 +51,7 @@ When creating happy path scenarios, follow these rules:
   + E.g., `make-full-order-and-delivery-path-bthread`
   + Use the form `make-<specifics-go-here>-bthread`
 - DO model scenarios linearly
-  + use `b/bids`
+  + use `b/scenario`
   + DO NOT build happy path state machines
   + DO NOT try to handle branching scenarios in a single bthread
 - DO separate similar but not quite the same workflows

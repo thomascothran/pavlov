@@ -37,16 +37,16 @@ A livelock means the model cycles forever without reaching a terminal event. Liv
 
 Positive scenarios describe the different scenarios that the application should support.
 
-Use `b/bids` to define each scenario as a sequence of bids. You can use flat event types or dynamic functions in the sequence.
+Use `b/scenario` to define each scenario as a sequence of bids. Literal bids can request flat event types. Dynamic functions receive `{:event event :state state}` and return a result map containing `:bid`.
 
 **Flat event types (keywords):**
 
 ```clojure
 (defn scenario-flat []
-  (b/bids [{:request #{:order/placed}}
-           {:request #{:order/paid}}
-           {:request #{{:type :order/done}}}
-           {:request #{{:type ::order-done-scenario-complete}}}]))
+  (b/scenario [{:request #{:order/placed}}
+               {:request #{:order/paid}}
+               {:request #{{:type :order/done}}}
+               {:request #{{:type ::order-done-scenario-complete}}}]))
 ```
 
 Note that you normally will want a namespaced event that only exists in your test suite to indicate that particular scenario is satisfied.
@@ -55,14 +55,14 @@ Note that you normally will want a namespaced event that only exists in your tes
 
 ```clojure
 (defn order-done-scenario-complete []
-  (b/bids [{:request #{{:type :order/placed :order-id 42}}}
-           (fn [event]
-             (if (:order-accepted event)
-               {:request #{{:type :order/paid
-                            :order-id (:order-id event)}}}
-               {}) ;; will not proceed if the order wasn't accepted
-           {:request #{{:type :order/done}}}
-           {:request #{{:type ::order-done-scenario-complete}}}]))
+  (b/scenario [{:request #{{:type :order/placed :order-id 42}}}
+               (fn [{:keys [event]}]
+                 {:bid (if (:order-accepted event)
+                         {:request #{{:type :order/paid
+                                      :order-id (:order-id event)}}}
+                         {})}) ;; parks if the order wasn't accepted
+               {:request #{{:type :order/done}}}
+               {:request #{{:type ::order-done-scenario-complete}}}]))
 
 (defn positive-scenarios
   []
@@ -85,11 +85,11 @@ Use hot-state liveness when some in-progress state must eventually be resolved o
 
 ```clojure
 {:bthreads
- {:order (b/bids [{:request #{:order/placed}}])
+ {:order (b/scenario [{:request #{:order/placed}}])
   :await-resolution
-  (b/bids [{:wait-on #{:order/placed}}
-           {:wait-on #{:order/done :order/cancelled}
-            :hot true}])}}
+  (b/scenario [{:wait-on #{:order/placed}}
+               {:wait-on #{:order/done :order/cancelled}
+                :hot true}])}}
 ```
 
 Add all your scenario completion events to `:possible`, and use `:hot true` where progress is required.

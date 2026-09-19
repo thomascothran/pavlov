@@ -39,10 +39,10 @@ Create a small program with two bthreads: one that emits letters in order and on
 ```clojure
 (defn make-test-bthreads
   []
-  {:letters (b/bids [{:request [:a]}
+  {:letters (b/scenario [{:request [:a]}
                      {:request [:b]}
                      {:request [:c]}])
-   :numbers (b/bids [{:request #{1 2}} ; unordered → branch
+   :numbers (b/scenario [{:request #{1 2}} ; unordered → branch
                      {:request #{3}}])})
 ```
 
@@ -85,14 +85,14 @@ Follow a whole path by specifying the branch event-types at decision points. `fo
 (-> (pnav/follow root [1 3]) :pavlov/event e/type)
 ;=> 3
 
-(-> (pnav/follow (pnav/root {:linear (b/bids [{:request [:a]}
+(-> (pnav/follow (pnav/root {:linear (b/scenario [{:request [:a]}
                                               {:request [:b]}
                                               {:request [:c]}])})
                  [:a :c])
     :pavlov/event e/type)
 ;=> :c
 
-(-> (pnav/follow (pnav/root {:linear (b/bids [{:request [:a]}
+(-> (pnav/follow (pnav/root {:linear (b/scenario [{:request [:a]}
                                               {:request [:b]}
                                               {:request [:c]}])})
                  [:a :d])
@@ -137,8 +137,8 @@ Example environment bthreads:
 ```clojure
 (defn make-env-bthreads
   []
-  {:submit      (b/bids [{:request #{{:type :application-submitted}}}])
-   :pay-deposit (b/bids [{:request #{{:type :initial-deposit-paid}}}])})
+  {:submit      (b/scenario [{:request #{{:type :application-submitted}}}])
+   :pay-deposit (b/scenario [{:request #{{:type :initial-deposit-paid}}}])})
 ```
 
 Combine domain bthreads with environment bthreads in a single map (unordered keys imply equal priority among bthreads). The selection engine will:
@@ -153,7 +153,7 @@ Tip: If you want a single bthread to offer multiple alternatives at once, use a 
 
 - Discover and require:
   - `tech.thomascothran.pavlov.nav` (entry points: `root`, `to`, `follow`)
-  - `tech.thomascothran.pavlov.bthread` (helpers: `bids`, `on`, `thread`, etc.)
+  - `tech.thomascothran.pavlov.bthread` (helpers: `scenario`, `on`, `thread`, etc.)
   - `tech.thomascothran.pavlov.event` (use `e/type` to read event types)
 - Construct bthreads from examples or tests
 - Build a navigable with `pnav/root`

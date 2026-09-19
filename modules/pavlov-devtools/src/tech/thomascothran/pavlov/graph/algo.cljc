@@ -64,10 +64,10 @@
       (require '[tech.thomascothran.pavlov.bthread :as b])
       (defn make-bthreads
         []
-        {:a (b/bids [{:request #{:a}}])
-         :b (b/bids [{:wait-on #{:a}}
+        {:a (b/scenario [{:request #{:a}}])
+         :b (b/scenario [{:wait-on #{:a}}
                      {:request #{:b}}])
-         :c (b/bids [{:wait-on #{:b}}
+         :c (b/scenario [{:wait-on #{:b}}
                      {:request #{:c}}])})
       (def lts
         (g/->lts (make-bthreads)))

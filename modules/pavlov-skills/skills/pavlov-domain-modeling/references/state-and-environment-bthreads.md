@@ -12,16 +12,16 @@ State stub bthreads mimic stateful collaborators such as repositories, databases
 
 (defn- make-find-foo
   []
-  (b/bids [{:wait-on #{:foo/find}}
-           (fn [{foo-id :foo/id}]
-             {:request #{{:type :foo/found
-                          :foo/id foo-id
-                          :foo/color :red}
-                         {:type :foo/found
-                          :foo/id foo-id
-                          :foo/color :purple}
-                         {:type :foo/not-found
-                          :foo/id foo-id}}})]))
+  (b/scenario [{:wait-on #{:foo/find}}
+               (fn [{{foo-id :foo/id} :event}]
+                 {:bid {:request #{{:type :foo/found
+                                    :foo/id foo-id
+                                    :foo/color :red}
+                                   {:type :foo/found
+                                    :foo/id foo-id
+                                    :foo/color :purple}
+                                   {:type :foo/not-found
+                                    :foo/id foo-id}}}})]))
 
 (defn make-bthreads
   []
@@ -38,10 +38,10 @@ Environment bthreads request events spontaneously. Use them to model initiating 
 
 (defn- make-init-requests
   []
-  (b/bids [{:request #{{:type :workflow/initialize-workflow-a
-                        :foo/id 1}
-                       {:type :workflow/initialize-workflow-a
-                        :foo/id 2}}}]))
+  (b/scenario [{:request #{{:type :workflow/initialize-workflow-a
+                            :foo/id 1}
+                           {:type :workflow/initialize-workflow-a
+                            :foo/id 2}}}]))
 
 (defn- make-user-actions
   []

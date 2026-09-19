@@ -44,7 +44,7 @@ But there should be enough *representative* happy paths that a new employee coul
 ### 3. Safety Properties
 Write the safety properties. See the pavlov model checking skill for more detail on safety properties.
 
-These can be `b/bids`, `b/on`, or more complex forms as needed, including more state-machine-like forms with `b/step`.
+These can be `b/scenario`, `b/on`, or more complex forms as needed, including more state-machine-like forms with `b/step`.
 
 IMPORTANT: safety properties at this stage are defined in terms of domain events. They do not apply to CRUD- or API-style events.
 
