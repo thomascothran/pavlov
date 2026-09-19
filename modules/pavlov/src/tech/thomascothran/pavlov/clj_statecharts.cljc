@@ -1,5 +1,6 @@
-(ns tech.thomascothran.pavlov.clj-statecharts
-  "Optional clj-statecharts integration. Add clj-statecharts/clj-statecharts
+(ns ^:alpha tech.thomascothran.pavlov.clj-statecharts
+  "Experimental, alpha functionality for optional clj-statecharts integration.
+  Add clj-statecharts/clj-statecharts
   to your application's dependencies before requiring this namespace.
 
   Charts use the clj-statecharts syntax, with ::bid on any state node.
