@@ -14,8 +14,8 @@ Use a single model-check entry point per feature. Merge the relevant bthread gro
 
 (defn- make-init-bthread
   []
-  (b/bids [{:request #{{:type :request-foo}      ;; establish branching
-                       {:type :request-bar}}}]))
+  (b/scenario [{:request #{{:type :request-foo}      ;; establish branching
+                           {:type :request-bar}}}]))
 
 (defn make-config []
   {:bthreads (merge (rules/make-bthreads)

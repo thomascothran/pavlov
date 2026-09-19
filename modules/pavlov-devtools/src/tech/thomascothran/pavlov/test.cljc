@@ -71,10 +71,10 @@
   Example
   -------
   (let [bthreads
-        [[:event-a (b/bids [{:request #{:event-a}}])]
-         [:event-b (b/bids [{:wait-on #{:event-a}}
+        [[:event-a (b/scenario [{:request #{:event-a}}])]
+         [:event-b (b/scenario [{:wait-on #{:event-a}}
                             {:request #{:event-b}}])]
-         [:event-c (b/bids [{:wait-on #{:event-b}}
+         [:event-c (b/scenario [{:wait-on #{:event-b}}
                             {:request #{:event-c}}])]]]
      (ptest/scenario bthreads [:event-a :event-b :event-c]))
 

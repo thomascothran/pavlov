@@ -70,10 +70,10 @@
   (do (def p (portal/open))
       (add-tap #'portal/submit))
 
-  (do (def bthreads {:letters (b/bids [{:request [:a]}
+  (do (def bthreads {:letters (b/scenario [{:request [:a]}
                                        {:request [:b]}
                                        {:request [:c]}])
-                     :numbers (b/bids [{:request #{1 2}}
+                     :numbers (b/scenario [{:request #{1 2}}
                                        {:request #{3}}])})
       (tap>
        (bthreads->navigable bthreads))))

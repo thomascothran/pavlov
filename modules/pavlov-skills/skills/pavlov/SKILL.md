@@ -22,7 +22,7 @@ Pavlov is a Clojure and ClojureScript behavioral programming library inspired by
 
 (doc 'tech.thomascothran.pavlov.bthread)
 (doc 'tech.thomascothran.pavlov.bprogram.ephemeral)
-(doc 'tech.thomascothran.pavlov.bthread/bids)
+(doc 'tech.thomascothran.pavlov.bthread/scenario)
 (doc 'tech.thomascothran.pavlov.bprogram.ephemeral/execute!)
 ```
 

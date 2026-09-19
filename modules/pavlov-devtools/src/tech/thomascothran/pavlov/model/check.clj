@@ -10,10 +10,11 @@
   ```clojure
   (require '[tech.thomascothran.pavlov.model.check :as check])
   (require '[tech.thomascothran.pavlov.bthread :as b])
+  (require '[tech.thomascothran.pavlov.event :as e])
 
   ;; Check a simple program for deadlocks
   (check/check
-    {:bthreads {:my-bthread (b/bids [{:request #{:hello}}
+    {:bthreads {:my-bthread (b/scenario [{:request #{:hello}}
                                      {:request #{{:type :done :terminal true}}}])}})
   ;; => nil (no violations found)
   ```
@@ -67,7 +68,7 @@
   ```clojure
   ;; This will deadlock - requests event then has nothing to do
   (check/check
-    {:bthreads {:stuck (b/bids [{:request #{:something}}])}})
+    {:bthreads {:stuck (b/scenario [{:request #{:something}}])}})
   ;; => {:deadlocks [{:path [:something], :state {...}}]}
   ```
 
@@ -76,7 +77,7 @@
   ```clojure
   ;; This terminates successfully - no deadlock
   (check/check
-    {:bthreads {:ok (b/bids [{:request #{{:type :done :terminal true}}}])}})
+    {:bthreads {:ok (b/scenario [{:request #{{:type :done :terminal true}}}])}})
   ;; => nil
   ```
 
@@ -102,21 +103,15 @@
 
   ```clojure
   (check/check
-    {:bthreads {:worker (b/bids [{:request #{:work}}
+    {:bthreads {:worker (b/scenario [{:request #{:work}}
                                  {:request #{:work}}  ;; oops, double work
                                  {:request #{{:type :done :terminal true}}}])}
      :safety-bthreads
      {:no-double-work
-      (b/step (fn [event state]
-                (let [new-state (update state :work-count (fnil inc 0))]
-                  (if (> (:work-count new-state) 1)
-                    ;; Violation! Emit invariant-violated event
-                    [(b/bids [{:request #{{:type :double-work-error
-                                           :invariant-violated true}}}])
-                     new-state]
-                    ;; OK, continue monitoring
-                    [nil new-state])))
-              {})}})
+      (b/scenario [{:wait-on #{:work}}
+                   {:wait-on #{:work}}
+                   {:request #{{:type :double-work-error
+                                :invariant-violated true}}}])}})
   ;; => {:safety-violations [{:event {:type :double-work-error, ...}, :path [...], :state {...}}]}
   ```
 
@@ -130,8 +125,8 @@
   ;; After :start-order, payment becomes a hot obligation.
   ;; Because nothing can produce :payment here, the program deadlocks while hot.
   (check/check
-    {:bthreads {:order (b/bids [{:request #{:start-order}}])
-                :await-payment (b/bids [{:wait-on #{:start-order}}
+    {:bthreads {:order (b/scenario [{:request #{:start-order}}])
+                :await-payment (b/scenario [{:wait-on #{:start-order}}
                                          {:wait-on #{:payment}
                                           :hot true}])}})
   ;; => {:liveness-violation {:node-id ...,
@@ -148,9 +143,9 @@
   ```clojure
   ;; Assert: payment must be POSSIBLE (at least one path has it)
   (check/check
-    {:bthreads {:path-a (b/bids [{:request #{:payment}}
+    {:bthreads {:path-a (b/scenario [{:request #{:payment}}
                                  {:request #{{:type :done-a :terminal true}}}])
-                :path-b (b/bids [{:request #{:skip}}
+                :path-b (b/scenario [{:request #{:skip}}
                                  {:request #{{:type :done-b :terminal true}}}])}
      :possible #{:payment}})
   ;; => nil (satisfied - path-a has payment)
@@ -163,14 +158,17 @@
 
   ```clojure
   (check/check
-    {:bthreads {:handler (b/on #{:success :failure}
-                           (fn [event]
-                             (if (= :success (e/type event))
-                               (b/bids [{:request #{{:type :done :terminal true}}}])
-                               (b/bids [{:request #{:retry}}
-                                        {:request #{{:type :done :terminal true}}}]))))}
+    {:bthreads
+     {:handler
+      (b/scenario
+       [{:wait-on #{:success :failure}}
+        (fn [{:keys [event]}]
+          {:bid {:request (if (= :success (e/type event))
+                            #{{:type :done :terminal true}}
+                            #{:retry})}})
+        {:request #{{:type :done :terminal true}}}])}
      :environment-bthreads
-     {:external-api (b/bids [{:request #{:success :failure}}])}})
+     {:external-api (b/scenario [{:request #{:success :failure}}])}})
   ```
 
   ## Multiple Violations
@@ -331,7 +329,7 @@
 (comment
   (require '[tech.thomascothran.pavlov.bthread :as b])
   (-> (graph/->lts
-       {:a->c (b/bids [{:request #{:a}}
+       {:a->c (b/scenario [{:request #{:a}}
                        {:request #{:b}}
                        {:request #{:c}}])})
       (find-impossible-events {:possible #{:d}})))

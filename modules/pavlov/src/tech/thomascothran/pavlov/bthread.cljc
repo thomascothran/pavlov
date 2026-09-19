@@ -325,10 +325,13 @@
 
   Bthread instances, including nested `bids` calls, are not valid sequence
   items. To create child bthreads, return a bid containing `:bthreads`,
-  keyed by child name. Those children may spawn further children in their bids:
+  keyed by child name. Those children may spawn further children in their bids.
+
+  Prefer `scenario` for new scripted behavior. The examples below show the
+  scenario equivalents, using context arguments and result maps for functions:
 
   ```clojure
-  (b/bids [{:bthreads {:child (b/bids [{:request #{:child-event}}])}}])
+  (b/scenario [{:bthreads {:child (b/scenario [{:request #{:child-event}}])}}])
   ```
 
   The sequence is fully realized in memory.
@@ -337,35 +340,37 @@
   ```clojure
   (defn make-workflow
     []
-    (b/bids [{:request #{:step-1}}
-             {:request #{:step-2}}
-             {:request #{:step-3}}]))
+    (b/scenario [{:request #{:step-1}}
+                 {:request #{:step-2}}
+                 {:request #{:step-3}}]))
   (let [workflow (make-workflow)]
     (b/notify! workflow nil)           ;=> {:request #{:step-1}}
     (b/notify! workflow {:type :step-1})) ;=> {:request #{:step-2}}
   ```
 
-  Example with dynamic function:
+  Scenario example with a dynamic function:
 
   ```clojure
-  (defn make-dynamic-bids
+  (defn make-dynamic-scenario
     []
-    (b/bids [{:wait-on #{:order/placed}}
-             (fn [event]
-               {:request #{{:type :confirm
-                            :order-id (:order-id event)}}})]))
+    (b/scenario [{:wait-on #{:order/placed}}
+                 (fn [{:keys [event]}]
+                   {:bid {:request #{{:type :confirm
+                                      :order-id (:order-id event)}}}})]))
+  ```
 
-  Provide the `:repeat` option to start the bids over. After the last
+  For `bids`, provide the `:repeat` option to start the bids over. After the last
   bid in `xs`, instead of closing the bthread, it starts over at the
   first bid in xs.
 
-  Example:
+  With `scenario`, return `:next-step :first` from the final function step:
   ```clojure
   (defn make-alternative-between-a-and-b-forever
     []
-    (b/bids [{:request #{:a}}
-             {:request #{:b}}]
-            {:repeat true}))
+    (b/scenario [{:request #{:a}}
+                 (fn [_]
+                   {:bid {:request #{:b}}
+                    :next-step :first})]))
   ```"
   ([xs]
    (bids xs nil))

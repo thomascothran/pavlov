@@ -57,8 +57,8 @@
 
    ;; Simple execution - returns promise of terminal event
    @(bpe/execute!
-     [[:step-1 (b/bids [{:request #{:a}}])]
-      [:step-2 (b/bids [{:wait-on #{:a}}
+     [[:step-1 (b/scenario [{:request #{:a}}])]
+      [:step-2 (b/scenario [{:wait-on #{:a}}
                         {:request #{{:type :done :terminal true}}}])]]
      {:kill-after 1000})
    ;; => {:type :done, :terminal true}
@@ -361,8 +361,8 @@
 
   ;; Vector of tuples gives :producer priority over :consumer
   @(bpe/execute!
-    [[:producer (b/bids [{:request #{:data-ready}}])]
-     [:consumer (b/bids [{:wait-on #{:data-ready}}
+    [[:producer (b/scenario [{:request #{:data-ready}}])]
+     [:consumer (b/scenario [{:wait-on #{:data-ready}}
                          {:request #{{:type :done :terminal true}}}])]]
     {:kill-after 1000})
   ;; => {:type :done, :terminal true}
@@ -373,8 +373,8 @@
   ```clojure
   ;; Map has non-deterministic priority - either bthread could go first
   @(bpe/execute!
-    {:bt-a (b/bids [{:request #{:event-a}}])
-     :bt-b (b/bids [{:request #{:event-b}}])}
+    {:bt-a (b/scenario [{:request #{:event-a}}])
+     :bt-b (b/scenario [{:request #{:event-b}}])}
     {:kill-after 1000})
   ;; => {:type :tech.thomascothran.pavlov.bprogram.ephemeral/deadlock, :terminal true}
   ```"

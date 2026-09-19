@@ -44,7 +44,7 @@
   requests, like so:
 
   ```clojure
-  (b/bids [{:request #{{:type :event-a} {:type :event-b}}}])
+  (b/scenario [{:request #{{:type :event-a} {:type :event-b}}}])
   ```
 
   This creates a branch in the execution graph.

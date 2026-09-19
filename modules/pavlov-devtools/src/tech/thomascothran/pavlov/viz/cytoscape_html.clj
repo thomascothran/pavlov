@@ -48,7 +48,7 @@
 
       (defn make-bthreads
         []
-        {:linear (b/bids [{:request #{:begin}}
+        {:linear (b/scenario [{:request #{:begin}}
                           {:request #{{:type :step-1a}
                                       {:type :step-1b}}}
                           {:request #{{:type :step-2
