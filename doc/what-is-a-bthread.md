@@ -64,7 +64,6 @@ The first selected bthread with an unblocked request will result in one of its r
 ```
 
 ## The step function is the core
-
 At the heart of Pavlov’s bthread story is the step function. This is not a feature of standard behavioral programming but a Pavlov-specific convention that enables a number of capabilities.
 
 A step function is a pure function that receives the previous state of the bthread and the event selected by the bprogram's algorithm, and returns the new state plus the next bid (the `:request`, `:wait-on`, and `:blocked`) map.
@@ -118,10 +117,17 @@ Writing step functions directly is flexible but verbose. Pavlov provides conveni
 Use `b/bids` when you want to replay a finite sequence of bids. The bthread walks the sequence once and removes itself when the sequence is exhausted.
 
 Items in the sequence may be:
-- Bid maps (or any bthread)
+
+- Bid values, usually maps
 - Functions of event to bid: `(fn [event] -> bid)`
 
 Functions are detected with `fn?` and called with the current event, allowing bids to be computed dynamically.
+
+Bthread instances, including nested `b/bids` calls, are not valid sequence items. To create child bthreads, return a bid with a `:bthreads` map keyed by child name. Those children can create further children by returning their own bids with `:bthreads`:
+
+```clojure
+(b/bids [{:bthreads {:child (b/bids [{:request #{:child-event}}])}}])
+```
 
 ```clojure
 (def staged-requests
@@ -151,27 +157,37 @@ You can also mix literal bids with functions that compute bids from event data:
                    :order-id (:order-id event)}}})]))
 ```
 
-### `b/on` — react to a specific event
+### `b/scenario` — stateful scripted behavior
 
-`b/on` is ideal when you need a bthread that wakes up for exactly one event type and computes a new bid from the current event -- without keeping any state.
+Use `b/scenario` when steps need private state or need to repeat the current
+step or return to the first one. Literal bid steps preserve state and advance.
+Function steps receive `{:event event :state state}` and return a result map:
 
 ```clojure
-(def review-on-receipt
-  (b/on :invoice/received
-        (fn [event]
-          {:request #{{:type :invoice/reviewed
-                       :invoice/id (:invoice/id event)}}})))
-
-[(b/notify! review-on-receipt nil)
- (b/notify! review-on-receipt {:type :invoice/received :invoice/id 17})
- (b/notify! review-on-receipt {:type :invoice/reviewed :invoice/id 17})]
-;; => [{:wait-on #{:invoice/received}}
-;;     {:request #{{:type :invoice/reviewed, :invoice/id 17}},
-;;      :wait-on #{:invoice/received}}
-;;     {:wait-on #{:invoice/received}}]
+(b/scenario
+ [{:wait-on #{:order/placed}}
+  (fn [context]
+    (let [event (get context :event)
+          state (get context :state)]
+      {:bid {:request #{{:type :payment/requested
+                         :order-id (:order-id event)}}}
+       :state (assoc state :order-id (:order-id event))}))
+  (fn [context]
+    (let [state (get context :state)]
+      {:bid {:request #{{:type :workflow/completed
+                         :order-id (:order-id state)}}}
+       :next-step :first}))]
+ {:initial-state {}})
 ```
 
-The handler runs only when the subscribed event arrives—even though it requests `:invoice/reviewed`, that follow-up event will not retrigger the handler.
+`:bid` is required. `:state` is optional and preserves the prior value when
+absent; a present `:state nil` clears it. `:next-step` may be `:current` or
+`:first` and takes effect on the next notification. With no directive the
+scenario advances, and a nil bid terminates it.
+
+The cursor and local state are both included in `b/state`, so state restoration
+and model checking can distinguish scenario positions. Keep changing state
+bounded in repeating scenarios to avoid an unbounded model-checking state space.
 
 ### `b/after-all` — wait for several prerequisites
 
@@ -200,47 +216,5 @@ The handler runs only when the subscribed event arrives—even though it request
 
 Once all prerequisites are satisfied the bthread emits its completion request and then terminates.
 
-### `b/thread` — declarative branching
-
-The `b/thread` macro lets you describe a bthread as a set of event-specific clauses, similar to writing a `case`. It is great when the bthread maintains meaningful state across several event types.
-
-```clojure
-(def door-alarm
-  (b/thread [state event]
-    :pavlov/init
-    [{:door :closed}
-     {:wait-on #{:door/opened}}]
-
-    :door/opened
-    [{:door :open}
-     {:wait-on #{:door/closed}
-      :block #{:door/opened}
-      :request #{{:type :alarm/check}}}]
-
-    :door/closed
-    [{:door :closed}
-     {:wait-on #{:door/opened}
-      :request #{{:type :alarm/reset}}}]
-
-    ;; remember this! This is easy to forget. This will be called
-    ;; when an event is received that doesn't match any other clause.
-    [state {:wait-on #{:door/opened :door/closed}}]))
-
-[(b/notify! door-alarm nil)
- (b/notify! door-alarm {:type :door/opened})
- (b/notify! door-alarm {:type :door/closed})
- (b/notify! door-alarm {:type :door/locked})]
-;; => [{:wait-on #{:door/opened}}
-;;     {:wait-on #{:door/closed},
-;;      :block #{:door/opened},
-;;      :request #{{:type :alarm/check}}}
-;;     {:wait-on #{:door/opened},
-;;      :request #{{:type :alarm/reset}}}
-;;     {:wait-on #{:door/opened :door/closed}}]
-```
-
-Here the bthread blocks a second `:door/opened` event while the door is already open, requests downstream checks, and keeps listening for state changes until it terminates or the program stops.
-
----
 
 Bthreads give you a lightweight way to isolate behavior into independent units. Understanding how they consume events, produce bids, and leverage helper constructors makes it straightforward to model complex coordination without entangling logic or state between components.
