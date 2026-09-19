@@ -9,6 +9,9 @@
   automatically. Guards, actions, and bid functions must be pure. Use
   fsm/assign for context updates and requested events for external effects.
 
+  Mark states ::hot true for liveness obligations, or ::invariant-violated true
+  for forbidden states. Invariant violations include transient state entry.
+
   Built-in timers are unsupported: supply timer events through Pavlov.
   clj-statecharts uses :regions for parallel children, not :states."
   (:require [statecharts.core :as fsm]
@@ -16,17 +19,31 @@
             [tech.thomascothran.pavlov.bthread :as b]
             [tech.thomascothran.pavlov.event :as event]))
 
-(defn- prepare-chart [node]
+(defn- prepare-chart [node path]
   (when (or (contains? node :after) (contains? node :scheduler))
     (throw (ex-info "Use Pavlov events for timers, not :after or :scheduler"
                     {:node node})))
+  (doseq [k [::hot ::invariant-violated]]
+    (when (and (contains? node k) (not (boolean? (get node k))))
+      (throw (ex-info "State property markers must be booleans"
+                      {:path path :property k :value (get node k)}))))
   (reduce (fn [result k]
             (if (contains? node k)
               (assoc result k
-                     (into {} (map (fn [[id child]] [id (prepare-chart child)]))
+                     (into {} (map (fn [[id child]]
+                                     [id (prepare-chart child (conj path id))]))
                            (get node k)))
               result))
-          (dissoc node ::bid)
+          (cond-> (dissoc node ::bid ::hot ::invariant-violated)
+            (::invariant-violated node)
+            (update :entry
+                    (fn [actions]
+                      (into [(fsm/assign
+                              (fn [state _]
+                                (update state ::violated-states (fnil conj #{}) path)))]
+                            (cond (nil? actions) []
+                                  (vector? actions) actions
+                                  :else [actions])))))
           [:states :regions]))
 
 ;; Decode the documented runtime _state representation without depending on
@@ -73,24 +90,36 @@
 
   Includes bids from the root, active ancestors, and active parallel regions.
   Unions waits and blocks, observes active :on event types, and marks the bid
-  hot when any contribution is hot. A missing/nil state bid contributes nothing.
+  hot when any contribution or active state's ::hot marker is true.
+  A missing/nil state bid contributes nothing.
   Multiple nonempty request contributions must be sets; a single contribution
   retains its ordering. Duplicate child bthread names are errors.
 
+  Entering a state marked ::invariant-violated records its path under
+  ::violated-states in the runtime state, including transient states. A recorded
+  violation (or active forbidden state) replaces the chart's ordinary bid with
+  a terminal ::invariant-violated event recognized by Pavlov's safety checker.
+
   This is also useful for inspecting the bid after restoring a chart snapshot."
   [chart state]
-  (let [nodes (active-nodes chart (:_state state))
-        bids (mapv (fn [node]
-                     (let [value (::bid node)]
-                       (if (fn? value) (value state) value)))
-                   nodes)
-        waits (into #{} (mapcat (comp keys :on)) nodes)
-        children (combine-children bids)]
-    (cond-> {:request (combine-requests bids)
-             :wait-on (into waits (mapcat bid/wait-on) bids)
-             :block (into #{} (mapcat bid/block) bids)}
-      (some bid/hot bids) (assoc :hot true)
-      (seq children) (assoc :bthreads children))))
+  (let [nodes (active-nodes chart (:_state state))]
+    (if (or (seq (::violated-states state))
+            (some ::invariant-violated nodes))
+      {:request #{{:type ::invariant-violated
+                   :invariant-violated true
+                   :terminal true
+                   :state state}}}
+      (let [bids (mapv (fn [node]
+                         (let [value (::bid node)]
+                           (if (fn? value) (value state) value)))
+                       nodes)
+            waits (into #{} (mapcat (comp keys :on)) nodes)
+            children (combine-children bids)]
+        (cond-> {:request (combine-requests bids)
+                 :wait-on (into waits (mapcat bid/wait-on) bids)
+                 :block (into #{} (mapcat bid/block) bids)}
+          (or (some ::hot nodes) (some bid/hot bids)) (assoc :hot true)
+          (seq children) (assoc :bthreads children))))))
 
 (defn bthread
   "Create a Pavlov bthread from an uncompiled clj-statecharts definition.
@@ -110,7 +139,7 @@
   transitions. No services, timers, or effectful actions should run here."
   ([chart] (bthread chart nil))
   ([chart opts]
-   (let [machine (fsm/machine (prepare-chart chart))]
+   (let [machine (fsm/machine (prepare-chart chart []))]
      (b/step
       (fn [state selected-event]
         (let [next-state

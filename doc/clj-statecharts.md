@@ -102,6 +102,56 @@ Chart transitions follow clj-statecharts 0.1.7 semantics. Its unsupported
 features, including history and final/done states, are not added by this
 integration.
 
+## Model checking and state properties
+
+Pass chart bthreads to Pavlov's model checker just like other bthreads. It
+explores alternative events and restores each branch's chart state and context.
+Provide environment bthreads for events the outside world can supply.
+
+Two optional boolean markers express properties directly on states:
+
+- `::sc/hot true`: progress is required while this state is active. The checker
+  reports a liveness violation if execution can stay hot forever, deadlock while
+  hot, or terminate while hot. Leaving the hot state discharges that obligation
+  unless another active state or bid remains hot.
+- `::sc/invariant-violated true`: this state must never be entered. Entry
+  requests a terminal safety-violation event instead of ordinary work, even if
+  an immediate `:always` transition leaves the forbidden state.
+
+Markers on parents apply throughout their active descendants. Any active
+parallel region can make the chart hot or violate an invariant. Use guarded
+transitions into a marked state for a condition-dependent violation.
+
+For example, this deliberately permits a failing path so the checker can find it:
+
+```clojure
+(require '[tech.thomascothran.pavlov.model.check :as check])
+
+(check/check
+ {:bthreads
+  {:worker
+   (sc/bthread
+    {:id :checked-job
+     :initial :working
+     :states
+     {:working {::sc/hot true
+                :on {:finish :complete :fail :failed}}
+      :complete {::sc/bid {:request #{{:type :done :terminal true}}}}
+      :failed {::sc/invariant-violated true}}})}
+  :environment-bthreads
+  {:outcome (b/scenario [{:request #{:finish :fail}}])}
+  :possible #{:done}})
+;; Reports :safety-violations for the :fail path.
+;; The successful :done event is also reachable.
+```
+
+The checker is in the optional `pavlov-devtools` module. Successful checks return
+nil; failures include witnesses under keys such as `:safety-violations`,
+`:liveness-violation`, and `:deadlocks`. Safety events identify this integration
+with `:type ::sc/invariant-violated` and include the chart snapshot as `:state`.
+Its `::sc/violated-states` field lists the forbidden state paths entered; preserve
+this reserved field when updating context or restoring snapshots.
+
 ## Inspecting and restoring a chart
 
 Use `(b/state worker)` to inspect the active state and context. To inspect its

@@ -178,3 +178,54 @@
        #"Use Pavlov events for timers"
        (sc/bthread {:id :timer :initial :a
                     :states {:a {:after {100 :b}} :b {}}}))))
+
+(deftest state-property-markers-apply-to-active-ancestors-and-regions
+  (doseq [marker [::sc/hot ::sc/invariant-violated]
+          chart [{:id :root :initial :a marker true :states {:a {}}}
+                 {:id :leaf :initial :a :states {:a {marker true}}}
+                 {:id :ancestor :initial :a
+                  :states {:a {marker true :initial :b :states {:b {}}}}}
+                 {:id :parallel :type :parallel
+                  :regions {:left {:initial :a :states {:a {}}}
+                            :right {marker true :initial :b :states {:b {}}}}}]]
+    (let [worker (sc/bthread chart)
+          bid (b/notify! worker nil)]
+      (if (= marker ::sc/hot)
+        (is (true? (:hot bid)))
+        (let [violation (first (:request bid))]
+          (is (= ::sc/invariant-violated (:type violation)))
+          (is (true? (:invariant-violated violation)))
+          (is (true? (:terminal violation)))
+          (is (seq (::sc/violated-states (:state violation)))))))))
+
+(deftest inactive-and-false-markers-do-not-contribute
+  (let [worker (sc/bthread
+                {:id :inactive :initial :a
+                 :states {:a {::sc/hot false ::sc/invariant-violated false
+                              :on {:go :b}}
+                          :b {::sc/hot true ::sc/invariant-violated true}}})]
+    (is (= {:request #{} :block #{} :wait-on #{:go}} (b/notify! worker nil)))))
+
+(deftest invariant-entry-survives-eventless-transition-and-restoration
+  (let [chart {:id :transient :initial :bad :context {:count 0}
+               :states {:bad {::sc/invariant-violated true
+                              :entry (fsm/assign (fn [s _] (update s :count inc)))
+                              :always :done}
+                        :done {::sc/bid {:request #{:ordinary-work}}}}}
+        original (sc/bthread chart)
+        restored (sc/bthread chart)
+        violation (b/notify! original nil)]
+    (is (= :done (:_state (b/state original))))
+    (is (= 1 (:count (b/state original))))
+    (is (= #{[:bad]} (::sc/violated-states (b/state original))))
+    (is (= #{::sc/invariant-violated} (set (map :type (:request violation)))))
+    (b/set-state restored (b/state original))
+    (is (= violation (b/notify! restored nil)))))
+
+(deftest markers-require-literal-booleans
+  (doseq [marker [::sc/hot ::sc/invariant-violated]]
+    (is (thrown-with-msg?
+         #?(:clj clojure.lang.ExceptionInfo :cljs js/Error)
+         #"markers must be booleans"
+         (sc/bthread {:id :invalid-marker :initial :a
+                      :states {:a {marker (constantly false)}}})))))
