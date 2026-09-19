@@ -42,17 +42,17 @@ Bthreads are composed in a behavioral program. Here is a simple example:
   []
   (b/scenario [{:request #{:hot-water}}
                {:request #{:hot-water}}
-               {:request #{:hot-water}}])
+               {:request #{:hot-water}}]))
 
 (defn cold-water
   []
   (b/scenario [{:request #{:cold-water}}
                {:request #{:cold-water}}
-               {:request #{:cold-water}}])
+               {:request #{:cold-water}}]))
 
-@(bpe/execute! {:bthreads {:hot-water (hot-water)
-                           :cold-water (cold-water)}
-                :subscribers {:logger println})
+@(bpe/execute! [[:hot-water (hot-water)]
+               [:cold-water (cold-water)]]
+              {:subscribers {:logger (fn [event _] (println event))}})
 
 ;; :hot-water
 ;; :hot-water
@@ -71,16 +71,17 @@ Usually, you need to add modify the existing code to add this new requirement. B
   []
   (b/scenario [{:wait-on #{:cold-water}
                 :block #{:hot-water}} ;; <- block :hot-water until :cold-water
-               {:wait-on #{:hot-water}
-                :block #{:cold-water}
-                :next-step :first}]) ;; <- causes the scenario to restart at the top
+               (fn [_]
+                 {:bid {:wait-on #{:hot-water}
+                        :block #{:cold-water}}
+                  :next-step :first})])) ;; <- restart at the top after hot water
 
 
-@(bpe/execute! {:bthreads {:hot-water (hot-water)
-                           :cold-water (cold-water)
-                           :interleave-hot-and-cold    ;; only change to
-                           (interleave-hot-and-cold)}  ;; existing code
-                :subscribers {:logger println})
+@(bpe/execute! [[:hot-water (hot-water)]
+               [:cold-water (cold-water)]
+               [:interleave-hot-and-cold    ;; only change to
+                (interleave-hot-and-cold)]] ;; existing code
+              {:subscribers {:logger (fn [event _] (println event))}})
 
 ;; :cold-water
 ;; :hot-water
@@ -117,7 +118,7 @@ We already saw this example:
   []
   (b/scenario [{:request #{:hot-water}}
                {:request #{:hot-water}}
-               {:request #{:hot-water}}])
+               {:request #{:hot-water}}]))
 ```
 
 We call the map with the `:request`, `:wait-on`, or `:block` keys a bid.
@@ -136,10 +137,10 @@ But `scenario` can also take a function:
                (fn [{_ :event, state :state}]
                  {:bid {:request #{:hot-water}}
                   :state (update state :ounces inc)})]
-              {:initial-state {:ounces 0}})
+              {:initial-state {:ounces 0}}))
 ```
 
-Because events can be maps, they can carry more information, such as the temperature of the water. The function also receives internal state, and can update that state by setting a `:state` value in the bid.
+Because events can be maps, they can carry more information, such as the temperature of the water. The function also receives internal state, and can update that state by setting a `:state` value in its result map alongside `:bid`.
 
 Because `scenario` is linear, it reads a lot like a test scenario. This is intentional!
 
@@ -183,7 +184,7 @@ Bids may also spawn child bthreads via `:bthreads`. Spawned bthreads are keyed b
 ```clojure
 
 (b/scenario [{:request #{:a}
-              :bthreads {:child (b/bids [{:request #{:b}}])}}])
+              :bthreads {:child (b/scenario [{:request #{:b}}])}}])
 ```
 
 ## Bthread constructors
@@ -237,55 +238,6 @@ Use `after-all` when you want to wait on a set of prior events, regardless of th
 
 In this example the `:order/ready` event is only requested after both upstream events have run, regardless of which one arrives first.
 
-### Step Functions
-The low-level, general purpose way to create a bthread is to use a step function. You should rarely need this. Most higher level functions are implemented with the `step` constructor under the hood.
-
-A step function takes its previous state and an event, and returns its next state and a bid.
-
-As an example:
-
-```clojure
-(require '[tech.thomascothran.pavlov.bthread :as b])
-
-(defn only-thrice
-  [{:keys [count done?] :as state} event]
-  (cond
-    (nil? event)
-    [{:count 0} {:wait-on #{:test}}]
-
-    done?
-    [state nil]
-
-    (< count 2)
-    [{:count (inc count)} {:wait-on #{:test}}]
-
-    :else
-    [{:count (inc count) :done? true} nil]))
-
-(def count-down-bthread (b/step only-thrice))
-
-;; b/notify! will never be called in real application code,
-;; but it is useful at the REPL to see what the bthread does.
-[(b/notify! count-down-bthread nil)
- (b/notify! count-down-bthread {:type :test})
- (b/notify! count-down-bthread {:type :test})
- (b/notify! count-down-bthread {:type :test})
- (b/state count-down-bthread)]
-;; => [{:wait-on #{:test}}
-;;     {:wait-on #{:test}}
-;;     {:wait-on #{:test}}
-;;     nil
-;;     {:count 3, :done? true}]
-```
-
-The bthread keeps track of its state, and the behavioral program keeps track of this (and all other) bthread bids.
-
-The step function is called once on initialization with a `nil` event. Thereafter, it parks until the `:test` event is emitted. After the third `:test` event the bid returns `nil`, and subsequent notifications leave the bthread parked with the `:done?` flag set.
-
-#### Errors in Step Functions
-
-Step functions should not throw errors. If an error occurs, it will be caught, and a `:tech.thomascothran.pavlov.bthread/unhandled-step-fn-error` event will be emitted, terminating the program.
-
 ### Extensibility
 
 Bthreads, bids, and behavioral programs are all protocols, allowing you to extend each as needed.
@@ -306,7 +258,7 @@ Perhaps you just want to request `:a` once.
 
 
 ```clojure
-(b/scenario [{:bid {:request #{{:type :a}}}}])
+(b/scenario [{:request #{{:type :a}}}])
 ```
 
 This bthread requests an event of type `:a` once. Then the bthread terminates.
@@ -319,18 +271,18 @@ For example:
 
 ```clojure
 {:type :submit
- :form {:first-name "Thomas"}
+ :form {:first-name "Thomas"}}
 ```
 
 All bthreads that subscribe to `:submit` events now have access to the form data as well.
 
 ### Block until
 
-Combine `:wait` and `:block`:
+Combine `:wait-on` and `:block`:
 
 ```clojure
-(b/scenario [{:bid {:wait-on #{:b}
-                    :block #{:c}}])
+(b/scenario [{:wait-on #{:b}
+              :block #{:c}}])
 ```
 
 Event `:c` is blocked until `:b` occurs. Then the bthread terminates
@@ -342,13 +294,13 @@ Combine `:wait-on` and `:request`:
 ```clojure
 (defn bthread-one
   []
-  (b/scenario [{:bid {:wait-on #{:b}
-                      :request #{:a}}}]))
+  (b/scenario [{:wait-on #{:b}
+                :request #{:a}}]))
 
 (defn bthread-two
   []
-  (b/bids [{:bid {:block #{:a}
-                  :wait-on #{:c}}}]))
+  (b/scenario [{:block #{:a}
+                :wait-on #{:c}}]))
 ```
 
 `bthread-two` blocks event `:a`.
@@ -362,9 +314,9 @@ However, if event `:b` occurs before event `:c`, then `:a` is cancelled.
 When `:c` occurs, close the program.
 
 ```clojure
-(b/bids [{:wait-on #{:c}}
-         {:terminate true ;; <- causes the program to stop.
-          :type :finis}])
+(b/scenario [{:wait-on #{:c}}
+             {:request #{{:type :finis
+                          :terminal true}}}])
 ```
 
 ## Subscribers
@@ -487,7 +439,7 @@ than Clojars JARs. A consuming monorepo can configure paths directly:
 
 Support remains experimental and currently inherits Pavlov core's primitive
 string/keyword bthread-name and event-type profile. Collection-valued names or
-event types and the `b/thread` macro are not yet guaranteed under Squint.
+event types are not yet guaranteed under Squint.
 
 
 ## Further Reading
