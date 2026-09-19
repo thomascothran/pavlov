@@ -44,7 +44,7 @@ But there should be enough *representative* happy paths that a new employee coul
 ### 3. Safety Properties
 Write the safety properties. See the pavlov model checking skill for more detail on safety properties.
 
-These can be `b/scenario`, `b/on`, or more complex forms as needed, including more state-machine-like forms with `b/step`.
+Use `b/scenario` for these properties. Function steps can inspect events and private state; `:next-step :current` keeps a monitor active across notifications. More state-machine-like forms with `b/step` are available when needed.
 
 IMPORTANT: safety properties at this stage are defined in terms of domain events. They do not apply to CRUD- or API-style events.
 
