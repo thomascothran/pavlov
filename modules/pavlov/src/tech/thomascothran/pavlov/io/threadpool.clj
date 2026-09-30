@@ -22,10 +22,9 @@
    The caller must shut down the returned ExecutorService."
   ([] (make-pool! {}))
   ([{:keys [worker-count] :or {worker-count (default-worker-count)}}]
-   (when-not (and (integer? worker-count) (pos? worker-count)
-                  (<= worker-count Integer/MAX_VALUE))
-     (throw (ex-info "worker-count must be a positive Java integer"
-                     {:worker-count worker-count})))
+   (assert (and (integer? worker-count) (pos? worker-count)
+                (<= worker-count Integer/MAX_VALUE))
+           "worker-count must be a positive Java integer")
    (let [counter (atom 0)
          factory (reify ThreadFactory
                    (newThread [_ runnable]
@@ -54,9 +53,8 @@
    restores that thread's interrupt status."
   ([grace-ms] (shutdown! (pool!) grace-ms))
   ([^ExecutorService executor grace-ms]
-   (when-not (and (integer? grace-ms) (<= 0 grace-ms Long/MAX_VALUE))
-     (throw (ex-info "grace-ms must be a nonnegative Java long"
-                     {:grace-ms grace-ms})))
+   (assert (and (integer? grace-ms) (<= 0 grace-ms Long/MAX_VALUE))
+           "grace-ms must be a nonnegative Java long")
    (.shutdown executor)
    (try
      (when-not (.awaitTermination executor (long grace-ms) TimeUnit/MILLISECONDS)
