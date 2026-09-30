@@ -86,9 +86,17 @@ The examples above assume blocking clients and therefore require execution outsi
 
 Execution errors remain distinct from application outcome events. The IO facility can catch errors during handler invocation, but cannot automatically catch errors in later asynchronous callbacks or observe Promise rejections that the handler does not expose. Handlers must explicitly bridge asynchronous failures into outcome events or another reporting mechanism; the configurable error policy remains to be designed.
 
+### JVM and Babashka execution
+
+Blocking handlers run concurrently on a library-owned, global `ThreadPoolExecutor`, shared across bprograms, with non-daemon workers. Users may optionally supply their own `ExecutorService` to control execution behavior; they retain shutdown ownership.
+
+The shared executor requires explicit application-level shutdown, not shutdown when an individual bprogram stops: stop accepting tasks, allow a grace period for queued/running tasks to finish, then request interruption with `shutdownNow()`. Interruption is cooperative; shutdown cannot guarantee that underlying IO stops. A JVM shutdown hook alone is insufficient because non-daemon workers can prevent normal shutdown from starting.
+
+The same approach works in Babashka. Construction with a bounded queue, non-daemon workers, task execution, and graceful shutdown were verified on Babashka 1.12.218. An executor supplies queueing but not operation timeouts; async handlers may also outlive their executor tasks.
+
 Need to decide:
-- How to do thread pools
-- How to configure thread pools
+- Default pool size, queue capacity, and rejection policy (without blocking the bprogram)
+- Shutdown grace period and sequencing with bprogram shutdown
 - Precisely what initiation ordering guarantees mean under concurrent execution
 - How to report completion without an event
 - How to handle duplicate completion calls or an exception after completion
