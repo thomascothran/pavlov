@@ -1,9 +1,5 @@
 (ns tech.thomascothran.pavlov.io.threadpool
-  "JVM/Babashka execution resources for IO.
-
-   This namespace supplies workers, not per-program queueing or fairness.
-   Constructed pools are caller-owned; the shared pool is application-owned
-   and must not be shut down when an individual bprogram stops."
+  "Pavlov io uses a single, global thread pool by default."
   (:import (java.util.concurrent ExecutorService LinkedBlockingQueue
                                  ThreadFactory ThreadPoolExecutor TimeUnit)))
 
