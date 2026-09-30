@@ -60,11 +60,12 @@ Let's take an example:
 
 (defn make-io-subscriber
   [state]
-  (io {:aws/send-text! (partial send-text! state)
-       :aws/send-email! (partial send-email! state)}))
+  (io/make-subscriber!
+   {:aws/send-text! (partial send-text! state)
+    :aws/send-email! (partial send-email! state)}))
 ```
 
-`io` will build a subscriber that:
+`io/make-subscriber!` builds a subscriber that:
 
 1. Looks up the handler by event type.
 2. Invokes the handler with a map containing `:event` (the triggering event) and `:on-complete!` (a completion callback), without making the bprogram wait for the external outcome.
@@ -86,16 +87,27 @@ The examples above assume blocking clients and therefore require execution outsi
 
 Execution errors remain distinct from application outcome events. The IO facility can catch errors during handler invocation, but cannot automatically catch errors in later asynchronous callbacks or observe Promise rejections that the handler does not expose. Handlers must explicitly bridge asynchronous failures into outcome events or another reporting mechanism; the configurable error policy remains to be designed.
 
+### Dispatch
+
+The subscriber accepts an optional `:dispatch!` function taking a zero-argument task. It owns execution policy: buffering, blocking, rejection, and error handling. It may use an executor or another mechanism; custom resources remain caller-owned. The subscriber does not intercept dispatch or task exceptions.
+
+```clojure
+(io/make-subscriber!
+ handlers
+ {:dispatch! (fn [task] (.execute my-executor task))})
+```
+
+There are no subscriber-local queues or round-robin fairness guarantees. Each matching event is dispatched immediately, without waiting for earlier handlers to finish. JavaScript's default dispatch invokes the task directly; handlers must return promptly.
+
 ### JVM and Babashka execution
 
-Blocking handlers run concurrently on a library-owned, global `ThreadPoolExecutor`, shared across bprograms, with non-daemon workers. Users may optionally supply their own `ExecutorService` to control execution behavior; they retain shutdown ownership.
+By default, blocking handlers run concurrently on a library-owned, global `ThreadPoolExecutor`, shared across bprograms, with non-daemon workers. Worker count is configurable and defaults to `max(8, 2 × availableProcessors)`. Tasks go directly into the executor's unbounded queue: overload buffers work rather than applying backpressure, so sustained overload can exhaust memory. Submission after shutdown still rejects. Applications needing blocking admission or other policies can supply `:dispatch!`; blocking there also blocks the submitting bprogram.
 
 The shared executor requires explicit application-level shutdown, not shutdown when an individual bprogram stops: stop accepting tasks, allow a grace period for queued/running tasks to finish, then request interruption with `shutdownNow()`. Interruption is cooperative; shutdown cannot guarantee that underlying IO stops. A JVM shutdown hook alone is insufficient because non-daemon workers can prevent normal shutdown from starting.
 
 The same approach works in Babashka. Construction with a bounded queue, non-daemon workers, task execution, and graceful shutdown were verified on Babashka 1.12.218. An executor supplies queueing but not operation timeouts; async handlers may also outlive their executor tasks.
 
 Need to decide:
-- Default pool size, queue capacity, and rejection policy (without blocking the bprogram)
 - Shutdown grace period and sequencing with bprogram shutdown
 - Precisely what initiation ordering guarantees mean under concurrent execution
 - How to report completion without an event

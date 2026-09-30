@@ -4,7 +4,6 @@
             [tech.thomascothran.pavlov.bprogram.proto :as bprogram]
             [tech.thomascothran.pavlov.event.defaults]
             [tech.thomascothran.pavlov.io :as io]
-            [tech.thomascothran.pavlov.io.dispatcher :as dispatcher]
             #?(:clj [tech.thomascothran.pavlov.io.threadpool :as threadpool])))
 
 (defn- recording-program
@@ -13,7 +12,7 @@
     (submit-event! [_ event] (swap! events conj event))))
 
 (deftest routing-and-completion-test
-  (let [dispatcher (dispatcher/make-dispatcher! {:manual? true})
+  (let [tasks (atom [])
         invocations (atom [])
         complete! (atom nil)
         outcomes (atom [])
@@ -24,51 +23,81 @@
                                    (swap! invocations conj (:event input))
                                    (reset! complete! (:on-complete! input))
                                    {:event :ignored-return-value})}
-                    {:dispatcher dispatcher})]
+                    {:dispatch! #(swap! tasks conj %)})]
     (is (nil? (subscriber :unhandled program)))
-    (is (false? (dispatcher/run-next! dispatcher)))
+    (is (empty? @tasks))
     (is (nil? (subscriber triggering-event program)))
-    (is (empty? @invocations) "The dispatcher controls when the handler runs")
-    (is (true? (dispatcher/run-next! dispatcher)))
+    (is (= 1 (count @tasks)))
+    (is (empty? @invocations) "Dispatch controls when the handler runs")
+    ((first @tasks))
     (is (= [triggering-event] @invocations))
     (is (empty? @outcomes) "The handler return value is not an outcome")
     (@complete! {:event :email/sent})
     (is (= [:email/sent] @outcomes) "Completion can occur after invocation")))
 
-(deftest subscribers-have-independent-fair-queues-test
-  (let [dispatcher (dispatcher/make-dispatcher! {:manual? true})
-        outcomes (atom [])
-        a-program (recording-program (atom []))
-        b-outcomes (atom [])
-        b-program (recording-program b-outcomes)
-        handler (fn [{:keys [event on-complete!]}]
-                  (swap! outcomes conj (:id event))
-                  (on-complete! {:event (:id event)}))
-        a (io/make-subscriber! {:go handler} {:dispatcher dispatcher})
-        b (io/make-subscriber! {:go handler} {:dispatcher dispatcher})]
-    (doseq [id [:a1 :a2 :a3]] (a {:type :go :id id} a-program))
-    (doseq [id [:b1 :b2]] (b {:type :go :id id} b-program))
-    (dotimes [_ 5] (is (true? (dispatcher/run-next! dispatcher))))
-    (is (false? (dispatcher/run-next! dispatcher)))
-    (is (= [:a1 :b1 :a2 :b2 :a3] @outcomes))
-    (is (= [:b1 :b2] @b-outcomes))))
+(deftest synchronous-completion-test
+  (let [outcomes (atom [])
+        program (recording-program outcomes)
+        subscriber (io/make-subscriber!
+                    {:go (fn [{:keys [on-complete!]}]
+                           (on-complete! {:event :done}))}
+                    {:dispatch! (fn [task] (task))})]
+    (is (nil? (subscriber :go program)))
+    (is (= [:done] @outcomes))))
 
-(deftest default-dispatcher-test
+(deftest each-effect-is-dispatched-immediately-test
+  (let [tasks (atom [])
+        outcomes (atom [])
+        program (recording-program outcomes)
+        subscriber (io/make-subscriber!
+                    {:go (fn [{:keys [event on-complete!]}]
+                           (on-complete! {:event (:id event)}))}
+                    {:dispatch! #(swap! tasks conj %)})]
+    (doseq [id [:first :second :third]] (subscriber {:type :go :id id} program))
+    (is (= 3 (count @tasks)) "No local queue holds back subsequent effects")
+    ;; Execution order belongs to dispatch, not the subscriber.
+    (doseq [task (reverse @tasks)] (task))
+    (is (= [:third :second :first] @outcomes))))
+
+(deftest custom-dispatch-controls-error-policy-test
+  (let [failure (ex-info "handler failed" {})
+        errors (atom [])
+        subscriber (io/make-subscriber!
+                    {:go (fn [_] (throw failure))}
+                    {:dispatch! (fn [task]
+                                  (try (task)
+                                       (catch #?(:clj Throwable :cljs :default) e
+                                         (swap! errors conj e))))})]
+    (is (nil? (subscriber :go nil)))
+    (is (= [failure] @errors)))
+  (let [subscriber (io/make-subscriber!
+                    {:go (fn [_] nil)}
+                    {:dispatch! (fn [_] (throw (ex-info "rejected" {})))})]
+    (is (thrown? #?(:clj clojure.lang.ExceptionInfo :cljs js/Error)
+                 (subscriber :go nil)))))
+
+(deftest default-dispatch-test
   #?(:clj
-     (let [pool (threadpool/make-pool! {:worker-count 1})
-           dispatcher (dispatcher/make-dispatcher! {:executor pool :worker-count 1})
+     (let [pool (threadpool/make-pool! {:worker-count 2})
            caller (Thread/currentThread)
-           worker (promise)]
+           workers [(promise) (promise)]
+           release (promise)
+           subscriber (io/make-subscriber!
+                       {:go (fn [{:keys [event]}]
+                              (deliver (nth workers (:id event)) (Thread/currentThread))
+                              @release)})]
        (try
-         (with-redefs [dispatcher/dispatcher! (constantly dispatcher)]
-           (let [subscriber (io/make-subscriber!
-                             {:go (fn [_] (deliver worker (Thread/currentThread)))})]
-             (is (nil? (subscriber :go nil)))))
-         (let [actual (deref worker 1000 nil)]
-           (is (some? actual))
-           (is (not (identical? caller actual))))
+         (with-redefs [threadpool/pool! (constantly pool)]
+           (dotimes [id 2]
+             (is (nil? (subscriber {:type :go :id id} nil)))))
+         ;; Both handlers must start before either is released.
+         (let [actual (mapv #(deref % 1000 nil) workers)]
+           (doseq [worker actual]
+             (is (some? worker))
+             (is (not (identical? caller worker))))
+           (is (not (identical? (first actual) (second actual)))))
          (finally
-           (dispatcher/stop! dispatcher)
+           (deliver release true)
            (threadpool/shutdown! pool 1000))))
      :cljs
      (let [called? (atom false)

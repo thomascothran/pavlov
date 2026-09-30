@@ -5,7 +5,6 @@
             [tech.thomascothran.pavlov.bprogram.notification-test]
             [tech.thomascothran.pavlov.bprogram.state-test]
             [tech.thomascothran.pavlov.io-test]
-            [tech.thomascothran.pavlov.io.dispatcher-test]
             [tech.thomascothran.pavlov.event.selection.prioritized-bids-test]
             [tech.thomascothran.pavlov.event.selection.prioritized-events-test]))
 
@@ -26,7 +25,6 @@
               'tech.thomascothran.pavlov.bprogram.notification-test
               'tech.thomascothran.pavlov.bprogram.state-test
               'tech.thomascothran.pavlov.io-test
-              'tech.thomascothran.pavlov.io.dispatcher-test
               'tech.thomascothran.pavlov.event.selection.prioritized-bids-test
               'tech.thomascothran.pavlov.event.selection.prioritized-events-test)
              js/Promise.resolve
