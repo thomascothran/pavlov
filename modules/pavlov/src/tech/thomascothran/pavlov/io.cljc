@@ -28,7 +28,8 @@
 
    Exceptions are not intercepted by the subscriber.
 
-   Example:
+   Example
+   --------
    (make-subscriber!
     {:log (fn [{:keys [event on-complete!]}]
             (println (:message event))
