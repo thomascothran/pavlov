@@ -59,6 +59,7 @@
             :request #{{:type :task-form/submit-pending
                         :request/id request-id}}
             :block #{}
+            :hot nil
             :bthreads nil}
            bid))
     (is (= [] @!submitted-events))))
@@ -91,6 +92,7 @@
                    :request #{{:type :task-form/submit-pending
                                :request/id request-id}}
                    :block #{}
+                   :hot nil
                    :bthreads nil}
                   bid))
            (flush-async!
@@ -133,6 +135,7 @@
                    :request #{{:type :task-form/submit-pending
                                :request/id request-id}}
                    :block #{}
+                   :hot nil
                    :bthreads nil}
                   bid))
            (flush-async!
@@ -172,6 +175,7 @@
                    :request #{{:type :task-form/submit-pending
                                :request/id request-id}}
                    :block #{}
+                   :hot nil
                    :bthreads nil}
                   bid))
            (flush-async!
