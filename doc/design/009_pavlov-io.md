@@ -101,11 +101,15 @@ There are no subscriber-local queues or round-robin fairness guarantees. Each ma
 
 ### JVM and Babashka execution
 
-By default, blocking handlers run concurrently on a library-owned, global `ThreadPoolExecutor`, shared across bprograms, with non-daemon workers. Worker count is configurable and defaults to `max(8, 2 × availableProcessors)`. Tasks go directly into the executor's unbounded queue: overload buffers work rather than applying backpressure, so sustained overload can exhaust memory. Submission after shutdown still rejects. Applications needing blocking admission or other policies can supply `:dispatch!`; blocking there also blocks the submitting bprogram.
+Blocking handlers use a library-owned, shared executor. At runtime, we check for `Executors.newVirtualThreadPerTaskExecutor`: when available, each task gets a virtual thread; otherwise we use the existing non-daemon `ThreadPoolExecutor`. Detection avoids a compile-time dependency on Java 21 APIs.
+
+Virtual-thread execution has no worker-count limit and does not keep the process alive. Applications must await completion or explicitly shut down and await before exiting. The fixed-pool fallback defaults to `max(8, 2 × availableProcessors)` workers and an unbounded queue. `threadpool/make-pool!` remains available for explicitly configured worker limits, injected through `:dispatch!`.
+
+Neither default supplies backpressure: the fallback buffers pending tasks, while virtual threads allow unbounded concurrent handlers. Applications needing admission limits or other policies can supply `:dispatch!`; blocking there also blocks the submitting bprogram. Submission after executor shutdown rejects.
 
 The shared executor requires explicit application-level shutdown, not shutdown when an individual bprogram stops: stop accepting tasks, allow a grace period for queued/running tasks to finish, then request interruption with `shutdownNow()`. Interruption is cooperative; shutdown cannot guarantee that underlying IO stops. A JVM shutdown hook alone is insufficient because non-daemon workers can prevent normal shutdown from starting.
 
-The same approach works in Babashka. Construction with a bounded queue, non-daemon workers, task execution, and graceful shutdown were verified on Babashka 1.12.218. An executor supplies queueing but not operation timeouts; async handlers may also outlive their executor tasks.
+Virtual-thread executor creation and execution were verified on Babashka 1.12.218 (Java 25.0.2), including that its worker threads are virtual. Other runtimes use the same capability check rather than assuming support from their version. Neither executor supplies operation timeouts; async handlers may also outlive their executor tasks.
 
 Need to decide:
 - Shutdown grace period and sequencing with bprogram shutdown

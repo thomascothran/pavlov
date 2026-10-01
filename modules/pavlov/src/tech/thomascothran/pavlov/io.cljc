@@ -21,8 +21,10 @@
    including buffering, blocking, rejection, and error handling. The caller
    retains ownership of any custom execution resources.
 
-   By default, JVM/Babashka tasks go directly to the shared IO pool's unbounded
-   queue. There is no subscriber-local queue, fairness, or backpressure policy.
+   JVM/Babashka tasks go to the shared executor: a virtual thread per task when
+   available, otherwise a fixed pool with an unbounded queue. Virtual threads
+   do not keep the process alive; await completion before application exit.
+   There is no subscriber-local queue, fairness, or backpressure policy.
    JavaScript invokes tasks directly; handlers must initiate asynchronous work
    and return promptly. Exceptions are not intercepted by the subscriber."
   ([handlers] (make-subscriber! handlers {}))

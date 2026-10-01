@@ -1,5 +1,5 @@
 (ns tech.thomascothran.pavlov.io.threadpool
-  "Pavlov io uses a single, global thread pool by default."
+  "Shared IO execution: virtual threads when available, otherwise a fixed pool."
   (:import (java.util.concurrent ExecutorService LinkedBlockingQueue
                                  ThreadFactory ThreadPoolExecutor TimeUnit)))
 
@@ -31,11 +31,29 @@
                           0 TimeUnit/MILLISECONDS
                           (LinkedBlockingQueue.) factory))))
 
+(defn- make-virtual-executor!
+  []
+  ;; Resolve at runtime so this namespace also loads on pre-Java-21 runtimes.
+  (when-let [method (some #(when (= "newVirtualThreadPerTaskExecutor" (.getName %)) %)
+                         (.getMethods java.util.concurrent.Executors))]
+    (.invoke method nil (object-array 0))))
+
+(defn make-executor!
+  "Create a virtual-thread-per-task executor when available, else make-pool!.
+
+   Virtual threads are daemon threads and do not limit concurrent handlers.
+   Await completion or shut down and await before the application exits.
+   Use make-pool! explicitly when a fixed worker limit is required.
+   The caller owns shutdown of the returned ExecutorService."
+  []
+  (or (make-virtual-executor!) (make-pool!)))
+
 (defonce ^:private shared-pool
-  (delay (make-pool!)))
+  (delay (make-executor!)))
 
 (defn pool!
-  "Return the lazy, shared default pool. Shutdown is terminal: no recreation."
+  "Return the lazy shared executor, preferring virtual threads when available.
+   Shutdown is terminal: no recreation."
   []
   @shared-pool)
 

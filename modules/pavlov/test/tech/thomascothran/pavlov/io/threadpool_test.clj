@@ -1,7 +1,36 @@
 (ns tech.thomascothran.pavlov.io.threadpool-test
   (:require [clojure.test :refer [deftest is testing]]
             [tech.thomascothran.pavlov.io.threadpool :as threadpool])
-  (:import (java.util.concurrent ThreadPoolExecutor)))
+  (:import (java.util.concurrent ExecutorService ThreadPoolExecutor)))
+
+(deftest automatic-executor-test
+  (let [^ExecutorService executor (threadpool/make-executor!)
+        result (promise)
+        virtual? (some #(when (= "isVirtual" (.getName %)) %) (.getMethods Thread))]
+    (try
+      (.execute executor ^Runnable #(deliver result (Thread/currentThread)))
+      (let [worker (deref result 1000 nil)]
+        (is (some? worker))
+        (when worker
+          (is (not (identical? worker (Thread/currentThread))))
+          (if virtual?
+            (do (is (true? (.invoke virtual? worker (object-array 0))))
+                (is (.isDaemon ^Thread worker)))
+            (is (instance? ThreadPoolExecutor executor)))))
+      (is (threadpool/shutdown! executor 1000))
+      (finally (threadpool/shutdown! executor 1000)))))
+
+(deftest unavailable-virtual-threads-fallback-test
+  (with-redefs-fn {#'threadpool/make-virtual-executor! (constantly nil)}
+    (fn []
+      (let [^ExecutorService executor (threadpool/make-executor!)
+            result (promise)]
+        (try
+          (is (instance? ThreadPoolExecutor executor))
+          (.execute executor ^Runnable #(deliver result (.isDaemon (Thread/currentThread))))
+          (is (= false (deref result 1000 :timeout)))
+          (is (threadpool/shutdown! executor 1000))
+          (finally (threadpool/shutdown! executor 1000)))))))
 
 (deftest pool-test
   (testing "default worker count scales with available processors"
