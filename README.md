@@ -149,7 +149,7 @@ Bthreads are assembled into bprograms. The main purpose of a behavioral program 
 
 To run an ephemeral bprogram, use one of the two main API functions in `tech.thomascothran.pavlov.bprogram.ephemeral`:
 
-- `execute!`: returns a promise that is delivered when the bprogram terminates with the value of the terminal event. It allows you to call a bprogram like a function
+- `execute!`: returns a promise that is delivered when the bprogram terminates with the value of the terminal event. It allows you to call a bprogram like a function. By default it terminates on deadlock; pass `{:terminate-on-deadlock false}` to wait for external events or asynchronous IO outcomes instead. In that mode, use explicit terminal events and optionally `:kill-after` to bound execution.
 - `make-program!`: returns the bprogram itself. This lets you send it new events from the outside (i.e,. not from bthreads).
 
 Bprograms have a simple algorithm for selecting the next event.

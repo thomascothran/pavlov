@@ -337,8 +337,9 @@
 
   This is the simplest way to run a bprogram. It handles the full lifecycle:
   starts the program, runs until termination, and returns the final event.
-  Automatically adds a deadlock detector that terminates if no events can
-  be selected.
+  By default, adds a deadlock detector that terminates if no events can
+  be selected. Set `:terminate-on-deadlock false` to wait for external events
+  instead, including asynchronous IO outcomes.
 
   Parameters
   ----------
@@ -348,6 +349,9 @@
 
   - `opts` - optional map:
     + `:kill-after` - milliseconds after which to force-terminate the program
+    + `:terminate-on-deadlock` - defaults to true; false disables the deadlock
+      detector. Use explicit terminal events and optionally `:kill-after` when
+      waiting for external input or IO completion.
     + `:request-event` - an event to request at startup (kicks off the program)
     + `:subscribers` - map of subscriber-name to `(fn [event bprogram] ...)`
 
@@ -356,7 +360,7 @@
 
   Termination occurs when:
   - A bthread requests an event with `:terminal true`
-  - No unblocked events can be selected (deadlock)
+  - No unblocked events can be selected (unless `:terminate-on-deadlock false`)
   - `:kill-after` timeout expires
 
   Example with deterministic priority
@@ -400,12 +404,13 @@
            requested-event-bthread
            (conj [::requested-event requested-event-bthread])
 
-           :then
+           (get opts :terminate-on-deadlock true)
            (conj [::deadlock {:request #{{:type ::deadlock
                                           :terminal true}}}]))
 
          bprogram (make-program! bthreads' opts)
-         stopped (bprogram/stopped bprogram)]
+         stopped #?(:clj (bprogram/stopped bprogram)
+                    :cljs (:promise (bprogram/stopped bprogram)))]
      (when kill-after
        (let [killfn (fn [] (bprogram/kill! bprogram))]
          #?(:clj (let [timeout-task (.schedule @kill-after-scheduler
