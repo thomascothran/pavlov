@@ -1,5 +1,17 @@
 # Pavlov IO
 
+## Decision: model calls return structured event data
+
+Pavlov AI's initial scope is calling LLMs or other decision models from a bthread through an IO handler. The caller declares the permitted response event contracts and their schemas. The handler requests structured data, decodes and validates the result against the original schema, and submits a correlated response event or an explicit failure event for connection, provider, parsing, or validation failures. A successful outcome must conform to a declared schema; obtaining a successful outcome is not guaranteed.
+
+**Do not use the OpenAI/ChatGPT tool-call syntax or protocol for this contract.** No provider-native function names, tool-call argument envelopes, tool-call IDs, or tool-result message rounds are required. A model can return arbitrary schema-constrained data, including data representing a proposed operation. Provider prompt/message formatting belongs inside the adapter and does not introduce a separate message-versus-action distinction into the Pavlov event contract.
+
+Pavlov represents both model results and proposed operations as events. External effects are performed by handlers, and subsequent model calls are explicit steps in the behavioral program. The model does not execute an operation merely by producing its data.
+
+The primary integration seam is a handler compatible with `io/make-subscriber!`, receiving `{:event request-event :on-complete! callback}`. The model handler must translate expected failures into outcome events; the generic IO subscriber does not intercept exceptions or enforce response schemas.
+
+Agent orchestration is deferred. A future optional agent layer may add history, planning, and repeated calls on top of the same validated event contract. It must not make an agent loop or the OpenAI tool-call protocol prerequisites for a model call. Existing Pavlov AI tool-call normalization is implementation history, not the intended core contract. This section records the design decision, not a claim that the complete model handler already exists.
+
 Pavlov is synchronous and blocking by default. In some cases it is fine to have bthreads perform IO. But many times it is not.
 
 ## Problem
