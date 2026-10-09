@@ -1,9 +1,20 @@
 # yaml-language-server: $schema=https://devenv.sh/devenv.schema.json
+#
+# All inputs use git+https with shallow=1 instead of the github: fetcher.
+# github: downloads tarballs from the GitHub API/codeload, which is blocked in
+# some sandboxes (e.g. Claude's cloud); plain git over https is not.
 inputs:
+  # Plain nixpkgs, pinned to a nixos-unstable revision (2026-10-09).
+  # Replaces github:cachix/devenv-nixpkgs/rolling, whose only additions are
+  # patches for lean4, llvm-on-darwin and poetry -- none of which we use -- and
+  # whose own nixpkgs-src input would still be fetched as a github: tarball.
   nixpkgs:
-    url: github:cachix/devenv-nixpkgs/rolling
+    url: git+https://github.com/NixOS/nixpkgs?ref=nixos-unstable&rev=e7439b6b14ad3cc35d05608ebca9bce01a25f5f8&shallow=1
+  # Must be declared explicitly, otherwise devenv adds it as a github: input.
+  devenv:
+    url: git+https://github.com/cachix/devenv?rev=a73c5b84c9527760f009232988466763068f9f61&shallow=1&dir=src/modules
   clojure-mcp-light:
-    url: github:bhauman/clojure-mcp-light?rev=401e2746d1dea1d29cd9e69c35f22e844e104c2d
+    url: git+https://github.com/bhauman/clojure-mcp-light?rev=d341c239d4b1faa58ccefaf8bc0b1e2a312e2af4&shallow=1
     flake: false
 
 # If you're using non-OSS software, you can set allowUnfree to true.

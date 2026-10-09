@@ -15,6 +15,7 @@ in
   };
 
   packages = [
+    pkgs.babashka
     pkgs.git
     pkgs.nodejs
   ];

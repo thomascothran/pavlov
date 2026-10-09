@@ -3,71 +3,56 @@
     "clojure-mcp-light": {
       "flake": false,
       "locked": {
-        "lastModified": 1766419491,
-        "narHash": "sha256-dqxDPCr8epBfVrA9q/ibiLyJlFBPc0rmbEP9E6MMWcI=",
-        "owner": "bhauman",
-        "repo": "clojure-mcp-light",
-        "rev": "401e2746d1dea1d29cd9e69c35f22e844e104c2d",
-        "type": "github"
+        "lastModified": 1781886265,
+        "narHash": "sha256-aLqXWZTL0HqHnvQQN5hRH1IJaL0eHJN5OVgOQ5O2pXs=",
+        "ref": "refs/heads/main",
+        "rev": "d341c239d4b1faa58ccefaf8bc0b1e2a312e2af4",
+        "shallow": true,
+        "type": "git",
+        "url": "https://github.com/bhauman/clojure-mcp-light"
       },
       "original": {
-        "owner": "bhauman",
-        "repo": "clojure-mcp-light",
-        "rev": "401e2746d1dea1d29cd9e69c35f22e844e104c2d",
-        "type": "github"
+        "rev": "d341c239d4b1faa58ccefaf8bc0b1e2a312e2af4",
+        "shallow": true,
+        "type": "git",
+        "url": "https://github.com/bhauman/clojure-mcp-light"
       }
     },
     "devenv": {
       "locked": {
         "dir": "src/modules",
-        "lastModified": 1782331842,
-        "narHash": "sha256-7CJ2EqNVPMq0ly39aaP6dGgdO627MqUtM/+Dm+QwNdU=",
-        "owner": "cachix",
-        "repo": "devenv",
-        "rev": "885e1c9d62cfa12232802de77b36aaded1ca609b",
-        "type": "github"
+        "lastModified": 1791549372,
+        "narHash": "sha256-5Vu2oKeImB5wQWLFSEcWXsF0Oajm4/5MV7UlnOdelmg=",
+        "ref": "refs/heads/main",
+        "rev": "a73c5b84c9527760f009232988466763068f9f61",
+        "shallow": true,
+        "type": "git",
+        "url": "https://github.com/cachix/devenv"
       },
       "original": {
         "dir": "src/modules",
-        "owner": "cachix",
-        "repo": "devenv",
-        "type": "github"
+        "rev": "a73c5b84c9527760f009232988466763068f9f61",
+        "shallow": true,
+        "type": "git",
+        "url": "https://github.com/cachix/devenv"
       }
     },
     "nixpkgs": {
-      "inputs": {
-        "nixpkgs-src": "nixpkgs-src"
-      },
       "locked": {
-        "lastModified": 1782132010,
-        "narHash": "sha256-ZnAVHdVrotp80iIMm5CSR1fdxPlw7Uwmwxb+O/wsgZ8=",
-        "owner": "cachix",
-        "repo": "devenv-nixpkgs",
-        "rev": "12866ae2dddbc0ab8b329915f8072bb9c75bde89",
-        "type": "github"
+        "lastModified": 1791456040,
+        "narHash": "sha256-H83yz/do+hjOO0uujHyH8RgtIQP2v7Mw+cLwcZK/xKc=",
+        "ref": "nixos-unstable",
+        "rev": "e7439b6b14ad3cc35d05608ebca9bce01a25f5f8",
+        "shallow": true,
+        "type": "git",
+        "url": "https://github.com/NixOS/nixpkgs"
       },
       "original": {
-        "owner": "cachix",
-        "ref": "rolling",
-        "repo": "devenv-nixpkgs",
-        "type": "github"
-      }
-    },
-    "nixpkgs-src": {
-      "flake": false,
-      "locked": {
-        "lastModified": 1781607440,
-        "narHash": "sha256-rxO+uc/KFbSJp+pgyXRuAX6QlG9hJdnt0BXpEQRXY+U=",
-        "owner": "NixOS",
-        "repo": "nixpkgs",
-        "rev": "3e41b24abd260e8f71dbe2f5737d24122f972158",
-        "type": "github"
-      },
-      "original": {
-        "owner": "NixOS",
-        "ref": "nixpkgs-unstable",
-        "repo": "nixpkgs",
-        "type": "github"
+        "ref": "nixos-unstable",
+        "rev": "e7439b6b14ad3cc35d05608ebca9bce01a25f5f8",
+        "shallow": true,
+        "type": "git",
+        "url": "https://github.com/NixOS/nixpkgs"
       }
     },
     "root": {
