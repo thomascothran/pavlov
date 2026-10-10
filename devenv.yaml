@@ -1,15 +1,17 @@
 # yaml-language-server: $schema=https://devenv.sh/devenv.schema.json
 #
-# All inputs use git+https with shallow=1 instead of the github: fetcher.
-# github: downloads tarballs from the GitHub API/codeload, which is blocked in
-# some sandboxes (e.g. Claude's cloud); plain git over https is not.
+# Inputs avoid the github: fetcher, which downloads tarballs from the GitHub
+# API/codeload and is blocked in some sandboxes (e.g. Claude's cloud).
 inputs:
-  # Plain nixpkgs, pinned to a nixos-unstable revision (2026-10-09).
+  # nixpkgs from the nixos-unstable channel release tarball on nixos.org
+  # (revision e7439b6b14ad, 2026-10-09). It is a ~40 MB download instead of a
+  # git clone of nixpkgs, and builds the same packages as that revision.
   # Replaces github:cachix/devenv-nixpkgs/rolling, whose only additions are
-  # patches for lean4, llvm-on-darwin and poetry -- none of which we use -- and
-  # whose own nixpkgs-src input would still be fetched as a github: tarball.
+  # patches for lean4, llvm-on-darwin and poetry -- none of which we use.
+  # To update: curl -sI https://channels.nixos.org/nixos-unstable | grep location
   nixpkgs:
-    url: git+https://github.com/NixOS/nixpkgs?ref=nixos-unstable&rev=e7439b6b14ad3cc35d05608ebca9bce01a25f5f8&shallow=1
+    url: https://releases.nixos.org/nixos/unstable/nixos-26.11pre1087755.e7439b6b14ad/nixexprs.tar.xz
+  # The other inputs use git+https with shallow=1.
   # Must be declared explicitly, otherwise devenv adds it as a github: input.
   devenv:
     url: git+https://github.com/cachix/devenv?rev=a73c5b84c9527760f009232988466763068f9f61&shallow=1&dir=src/modules

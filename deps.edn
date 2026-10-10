@@ -3,6 +3,11 @@
         tech.thomascothran/pavlov-skills {:local/root "./modules/pavlov-skills"}
         tech.thomascothran/pavlov-web {:local/root "./modules/pavlov-web"}
         tech.thomascothran/pavlov-web-examples {:local/root "./examples/web"}}
+ ;; Google's Maven Central mirror first, Maven Central itself as a fallback.
+ ;; Maven Central rate-limits (HTTP 429) shared egress IPs such as cloud CI
+ ;; and sandboxes. "central" is the repo tools.deps tries first.
+ :mvn/repos {"central" {:url "https://maven-central.storage-download.googleapis.com/maven2/"}
+             "maven-central" {:url "https://repo1.maven.org/maven2/"}}
  :aliases
  {:test {:extra-paths ["modules/pavlov/test" "modules/pavlov-devtools/test" "modules/pavlov-web/test"]
          :extra-deps {org.clojure/test.check {:mvn/version "1.1.1"}
