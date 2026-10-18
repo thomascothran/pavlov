@@ -181,6 +181,40 @@
       (is (= successor-ids-1 successor-ids-2)
           "Repeated succ calls should point at the same successor states"))))
 
+(defn- make-stateless-spawner-program
+  "An environment picks :x or :y twice. A stateless spawner starts one child
+  per event, named after the event type, built by `make-child`."
+  [make-child]
+  {::env (b/bids [{:request #{:x :y}}
+                  {:request #{:x :y}}])
+   ::spawner (b/step (fn [_ e]
+                       [nil (cond-> {:wait-on #{:x :y}}
+                              e (assoc :bthreads
+                                       {[::child (event/type e)]
+                                        (make-child)}))]))})
+
+(deftest make-navigator-ignores-spawned-bthreads-in-state-identity
+  (testing "States that differ only in which ended children a bid spawned are the same state"
+    (let [nav (search/make-navigator
+               (make-stateless-spawner-program #(b/bids [])))
+          succs (search/succ nav (search/root nav))]
+      (is (= 2 (count succs)))
+      (is (= 1 (count (into #{} (map #(search/identifier nav (:state %))) succs)))
+          "after :x and after :y are the same state")
+      (is (= 3 (count (search/bfs-seq nav)))
+          "root, after one event, after two events"))))
+
+(deftest make-navigator-distinguishes-live-spawned-bthreads
+  (testing "Children that are still running keep states distinct"
+    (let [nav (search/make-navigator
+               (make-stateless-spawner-program
+                #(b/bids [{:wait-on #{:never}}])))
+          succs (search/succ nav (search/root nav))
+          ids (into #{} (map #(search/identifier nav (:state %))) succs)]
+      (is (= 2 (count succs)))
+      (is (= 2 (count ids))
+          "after :x a [::child :x] runs; after :y a [::child :y] runs"))))
+
 (deftest dfs-reduce-early-termination-test
   (testing "DFS-reduce can terminate early with reduced"
     (let [nav (->InfiniteNavigator)]

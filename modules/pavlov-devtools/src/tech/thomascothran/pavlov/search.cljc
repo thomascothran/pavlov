@@ -112,12 +112,22 @@
                      acc')))))))) ; finished
 
 (defn- bids->state-key-bids
-  "Replace spawned bthread objects with their names for structural equality."
+  "Drop a bid's `:bthreads` from the state key.
+
+  Spawns happen in the same notification pass that produced the bid: the
+  children are registered before the state is returned, so any bid stored in
+  `:bthread->bid` has already spawned. Live children are identified by their
+  own entries in the saved bthread states, and ended children no longer
+  affect behavior. Keeping `:bthreads` would split states that differ only in
+  which children a stateless spawner last started.
+
+  This relies on stored bids never being re-read for `:bthreads`. If spawning
+  is ever deferred, this must change."
   [bids]
   (update-vals bids
                (fn [bid]
-                 (if-let [bthreads (bid/bthreads bid)]
-                   (assoc bid :bthreads (keys bthreads))
+                 (if (and (map? bid) (bid/bthreads bid))
+                   (dissoc bid :bthreads)
                    bid))))
 
 (defn- wrapped->state-key
