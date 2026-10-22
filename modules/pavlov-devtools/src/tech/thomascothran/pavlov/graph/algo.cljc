@@ -30,6 +30,40 @@
   (some->> (get outgoing-index node-id)
            (filter edge-predicate)))
 
+(defn shortest-path-tree
+  "Map each node reachable from `start-id` to the edge through which a
+  breadth-first search first discovers it; `start-id` maps to nil.
+
+  Successors are visited in `outgoing-index` order, so the path this tree
+  gives to a node is the one `find-path` returns for it."
+  [outgoing-index start-id]
+  (loop [queue (conj #?(:clj PersistentQueue/EMPTY
+                        :cljs #queue [])
+                     start-id)
+         tree (transient {start-id nil})]
+    (if-let [node-id (peek queue)]
+      (let [[queue tree]
+            (reduce (fn [[queue tree :as acc] edge]
+                      (let [to (get edge :to)]
+                        (if (contains? tree to)
+                          acc
+                          [(conj queue to) (assoc! tree to edge)])))
+                    [(pop queue) tree]
+                    (get outgoing-index node-id))]
+        (recur queue tree))
+      (persistent! tree))))
+
+(defn tree-path
+  "The edges from the root of a `shortest-path-tree` to `node-id`, or nil when
+  `node-id` is not in `tree`."
+  [tree node-id]
+  (when (contains? tree node-id)
+    (loop [node-id node-id
+           path ()]
+      (if-let [edge (get tree node-id)]
+        (recur (get edge :from) (conj path edge))
+        (vec path)))))
+
 (defn- ->frontier-state
   [path edge]
   {:node-id (get edge :to)

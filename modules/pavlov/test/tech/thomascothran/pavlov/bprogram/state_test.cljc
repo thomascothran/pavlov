@@ -155,6 +155,22 @@
     (is (identical? (:waits state) (:waits next-state)))
     (is (identical? (:blocks state) (:blocks next-state)))))
 
+(deftest unchanged-bids-keep-their-index-entries
+  (let [observer (b/step (fn [_ _] [nil {:wait-on #{:a :b} :block #{:x}}]))
+        ticker (b/step (fn [_ _] [nil {:request #{:a} :wait-on #{:b}}]))
+        state (s/init [[:observer observer]
+                       [:ticker ticker]])
+        next-state (s/step state :a)]
+    (is (= (select-keys state [:bthread->bid :waits :requests :blocks])
+           (select-keys next-state [:bthread->bid :waits :requests :blocks]))
+        "Equal bids leave every index unchanged")
+    (is (= #{:observer} (get-in next-state [:waits :a]))
+        "The triggered event type's key is rebuilt for unchanged bids")
+    (is (= #{:ticker} (get-in next-state [:requests :a])))
+    (is (identical? (get-in state [:waits :b]) (get-in next-state [:waits :b]))
+        "Other memberships of unchanged bids are not rebuilt")
+    (is (identical? (:blocks state) (:blocks next-state)))))
+
 (deftest custom-bid-implementations-remain-indexable
   (let [custom-bid (->CustomBid [:go] [:watched] [:blocked])
         state (s/init [[:custom (b/step (fn [_ _] [nil custom-bid]))]])

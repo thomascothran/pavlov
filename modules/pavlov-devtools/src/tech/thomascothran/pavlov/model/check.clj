@@ -227,9 +227,9 @@
   (:require [clojure.set :as set]
             [tech.thomascothran.pavlov.event :as e]
             [tech.thomascothran.pavlov.graph :as graph]
+            [tech.thomascothran.pavlov.graph.algo :as algo]
             [tech.thomascothran.pavlov.model.check.livelock :as livelock]
-            [tech.thomascothran.pavlov.model.check.liveness :as liveness])
-  (:import [clojure.lang PersistentQueue]))
+            [tech.thomascothran.pavlov.model.check.liveness :as liveness]))
 
 ;; Internal implementation details below
 
@@ -246,40 +246,27 @@
              env-bthreads
              main-bthreads])))
 
+(defn- path-tree
+  "A delayed shortest-path tree of `lts`, built at most once per check and only
+  when a witness is needed."
+  [lts]
+  (delay (algo/shortest-path-tree (algo/lts->outgoing-index lts) (:root lts))))
+
 (defn- find-path
-  "Find a path from root to target node in the LTS graph.
+  "Find a shortest path from root to target node in the LTS graph.
   Returns a vector of full events, or nil if no path exists."
-  [lts target-id]
-  (let [{:keys [root edges]} lts
-        ;; Build adjacency map: node-id -> [{:to id :event e}]
-        adjacency (reduce (fn [acc {:keys [from to event]}]
-                            (update acc from (fnil conj []) {:to to :event event}))
-                          {}
-                          edges)]
-    (loop [queue (conj PersistentQueue/EMPTY {:id root :path []})
-           visited #{}]
-      (if-let [{:keys [id path]} (peek queue)]
-        (if (= id target-id)
-          path
-          (if (visited id)
-            (recur (pop queue) visited)
-            (let [neighbors (get adjacency id [])
-                  new-states (map (fn [{:keys [to event]}]
-                                    {:id to
-                                     :path (conj path event)})
-                                  neighbors)]
-              (recur (into (pop queue) new-states)
-                     (conj visited id)))))
-        nil))))
+  [tree target-id]
+  (some->> (algo/tree-path @tree target-id)
+           (mapv :event)))
 
 (defn- find-safety-violations
   "Scan LTS edges for all safety violations.
   Returns a vector of violation maps (without :type key)."
-  [lts]
+  [lts tree]
   (let [{:keys [edges nodes]} lts]
     (vec (for [{:keys [from to event]} edges
                :when (get event :invariant-violated)]
-           (let [path (find-path lts from) ;; Path to the node BEFORE the violation
+           (let [path (find-path tree from) ;; Path to the node BEFORE the violation
                  state (get nodes to)]
              {:event event
               :path path
@@ -298,7 +285,7 @@
   "Find all deadlocks in the LTS graph.
   A deadlock is a leaf node that is not a terminal node.
   Returns a vector of deadlock maps (without :type key)."
-  [lts config]
+  [lts tree config]
   (when (not= false (:check-deadlock? config))
     (let [{:keys [edges nodes]} lts
           ;; Find all nodes that have outgoing edges
@@ -311,7 +298,7 @@
           deadlock-nodes (remove terminal-node-ids leaf-nodes)]
       ;; Return ALL deadlocks as a vector
       (vec (for [deadlock-id deadlock-nodes]
-             (let [path (find-path lts deadlock-id)
+             (let [path (find-path tree deadlock-id)
                    state (get nodes deadlock-id)]
                {:path (mapv e/type path)
                 :state state}))))))
@@ -369,16 +356,17 @@
                    (:max-nodes config) (assoc :max-nodes (:max-nodes config)))
         lts (graph/->lts all-bthreads lts-opts)
         truncated? (:truncated lts)
+        tree (path-tree lts)
 
         ;; Collect all violations (each find-* returns a vector)
         livelocks (livelock/find-livelocks lts config)
         ;; Don't report liveness violations if truncated (likely false positives)
         liveness-violation  (when-not truncated?
                               (liveness/liveness-violation lts))
-        safety-violations (find-safety-violations lts)
+        safety-violations (find-safety-violations lts tree)
         ;; Don't report deadlocks if truncated (likely false positives)
         deadlocks (when-not truncated?
-                    (find-deadlocks lts config))
+                    (find-deadlocks lts tree config))
 
         ;; Don't report impossible events if truncated (likely false negatives)
         impossible (when-not truncated?

@@ -19,15 +19,15 @@
   Returns an empty vector if event is nil."
   [state event]
   (when event
-    (let [requesting-bthreads
-          (get-in state [:requests (event/type event)])
-
-          waiting-bthreads
-          (into []
-                (remove (into #{} requesting-bthreads))
-                (get-in state [:waits (event/type event)]))]
-      (reduce into [] [waiting-bthreads
-                       requesting-bthreads]))))
+    (let [event-type (event/type event)
+          requesting-bthreads (get-in state [:requests event-type])
+          requesting? (if (set? requesting-bthreads)
+                        requesting-bthreads
+                        (set requesting-bthreads))]
+      (-> []
+          (into (remove #(contains? requesting? %))
+                (get-in state [:waits event-type]))
+          (into requesting-bthreads)))))
 
 (defn index-bid-events
   "Indexes events from a bid by adding the bthread to the appropriate event-type sets.
@@ -84,6 +84,54 @@
   (or (nil? bid)
       (spawn-only-bid? bid)))
 
+(defn- notify-and-collect!
+  "Notify `bthread-names` of `event` and collect their bids into a delta.
+
+  When `skip-unchanged?` is true, a bthread whose new bid equals its current
+  bid in `state` and spawns nothing is listed under `:unchanged-bthreads`. Its bid
+  is still collected, but its events are not indexed, because its existing
+  index entries remain valid."
+  [state event bthread-names skip-unchanged?]
+  (let [current-bids (get state :bthread->bid)]
+    (reduce (fn [acc bthread-name]
+              (let [bthread (get-in state [:name->bthread bthread-name])
+                    _ (when-not bthread (println "No bthread found for" bthread-name))
+                    bid (b/notify! bthread event)
+                    bthreads (bid/bthreads bid)
+                    retired? (retired-bid? bid)
+                    unchanged? (and skip-unchanged?
+                                    (not retired?)
+                                    (empty? bthreads)
+                                    (= bid (get current-bids bthread-name)))]
+                (cond-> acc
+                  (seq bthreads)
+                  (-> (update :bthreads merge bthreads)
+                      (assoc-in [:parent->child-bthreads bthread-name]
+                                (into #{} (keys bthreads))))
+
+                  retired?
+                  (update :retired-bthreads (fnil conj #{}) bthread-name)
+
+                  unchanged?
+                  (-> (assoc-in [:bthread->bid bthread-name] bid)
+                      (update :unchanged-bthreads (fnil conj #{}) bthread-name))
+
+                  (not (or retired? unchanged?))
+                  (-> (assoc-in [:bthread->bid bthread-name] bid)
+                      (index-bid-events bthread-name bid :requests)
+                      (index-bid-events bthread-name bid :waits)
+                      (index-bid-events bthread-name bid :blocks)))))
+            {:bthread->bid {}}
+            bthread-names)))
+
+(defn notify-step!
+  "Like `(notify-bthreads! state event)`, but bthreads whose bid is unchanged
+  are reported under `:unchanged-bthreads` instead of being indexed.
+
+  Used by `bprogram.state/step`, which keeps their existing index entries."
+  [state event]
+  (notify-and-collect! state event (bthreads-to-notify state event) true))
+
 (defn notify-bthreads!
   "Notifies relevant bthreads of an event and collects their updated bids.
 
@@ -115,25 +163,4 @@
   ([state event]
    (notify-bthreads! state event (bthreads-to-notify state event)))
   ([state event bthread-names]
-   (reduce (fn [acc bthread-name]
-             (let [bthread (get-in state [:name->bthread bthread-name])
-                   _ (when-not bthread (println "No bthread found for" bthread-name))
-                   bid (b/notify! bthread event)
-                   bthreads (bid/bthreads bid)
-                   retired? (retired-bid? bid)]
-               (cond-> acc
-                 (seq bthreads)
-                 (-> (update :bthreads merge bthreads)
-                     (assoc-in [:parent->child-bthreads bthread-name]
-                               (into #{} (keys bthreads))))
-
-                 retired?
-                 (update :retired-bthreads (fnil conj #{}) bthread-name)
-
-                 (not retired?)
-                 (-> (assoc-in [:bthread->bid bthread-name] bid)
-                     (index-bid-events bthread-name bid :requests)
-                     (index-bid-events bthread-name bid :waits)
-                     (index-bid-events bthread-name bid :blocks)))))
-           {:bthread->bid {}}
-           bthread-names)))
+   (notify-and-collect! state event bthread-names false)))

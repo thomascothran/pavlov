@@ -1,0 +1,399 @@
+;; Frozen copy of the pre-optimization implementation (commit 7db837b).
+;; It is the oracle's reference in bench.model-check. Do not edit.
+(ns bench.legacy.model.check
+  "Model checking for behavioral programs.
+
+  This namespace provides exhaustive state-space exploration to verify
+  behavioral programs. It detects bugs that might only occur in specific
+  execution paths or event orderings.
+
+  ## Quick Start
+
+  ```clojure
+  (require '[bench.legacy.model.check :as check])
+  (require '[tech.thomascothran.pavlov.bthread :as b])
+  (require '[tech.thomascothran.pavlov.event :as e])
+
+  ;; Check a simple program for deadlocks
+  (check/check
+    {:bthreads {:my-bthread (b/scenario [{:request #{:hello}}
+                                     {:request #{{:type :done :terminal true}}}])}})
+  ;; => nil (no violations found)
+  ```
+
+  ## The `check` Function
+
+  The main entry point. It builds a Labeled Transition System (LTS) graph
+  from your bthreads and analyzes it for violations.
+
+  ### Configuration Options
+
+  | Key | Type | Default | Description |
+  |-----|------|---------|-------------|
+  | `:bthreads` | map/vec | required | The bthreads under test |
+  | `:safety-bthreads` | map/vec | nil | Bthreads that emit `:invariant-violated` events |
+  | `:environment-bthreads` | map/vec | nil | Bthreads simulating external inputs |
+  | `:check-deadlock?` | bool | true | Whether to detect deadlocks |
+  | `:check-livelock?` | bool | true | Whether to detect livelocks (infinite loops) |
+  | `:possible` | set | nil | Events that must be reachable on at least one path |
+  | `:max-nodes` | int | nil | Limit state space exploration |
+
+  ### Return Values
+
+  Returns `nil` if no violations found. Otherwise returns a categorized map
+  with only non-empty categories:
+
+  ```clojure
+  {:livelocks [{:path [...] :cycle [...]}]
+   :liveness-violation {:node-id ... :path-edges [...] :state {...}}
+   :impossible #{:event-a :event-b}
+   :safety-violations [{:event {...} :path [...] :state {...}}]
+   :deadlocks [{:path [...] :state {...}}]
+   :truncated true}  ;; optional flag when max-nodes exceeded
+  ```
+
+  - `:livelocks` — Programs stuck in infinite loops
+  - `:liveness-violation` — A hot state obligation that is not met. If there are
+    multiple unmet hot state obligations, only one is returned
+  - `:impossible` — Requested possible events were not found in the fully explored LTS
+  - `:safety-violations` — Invariants violated
+  - `:deadlocks` — Programs stuck, no events possible
+  - `:truncated` — Boolean flag when exploration hit `:max-nodes` limit
+
+  ## Violation Types
+
+  ### Deadlock Detection
+
+  A deadlock occurs when no events can be selected and no terminal event
+  has occurred. The program is stuck.
+
+  ```clojure
+  ;; This will deadlock - requests event then has nothing to do
+  (check/check
+    {:bthreads {:stuck (b/scenario [{:request #{:something}}])}})
+  ;; => {:deadlocks [{:path [:something], :state {...}}]}
+  ```
+
+  To mark successful completion, use `:terminal true`:
+
+  ```clojure
+  ;; This terminates successfully - no deadlock
+  (check/check
+    {:bthreads {:ok (b/scenario [{:request #{{:type :done :terminal true}}}])}})
+  ;; => nil
+  ```
+
+  ### Livelock Detection
+
+  A livelock occurs when the program runs forever in a cycle without
+  ever reaching a terminal state.
+
+  ```clojure
+  ;; Infinite ping-pong loop - never terminates
+  (check/check
+    {:bthreads {:loop (b/round-robin [{:request #{:ping}}
+                                      {:request #{:pong}}])}})
+  ;; => {:livelocks [{:path [], :cycle [:ping :pong]}]}
+  ```
+
+  Disable with `:check-livelock? false` if cycles are intentional.
+
+  ### Safety Violations
+
+  Use safety bthreads to assert invariants. When they detect a bad state,
+  they emit an event with `:invariant-violated true`.
+
+  ```clojure
+  (check/check
+    {:bthreads {:worker (b/scenario [{:request #{:work}}
+                                 {:request #{:work}}  ;; oops, double work
+                                 {:request #{{:type :done :terminal true}}}])}
+     :safety-bthreads
+     {:no-double-work
+      (b/scenario [{:wait-on #{:work}}
+                   {:wait-on #{:work}}
+                   {:request #{{:type :double-work-error
+                                :invariant-violated true}}}])}})
+  ;; => {:safety-violations [{:event {:type :double-work-error, ...}, :path [...], :state {...}}]}
+  ```
+
+  ### Hot-State Liveness
+
+  Liveness is expressed behaviorally with `:hot true` on bids. A violation
+  exists when execution terminates while hot, deadlocks while hot, or can stay
+  in hot states forever.
+
+  ```clojure
+  ;; After :start-order, payment becomes a hot obligation.
+  ;; Because nothing can produce :payment here, the program deadlocks while hot.
+  (check/check
+    {:bthreads {:order (b/scenario [{:request #{:start-order}}])
+                :await-payment (b/scenario [{:wait-on #{:start-order}}
+                                         {:wait-on #{:payment}
+                                          :hot true}])}})
+  ;; => {:liveness-violation {:node-id ...,
+  ;;                          :path-edges [...],
+  ;;                          :state {...}}
+  ;;     :deadlocks [{:path [:start-order], :state {...}}]}
+  ```
+
+  ### Possibility Checks
+
+  Use `:possible` to assert that some event can occur on at least one reachable
+  execution.
+
+  ```clojure
+  ;; Assert: payment must be POSSIBLE (at least one path has it)
+  (check/check
+    {:bthreads {:path-a (b/scenario [{:request #{:payment}}
+                                 {:request #{{:type :done-a :terminal true}}}])
+                :path-b (b/scenario [{:request #{:skip}}
+                                 {:request #{{:type :done-b :terminal true}}}])}
+     :possible #{:payment}})
+  ;; => nil (satisfied - path-a has payment)
+  ```
+
+  ## Environment Bthreads
+
+  Use `:environment-bthreads` to simulate external inputs or
+  nondeterministic choices. The model checker explores all possibilities.
+
+  ```clojure
+  (check/check
+    {:bthreads
+     {:handler
+      (b/scenario
+       [{:wait-on #{:success :failure}}
+        (fn [{:keys [event]}]
+          {:bid {:request (if (= :success (e/type event))
+                            #{{:type :done :terminal true}}
+                            #{:retry})}})
+        {:request #{{:type :done :terminal true}}}])}
+     :environment-bthreads
+     {:external-api (b/scenario [{:request #{:success :failure}}])}})
+  ```
+
+  ## Multiple Violations
+
+  Fix violations in this recommended order (most severe first):
+
+  1. **Livelocks** — Most severe (pegs CPU at 100%)
+  2. **Liveness violation** — An unmet hot-state obligation
+  3. **Safety violations** — Bad states reached
+  4. **Deadlocks** — Programs stuck
+
+  ## Performance
+
+  The model checker explores all reachable states. Use `:max-nodes` to
+  limit exploration for large state spaces:
+
+  ```clojure
+  (check/check
+    {:bthreads {...}
+     :max-nodes 10000})
+  ;; => {:truncated true}
+  ;;    if limit reached without finding violations
+  ;; Or: {:deadlocks [...], :truncated true}
+  ;;    if violations found before truncation
+  ```
+
+  ## Best practices
+
+  Model checks are dissimilar to traditional unit tests in the sense that you will have *one*
+  model check running in a test that tests *all* the scenarios for that group of bthreads.
+
+  ### The Workflow
+
+  The following structure can be used for tests:
+
+  1. Decide what bthreads you want to test
+  2. Specify initiating events in a single request, establishing top-level branches
+     in the execution graph and kicking things off
+  3. Specify positive scenarios and validate they occur with possibility checks
+  4. Specify safety properties as their own bthreads
+  5. Specify hot-state obligations with `:hot true` where progress is required
+
+  ### One branching request for all initiating events
+
+  This *requires* having *one* bthread with *one* bid that requests the initiating events
+  in a set - causing this to be the initial branch point.
+
+  ### Positive Scenarios
+
+  Specify all the desired positive scenarios with a bthread for each scenario. These will
+  use `b/bid` with `:wait-on` events. `b/bid` can be used either with maps or functions.
+
+  The final bid will `:request` an event unique to the scenario which will then be used
+  with possibility checks to guarantee the scenario reached completion.
+  "
+  (:require [clojure.set :as set]
+            [tech.thomascothran.pavlov.event :as e]
+            [bench.legacy.graph :as graph]
+            [bench.legacy.model.check.livelock :as livelock]
+            [bench.legacy.model.check.liveness :as liveness])
+  (:import [clojure.lang PersistentQueue]))
+
+;; Internal implementation details below
+
+(defn- assemble-all-bthreads
+  "Assembles all bthreads with proper priority ordering."
+  [config]
+  (let [;; Create bthreads from each category
+        safety-bthreads (get config :safety-bthreads)
+        main-bthreads (get config :bthreads)
+        env-bthreads (get config :environment-bthreads)
+        equal-priority? (not (sequential? main-bthreads))]
+    (reduce into (if equal-priority? {} [])
+            [safety-bthreads
+             env-bthreads
+             main-bthreads])))
+
+(defn- find-path
+  "Find a path from root to target node in the LTS graph.
+  Returns a vector of full events, or nil if no path exists."
+  [lts target-id]
+  (let [{:keys [root edges]} lts
+        ;; Build adjacency map: node-id -> [{:to id :event e}]
+        adjacency (reduce (fn [acc {:keys [from to event]}]
+                            (update acc from (fnil conj []) {:to to :event event}))
+                          {}
+                          edges)]
+    (loop [queue (conj PersistentQueue/EMPTY {:id root :path []})
+           visited #{}]
+      (if-let [{:keys [id path]} (peek queue)]
+        (if (= id target-id)
+          path
+          (if (visited id)
+            (recur (pop queue) visited)
+            (let [neighbors (get adjacency id [])
+                  new-states (map (fn [{:keys [to event]}]
+                                    {:id to
+                                     :path (conj path event)})
+                                  neighbors)]
+              (recur (into (pop queue) new-states)
+                     (conj visited id)))))
+        nil))))
+
+(defn- find-safety-violations
+  "Scan LTS edges for all safety violations.
+  Returns a vector of violation maps (without :type key)."
+  [lts]
+  (let [{:keys [edges nodes]} lts]
+    (vec (for [{:keys [from to event]} edges
+               :when (get event :invariant-violated)]
+           (let [path (find-path lts from) ;; Path to the node BEFORE the violation
+                 state (get nodes to)]
+             {:event event
+              :path path
+              :state state})))))
+
+(defn- terminal-nodes
+  "Find all terminal nodes in the LTS.
+  Returns a set of node IDs."
+  [lts]
+  (->> (:edges lts)
+       (filter #(get-in % [:event :terminal]))
+       (map :to)
+       set))
+
+(defn- find-deadlocks
+  "Find all deadlocks in the LTS graph.
+  A deadlock is a leaf node that is not a terminal node.
+  Returns a vector of deadlock maps (without :type key)."
+  [lts config]
+  (when (not= false (:check-deadlock? config))
+    (let [{:keys [edges nodes]} lts
+          ;; Find all nodes that have outgoing edges
+          nodes-with-outgoing (into #{} (map :from edges))
+          ;; Find terminal nodes
+          terminal-node-ids (terminal-nodes lts)
+          ;; Find leaf nodes (no outgoing edges)
+          leaf-nodes (remove nodes-with-outgoing (keys nodes))
+          ;; Deadlock = leaf node that is not terminal
+          deadlock-nodes (remove terminal-node-ids leaf-nodes)]
+      ;; Return ALL deadlocks as a vector
+      (vec (for [deadlock-id deadlock-nodes]
+             (let [path (find-path lts deadlock-id)
+                   state (get nodes deadlock-id)]
+               {:path (mapv e/type path)
+                :state state}))))))
+
+(defn- find-impossible-events
+  "Return the subset of `:possible` events that do not appear on any explored edge."
+  [lts config]
+  (when-let [possible (get config :possible)]
+    (let [events (into #{}
+                       (comp (map :event)
+                             (map e/type))
+                       (get lts :edges))]
+      (set/difference possible events))))
+
+(comment
+  (require '[tech.thomascothran.pavlov.bthread :as b])
+  (-> (graph/->lts
+       {:a->c (b/scenario [{:request #{:a}}
+                       {:request #{:b}}
+                       {:request #{:c}}])})
+      (find-impossible-events {:possible #{:d}})))
+
+(defn check
+  "Model check a behavioral program for safety violations.
+
+  Explores the state space once, checking for:
+  - Livelocks (cycles with no path to terminal, unless :check-livelock? is false)
+  - Liveness violation (hot terminal, hot deadlock, or hot cycle). Returns at most 1
+  - Safety violations (events with :invariant-violated true)
+  - Deadlocks (unless :check-deadlock? is false)
+
+  Parameters:
+  - config: map with keys:
+    :bthreads - the bthreads under test
+    :safety-bthreads - bthreads that detect violations
+    :environment-bthreads - bthreads that generate events
+    :check-livelock? - if true, detect livelocks (default: true)
+    :check-deadlock? - if true, detect deadlocks (default: true)
+    :possible (optional) - a set of events that must be possible
+    :max-nodes - maximum nodes to explore (optional)
+
+  Returns:
+  - nil if no violations found
+  - A map with non-empty result categories:
+    {:livelocks [{:path [...] :cycle [...]}]
+     :liveness-violation {:node-id ... :path-edges [...] :state {...}} ;; at most 1
+     :impossible #{:event-a :event-b} ;; impossible events
+     :safety-violations [{:event ... :path [...] :state {...}}]
+     :deadlocks [{:path [...] :state {...}}]
+     :truncated true}  ;; optional flag when max-nodes exceeded"
+  [config]
+  (let [all-bthreads (assemble-all-bthreads config)
+        ;; Build LTS graph
+        lts-opts (cond-> {}
+                   (:max-nodes config) (assoc :max-nodes (:max-nodes config)))
+        lts (graph/->lts all-bthreads lts-opts)
+        truncated? (:truncated lts)
+
+        ;; Collect all violations (each find-* returns a vector)
+        livelocks (livelock/find-livelocks lts config)
+        ;; Don't report liveness violations if truncated (likely false positives)
+        liveness-violation  (when-not truncated?
+                              (liveness/liveness-violation lts))
+        safety-violations (find-safety-violations lts)
+        ;; Don't report deadlocks if truncated (likely false positives)
+        deadlocks (when-not truncated?
+                    (find-deadlocks lts config))
+
+        ;; Don't report impossible events if truncated (likely false negatives)
+        impossible (when-not truncated?
+                     (find-impossible-events lts config))
+
+        ;; Build categorized result map - only include non-empty categories
+        result (cond-> nil
+                 (seq impossible) (assoc :impossible impossible)
+                 (seq livelocks) (assoc :livelocks livelocks)
+                 (seq liveness-violation) (assoc :liveness-violation liveness-violation)
+                 (seq safety-violations) (assoc :safety-violations safety-violations)
+                 (seq deadlocks) (assoc :deadlocks deadlocks)
+                 truncated? (assoc :truncated true))]
+
+    ;; Return nil if no violations and not truncated
+    (when result (vary-meta result assoc :lts lts))))

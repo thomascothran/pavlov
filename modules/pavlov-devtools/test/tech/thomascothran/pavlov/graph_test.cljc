@@ -4,7 +4,8 @@
             [tech.thomascothran.pavlov.graph :as graph]
             [tech.thomascothran.pavlov.model.check.liveness :as liveness]
             [tech.thomascothran.pavlov.nav :as pnav]
-            [tech.thomascothran.pavlov.bthread :as b]))
+            [tech.thomascothran.pavlov.bthread :as b]
+            [tech.thomascothran.pavlov.event :as event]))
 
 (defn make-bthreads-two-step
   []
@@ -443,3 +444,37 @@
           "Spawned environment bthread should contribute a :c edge to the LTS")
       (is (some #(= ::done (:type %)) edge-types)
           "Scenario should be able to reach terminal ::done in the LTS"))))
+
+(defn- make-stateless-spawner-program
+  "An environment picks :x or :y twice. A stateless spawner starts one child
+  per event, named after the event type, built by `make-child`."
+  [make-child]
+  {::env (b/bids [{:request #{:x :y}}
+                  {:request #{:x :y}}])
+   ::spawner (b/step (fn [_ e]
+                       [nil (cond-> {:wait-on #{:x :y}}
+                              e (assoc :bthreads
+                                       {[::child (event/type e)]
+                                        (make-child)}))]))})
+
+(deftest lts-ignores-spawned-bthreads-in-state-identity
+  (testing "States that differ only in which ended children a bid spawned are the same node"
+    (let [lts (graph/->lts (make-stateless-spawner-program #(b/bids [])) {})
+          root-successors (into #{} (comp (filter #(= (:root lts) (:from %)))
+                                          (map :to))
+                                (:edges lts))]
+      (is (= 1 (count root-successors))
+          "after :x and after :y are the same state")
+      (is (= 3 (count (:nodes lts)))
+          "root, after one event, after two events"))))
+
+(deftest lts-distinguishes-live-spawned-bthreads
+  (testing "Children that are still running keep states distinct"
+    (let [lts (graph/->lts (make-stateless-spawner-program
+                            #(b/bids [{:wait-on #{:never}}]))
+                           {})
+          root-successors (into #{} (comp (filter #(= (:root lts) (:from %)))
+                                          (map :to))
+                                (:edges lts))]
+      (is (= 2 (count root-successors))
+          "after :x a [::child :x] runs; after :y a [::child :y] runs"))))

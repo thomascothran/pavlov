@@ -44,3 +44,6 @@ devenv.local.nix
 
 .clj-kondo/.cache
 .clj-kondo/imports
+
+# Model checker benchmark results and profiles (bench.model-check)
+/dev/bench/model-check/

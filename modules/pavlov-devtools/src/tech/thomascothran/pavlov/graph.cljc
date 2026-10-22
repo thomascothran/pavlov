@@ -61,26 +61,117 @@
   Second, the eligible requested events from the eligible bid will be selected.
   These will then be aggregated together into the total branching events. "
   (:require [tech.thomascothran.pavlov.bid.proto :as bid]
-            [tech.thomascothran.pavlov.search :as search]))
+            [tech.thomascothran.pavlov.bprogram.notification :as notification]
+            [tech.thomascothran.pavlov.bprogram.state :as state]
+            [tech.thomascothran.pavlov.bthread :as b]
+            [tech.thomascothran.pavlov.event :as event]
+            [tech.thomascothran.pavlov.event.selection :as selection])
+  #?(:clj (:import [clojure.lang PersistentQueue])))
+
+;; ---------------------------------------------------------------------------
+;; State space exploration
+;;
+;; Bthreads are stateful objects shared by every explored state, so each
+;; state carries a snapshot of the bthread states (`saved`) that is restored
+;; before stepping from it.
+
+(defn- save-bthread-states
+  [name->bthread]
+  (persistent!
+   (reduce-kv (fn [saved bthread-name bthread]
+                (assoc! saved bthread-name (b/state bthread)))
+              (transient {})
+              name->bthread)))
+
+(defn- restore-bthread-states!
+  ([name->bthread saved]
+   (run! (fn [[bthread-name bthread]]
+           (when (contains? saved bthread-name)
+             (b/set-state bthread (get saved bthread-name))))
+         name->bthread))
+  ([name->bthread saved bthread-names]
+   (run! (fn [bthread-name]
+           (when (contains? saved bthread-name)
+             (b/set-state (get name->bthread bthread-name)
+                          (get saved bthread-name))))
+         bthread-names)))
+
+(defn- state-key-bids
+  "Drop each bid's `:bthreads` from the state key.
+
+  Spawns happen in the same notification pass that produced the bid, so a
+  stored bid has already spawned. Live children are identified by their own
+  saved states, and keeping `:bthreads` would split states that differ only in
+  which children a stateless spawner last started. Returns `bthread->bid`
+  itself when no bid spawns, so the key shares structure with the node payload."
+  [bthread->bid]
+  (if (some (fn [[_ bid]] (and (map? bid) (bid/bthreads bid))) bthread->bid)
+    (update-vals bthread->bid
+                 (fn [bid]
+                   (if (and (map? bid) (bid/bthreads bid))
+                     (dissoc bid :bthreads)
+                     bid)))
+    bthread->bid))
+
+(defn- state-key
+  "Identity of an explored state: whether it was entered by a terminal event,
+  the bthread snapshots, and the current bids."
+  [bp-state saved]
+  [(get (:last-event bp-state) :terminal)
+   saved
+   (state-key-bids (:bthread->bid bp-state))])
 
 (defn- ->node-value
-  "Extract minimal node data from wrapped state.
-
-  Includes only state-identity-relevant data, excluding path-dependent
-  fields like :path, :last-event, :next-event, and non-serializable
-  fields like :name->bthread."
-  [wrapped]
-  (let [bp-state (:bprogram/state wrapped)
-        bthread->bid (:bthread->bid bp-state)]
+  "Node payload. Excludes path-dependent and non-serializable fields such as
+  `:last-event` and `:name->bthread`."
+  [bp-state saved]
+  (let [bthread->bid (:bthread->bid bp-state)]
     {:bthread->bid bthread->bid
      :bthreads-by-priority (:bthreads-by-priority bp-state)
-     :saved-bthread-states (:saved-bthread-states wrapped)
+     :saved-bthread-states saved
      :requests (:requests bp-state)
      :waits (:waits bp-state)
      :blocks (:blocks bp-state)
-     :hot (boolean
-           (some bid/hot
-                 (vals bthread->bid)))}))
+     :hot (boolean (some bid/hot (vals bthread->bid)))}))
+
+(defn- successors
+  "Return [[event next-bp-state next-saved] ...] for every selectable event.
+
+  Stepping only notifies the bthreads woken by the event, so between events
+  only those bthreads are restored, and the next snapshot only re-reads them.
+  A step that spawns or retires bthreads falls back to a full restore and a
+  full snapshot."
+  [bp-state saved]
+  (if (event/terminal? (:last-event bp-state))
+    []
+    (let [name->bthread (:name->bthread bp-state)
+          events (selection/prioritized-events (:bthreads-by-priority bp-state)
+                                               (:bthread->bid bp-state)
+                                               ;; Keys are the blocked event types
+                                               (:blocks bp-state))]
+      (restore-bthread-states! name->bthread saved)
+      (loop [events (seq events)
+             dirty nil
+             out (transient [])]
+        (if-let [e (first events)]
+          (let [_ (cond
+                    (= :all dirty) (restore-bthread-states! name->bthread saved)
+                    (some? dirty) (restore-bthread-states! name->bthread saved dirty))
+                woken (notification/bthreads-to-notify bp-state e)
+                next-bp-state (state/step bp-state e)
+                [next-saved dirty]
+                (if (identical? name->bthread (:name->bthread next-bp-state))
+                  [(reduce (fn [m bthread-name]
+                             (assoc m bthread-name
+                                    (b/state (get name->bthread bthread-name))))
+                           saved
+                           woken)
+                   woken]
+                  [(save-bthread-states (:name->bthread next-bp-state)) :all])]
+            (recur (next events)
+                   dirty
+                   (conj! out [e next-bp-state next-saved])))
+          (persistent! out))))))
 
 (defn ->lts
   "Return a Labeled Transition System (LTS) for the supplied bthreads.
@@ -115,35 +206,57 @@
     ;; => {:root root-id :nodes {...} :edges [...] :truncated true}"
   ([bthreads] (->lts bthreads {:max-nodes 100}))
   ([bthreads {:keys [max-nodes] :as _opts}]
-   (let [nav (search/make-navigator bthreads)
-         root-wrapped (search/root nav)
-         root-id (search/identifier nav root-wrapped)]
-     (assoc
-      (search/bfs-reduce
-       nav
-       (fn [{:keys [edges nodes]} wrapped]
-         (if (and max-nodes (>= (count nodes) max-nodes))
-           (reduced {:edges edges :nodes nodes :truncated true})
-           (let [identifier (search/identifier nav wrapped)
-                 nodes (assoc nodes identifier (->node-value wrapped))
-                 stop-after-current? (and max-nodes (>= (count nodes) max-nodes))
-                 successors (if stop-after-current?
-                              []
-                              (search/succ nav wrapped))
-                 new-edges (mapv (fn [{:keys [state event]}]
-                                   {:from identifier
-                                    :to (search/identifier nav state)
-                                    :event event})
-                                 successors)
-                 ;; Also add successor nodes
-                 nodes (reduce (fn [nodes {:keys [state]}]
-                                 (assoc nodes
-                                        (search/identifier nav state)
-                                        (->node-value state)))
-                               nodes
-                               successors)]
-             {:edges (into edges new-edges)
-              :nodes nodes
-              :truncated false})))
-       {:edges [] :nodes {} :truncated false})
-      :root root-id))))
+   ;; Breadth-first search that deduplicates states when they are discovered.
+   ;; Node ids are dense and assigned in discovery order. A node's payload is
+   ;; rewritten each time the node is reached, so the last path to reach it
+   ;; wins (states that differ only in `:bthreads` share a node).
+   (let [root-state (state/init bthreads)
+         root-saved (save-bthread-states (:name->bthread root-state))
+         !ids (volatile! (transient {}))
+         id-of (fn [k] (get @!ids k))
+         intern! (fn [k]
+                   (let [id (count @!ids)]
+                     (vswap! !ids assoc! k id)
+                     id))
+         root-id (intern! (state-key root-state root-saved))
+         over-limit? (fn [nodes] (and max-nodes (>= (count nodes) max-nodes)))
+         result (fn [nodes edges truncated?]
+                  {:root root-id
+                   :nodes (persistent! nodes)
+                   :edges (persistent! edges)
+                   :truncated truncated?})]
+     (loop [queue (conj #?(:clj PersistentQueue/EMPTY
+                           :cljs cljs.core/PersistentQueue.EMPTY)
+                        [root-id root-state root-saved])
+            nodes (transient {})
+            edges (transient [])]
+       (if-let [[id bp-state saved] (peek queue)]
+         (if (over-limit? nodes)
+           (result nodes edges true)
+           (let [nodes (assoc! nodes id (->node-value bp-state saved))
+                 queue (pop queue)
+                 succs (successors bp-state saved)]
+             (if (over-limit? nodes)
+               ;; This node reached the limit, so it is not expanded. The
+               ;; result is truncated if anything is left unexplored.
+               (result nodes edges
+                       (boolean
+                        (or (seq queue)
+                            (some (fn [[_ next-bp-state next-saved]]
+                                    (nil? (id-of (state-key next-bp-state next-saved))))
+                                  succs))))
+               (let [[queue nodes edges]
+                     (reduce
+                      (fn [[queue nodes edges] [e next-bp-state next-saved]]
+                        (let [k (state-key next-bp-state next-saved)
+                              known-id (id-of k)
+                              to (or known-id (intern! k))]
+                          [(if known-id
+                             queue
+                             (conj queue [to next-bp-state next-saved]))
+                           (assoc! nodes to (->node-value next-bp-state next-saved))
+                           (conj! edges {:from id :to to :event e})]))
+                      [queue nodes edges]
+                      succs)]
+                 (recur queue nodes edges)))))
+         (result nodes edges false))))))

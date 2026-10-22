@@ -54,7 +54,8 @@
   (dissoc notification-results
           :bthreads
           :parent->child-bthreads
-          :retired-bthreads))
+          :retired-bthreads
+          :unchanged-bthreads))
 
 (defn- splice-bthread-priorities
   "Given an existing list of bthread priorities,
@@ -295,54 +296,83 @@
   current bids are replaced, and later lifecycle changes will use the same seam
   for deregistration semantics."
   [state event]
-  (into #{}
-        (mapcat #(get % (event/type event)))
-        [(get state :waits)
-         (get state :requests)]))
+  (let [event-type (event/type event)
+        waiting (get-in state [:waits event-type])]
+    (into (if (set? waiting) waiting (set waiting))
+          (get-in state [:requests event-type]))))
+
+(defn- reindex-at-event-type
+  "Add each of `bthread-names` back under `event-type` when its bid lists an
+  event of that type for `index-key`."
+  [event->bthreads bthread->bid bthread-names index-key event-type]
+  (reduce (fn [index bthread-name]
+            (if (some #(= event-type (event/type %))
+                      (bid-events (get bthread->bid bthread-name) index-key))
+              (update index event-type (fnil conj #{}) bthread-name)
+              index))
+          event->bthreads
+          bthread-names))
 
 (defn- update-event-index
-  [event->bthreads bthread->bid triggered-bthreads notification-index index-key
-   triggered-event-type clear-triggered-event-type?]
+  "Update one event index for a step.
+
+  `changed-bthreads` have their old memberships replaced by
+  `notification-index`. `unchanged-bthreads` keep theirs. When the triggered event type's key is
+  cleared, unchanged bthreads are added back under it."
+  [event->bthreads bthread->bid changed-bthreads unchanged-bthreads
+   notification-index index-key triggered-event-type clear-triggered-event-type?]
   (let [event->bthreads (if clear-triggered-event-type?
                           (dissoc event->bthreads triggered-event-type)
                           event->bthreads)]
     (cond-> (remove-bthread-bids-from-event-index
              event->bthreads
              bthread->bid
-             triggered-bthreads
+             changed-bthreads
              index-key
              triggered-event-type
              clear-triggered-event-type?)
       (seq notification-index)
-      (merge-event->bthreads notification-index))))
+      (merge-event->bthreads notification-index)
+
+      (and clear-triggered-event-type? (seq unchanged-bthreads))
+      (reindex-at-event-type bthread->bid unchanged-bthreads index-key
+                             triggered-event-type))))
 
 (defn- next-event-indexes
   "Incrementally update only event keys affected by triggered bthreads.
 
   Old memberships come from the triggered bthreads' previous bids, replacement
   memberships come from the notification delta, and every unrelated index key
-  remains structurally shared."
-  [state event triggered-bthreads
+  remains structurally shared. Triggered bthreads whose bid did not change
+  keep their memberships, apart from the triggered event type's key, which is
+  rebuilt."
+  [state event triggered-bthreads unchanged-bthreads
    notification-waits notification-requests notification-blocks]
   (let [bthread->bid (get state :bthread->bid)
-        triggered-event-type (event/type event)]
+        triggered-event-type (event/type event)
+        changed-bthreads (if (seq unchanged-bthreads)
+                           (reduce disj triggered-bthreads unchanged-bthreads)
+                           triggered-bthreads)]
     {:waits (update-event-index (get state :waits)
                                 bthread->bid
-                                triggered-bthreads
+                                changed-bthreads
+                                unchanged-bthreads
                                 notification-waits
                                 :waits
                                 triggered-event-type
                                 true)
      :requests (update-event-index (get state :requests)
                                    bthread->bid
-                                   triggered-bthreads
+                                   changed-bthreads
+                                   unchanged-bthreads
                                    notification-requests
                                    :requests
                                    triggered-event-type
                                    true)
      :blocks (update-event-index (get state :blocks)
                                  bthread->bid
-                                 triggered-bthreads
+                                 changed-bthreads
+                                 unchanged-bthreads
                                  notification-blocks
                                  :blocks
                                  triggered-event-type
@@ -360,6 +390,7 @@
     notification-blocks :blocks
     retired-bthreads :retired-bthreads
     spawned-bthreads :bthreads
+    unchanged-bthreads :unchanged-bthreads
     :keys [parent->child-bthreads]}
    state
    event]
@@ -368,6 +399,7 @@
         (next-event-indexes state
                             event
                             triggered-bthreads
+                            unchanged-bthreads
                             notification-waits
                             notification-requests
                             notification-blocks)
@@ -392,5 +424,5 @@
 (defn step
   "Return the next state based on the event"
   [state event]
-  (-> (notification/notify-bthreads! state event)
+  (-> (notification/notify-step! state event)
       (assemble-next-state state event)))
