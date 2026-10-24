@@ -1065,3 +1065,83 @@
         (let [violation (first (:safety-violations result))]
           (is (= :bad (:type (:event violation)))
               "Safety violation event should have type :bad"))))))
+
+(defn- cancellable-work-steps
+  []
+  [{:request #{:work}}
+   {:request #{:more-work}}
+   {:request #{{:type :work-done :terminal true}}}])
+
+(defn- check-cancellable-work
+  "Model check `worker-bthreads` racing a canceller.
+
+  Work events after `:cancel` are safety violations, and both the completed
+  and the cancelled outcomes must be reachable. `possible` adds events that
+  must also be reachable."
+  ([worker-bthreads]
+   (check-cancellable-work worker-bthreads #{}))
+  ([worker-bthreads possible]
+   (check/check
+    {:bthreads (assoc worker-bthreads
+                      :canceller
+                      (b/scenario [{:request #{:cancel}}
+                                   {:request #{{:type :cancelled
+                                                :terminal true}}}]))
+     :safety-bthreads
+     {:no-work-after-cancel
+      (b/scenario [{:wait-on #{:cancel}}
+                   {:wait-on #{:work :more-work}}
+                   {:request #{{:type :worked-after-cancel
+                                :invariant-violated true}}}])}
+     :possible (into #{:work-done :cancelled} possible)})))
+
+(deftest scenario-until-model-check
+  (testing "Without :until, the checker finds work continuing after :cancel"
+    (let [result (check-cancellable-work
+                  {:worker (b/scenario (cancellable-work-steps))})]
+      (is (= :worked-after-cancel
+             (-> result :safety-violations first :event :type)))))
+
+  (testing ":until shuts the scenario down on every path through :cancel"
+    (is (nil? (check-cancellable-work
+               {:worker (b/scenario (cancellable-work-steps)
+                                    {:until #{:cancel}})})))))
+
+;; Children are created inside function steps so each branch gets a fresh
+;; instance. Child instances embedded in literal bids are shared across the
+;; checker's branches, and their state is not restored between branches.
+(deftest scenario-until-model-check-with-spawning
+  (testing "A spawned child scenario with :until shuts down"
+    (is (nil? (check-cancellable-work
+               {:parent (b/scenario
+                         [(fn [_]
+                            {:bid {:bthreads
+                                   {:worker (b/scenario
+                                             (cancellable-work-steps)
+                                             {:until #{:cancel}})}}})])}))))
+
+  (testing "An :until scenario that spawns a child alongside its request"
+    (is (nil? (check-cancellable-work
+               {:worker (b/scenario
+                         (assoc (cancellable-work-steps)
+                                0
+                                (fn [_]
+                                  {:bid {:request #{:work}
+                                         :bthreads
+                                         {:audit (b/scenario
+                                                  [{:wait-on #{:work}}
+                                                   {:request #{:audited}}])}}}))
+                         {:until #{:cancel}})}
+               #{:audited}))
+        "The parent shuts down on :cancel and its child still runs"))
+
+  (testing "An :until scenario hands off to a child on a spawn-only step"
+    (is (nil? (check-cancellable-work
+               {:worker (b/scenario
+                         [{:request #{:work}}
+                          (fn [_]
+                            {:bid {:bthreads
+                                   {:finisher (b/scenario
+                                               (rest (cancellable-work-steps))
+                                               {:until #{:cancel}})}}})]
+                         {:until #{:cancel}})})))))

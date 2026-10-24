@@ -315,6 +315,14 @@
                         scenario-state)}
      bid]))
 
+(defn- live-bid?
+  "A bid keeps a bthread alive if it has a
+  request, wait or block - but not spawned bthreads"
+  [bid]
+  (and bid
+       (or (seq (:request bid))
+           (seq (:wait-on bid))
+           (seq (:block bid)))))
 (defn scenario
   "Create a stateful bthread from a finite sequence of scenario steps.
 
@@ -337,6 +345,7 @@
   Options:
   - `:initial-state` - any immutable value supplied to the first function step
   - `:label` - a function `(fn [bthread] -> label)` for debugging, as in `step`
+  - `:until` - a set of events on which the bthread should shut down.
 
   Example:
   ```clojure
@@ -353,30 +362,56 @@
         {:bid {:request #{{:type :workflow/completed
                            :order-id (:order-id state)}}}
          :next-step :first}))]
-   {:initial-state {}})
+   {:initial-state {}
+    :until #{:workflow/cancelled})
   ```"
   ([xs]
    (scenario xs nil))
   ([xs config]
-   (let [steps (into [] xs)
+   (let [until (get config :until)
+         wait-on-wrapper
+         (fn [step]
+           (cond (nil? until) step
+                 (fn? step)
+                 (fn [m]
+                   (let [result (step m)]
+                     (cond-> result
+                       (live-bid? (:bid result))
+                       (update-in [:bid :wait-on]
+                                  (fnil into #{})
+                                  until))))
+                 (and (map? step)
+                      (live-bid? step))
+                 (update step
+                         :wait-on
+                         (fnil into #{})
+                         until)
+                 :else step))
+
+         steps (into [] (map wait-on-wrapper) xs)
          initial-state (get config :initial-state)]
+
      (step
       (fn [internal-state event]
-        (let [internal-state (or internal-state
-                                 {:cursor 0
-                                  :scenario-state initial-state})
-              cursor (get internal-state :cursor)
-              scenario-state (get internal-state :scenario-state)
-              scenario-step (get steps cursor)]
-          (if (fn? scenario-step)
-            (scenario-function-result
-             (scenario-step {:event event
-                             :state scenario-state})
-             cursor
-             scenario-state)
-            [{:cursor (inc cursor)
-              :scenario-state scenario-state}
-             scenario-step])))
+        (when-not (and event
+                       until
+                       (contains? until
+                                  (event-proto/type event)))
+          (let [internal-state (or internal-state
+                                   {:cursor 0
+                                    :scenario-state initial-state})
+                cursor (get internal-state :cursor)
+                scenario-state (get internal-state :scenario-state)
+                scenario-step (get steps cursor)]
+            (if (fn? scenario-step)
+              (scenario-function-result
+               (scenario-step {:event event
+                               :state scenario-state})
+               cursor
+               scenario-state)
+              [{:cursor (inc cursor)
+                :scenario-state scenario-state}
+               scenario-step]))))
       config))))
 
 (defn repeat

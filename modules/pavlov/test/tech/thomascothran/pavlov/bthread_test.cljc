@@ -529,3 +529,42 @@
             "Restoration immediately rewinds every child")
         (is (= expected (mapv (fn [_] (advance)) (range 6)))
             "Replay preserves bids, child snapshots, and termination")))))
+
+(deftest until-shuts-down-bthread
+  (testing "with keyword killing event"
+    (let [bthread (b/scenario [{:request #{:a}}
+                               (fn [_]
+                                 {:bid {:request #{{:type :b}}}})
+                               {:request #{:c}}
+                               {:request #{:d}}]
+                              {:until #{:x}})
+          bid1 (b/notify! bthread nil)
+          bid2 (b/notify! bthread :a)
+          bid3 (b/notify! bthread :b)
+          bid4 (b/notify! bthread :x)]
+      (is (:request bid1))
+      (is (= #{:x} (:wait-on bid1)))
+      (is (:request bid2))
+      (is (= #{:x} (:wait-on bid2)))
+      (is (:request bid3))
+      (is (= #{:x} (:wait-on bid3)))
+      (is (nil? bid4))))
+
+  (testing "with map killing event"
+    (let [bthread (b/scenario [{:request #{:a}}
+                               (fn [_]
+                                 {:bid {:request #{{:type :b}}}})
+                               {:request #{:c}}
+                               {:request #{:d}}]
+                              {:until #{:x}})
+          bid1 (b/notify! bthread nil)
+          bid2 (b/notify! bthread :a)
+          bid3 (b/notify! bthread :b)
+          bid4 (b/notify! bthread {:type :x})]
+      (is (:request bid1))
+      (is (= #{:x} (:wait-on bid1)))
+      (is (:request bid2))
+      (is (= #{:x} (:wait-on bid2)))
+      (is (:request bid3))
+      (is (= #{:x} (:wait-on bid3)))
+      (is (nil? bid4)))))
