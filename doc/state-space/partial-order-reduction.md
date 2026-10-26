@@ -50,7 +50,7 @@ In the current implementation:
 
 - `search/succ` generates all enabled successor events from a state
 - `search/identifier` hashes the state
-- `graph/->lts` and `search/bfs-reduce` merge states that have the same identifier
+- `graph/->lts` (which uses its own breadth-first search) and `search/bfs-reduce` merge states that have the same identifier
 - `model.check/check` includes `:safety-bthreads`, `:environment-bthreads`, and normal `:bthreads` in the same explored program
 
 So the state identity is already a **full BP state identity**, not just an application-level state.
@@ -101,13 +101,12 @@ In an LTS, imagine a state `s` where both `:a` and `:b` are enabled.
 If both orders are possible, and if swapping them does not matter, then we get a diamond:
 
 ```text
-        :a          :b
-     s -----> s1 ------> t
-     |
-     |
-     v
-    s2 ------> t
-        :b          :a
+         :a          :b
+     s -------> s1 -------> t
+     |                      ^
+  :b |                      | :a
+     v                      |
+     s2 --------------------+
 ```
 
 The two traces are:
@@ -181,13 +180,12 @@ Consider a bthread that wants both `:a` and `:b` to happen, but does not care ab
 Its LTS shape can look like this:
 
 ```text
-        :a          :b
-     s -----> s1 ------> t
-     |
-     |
-     v
-    s2 ------> t
-        :b          :a
+         :a          :b
+     s -------> s1 -------> t
+     |                      ^
+  :b |                      | :a
+     v                      |
+     s2 --------------------+
 ```
 
 with a final `:done` edge after `t`.
@@ -232,13 +230,12 @@ But the **full behavioral-program state** is now different:
 So the diamond no longer converges to one hashed node:
 
 ```text
-        :a          :b
-     s -----> s1 ------> t-ab
+         :a          :b
+     s -------> s1 -------> t-ab
      |
-     |
-     v
-    s2 ------> t-ba
-        :b          :a
+  :b |
+     v           :a
+     s2 ------------------> t-ba
 ```
 
 Now POR must **not** treat those two orders as equivalent, because Pavlov itself says they are different states.

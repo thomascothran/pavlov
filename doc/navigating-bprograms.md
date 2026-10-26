@@ -10,6 +10,8 @@ Key tasks covered:
 
 Important: This guide uses `nav` (from `clojure.datafy`) for navigation. `datafy` is not used.
 
+`tech.thomascothran.pavlov.nav` is part of the `pavlov-devtools` module, so add `tech.thomascothran/pavlov-devtools` to your development dependencies.
+
 ## Concepts
 
 - Behavioral Threads (bthreads): Independent units that advance by returning bids that request, wait-on, or block events.
@@ -40,10 +42,10 @@ Create a small program with two bthreads: one that emits letters in order and on
 (defn make-test-bthreads
   []
   {:letters (b/scenario [{:request [:a]}
-                     {:request [:b]}
-                     {:request [:c]}])
+                         {:request [:b]}
+                         {:request [:c]}])
    :numbers (b/scenario [{:request #{1 2}} ; unordered → branch
-                     {:request #{3}}])})
+                         {:request #{3}}])})
 ```
 
 Turn the bthreads into a navigable root:
@@ -86,15 +88,15 @@ Follow a whole path by specifying the branch event-types at decision points. `fo
 ;=> 3
 
 (-> (pnav/follow (pnav/root {:linear (b/scenario [{:request [:a]}
-                                              {:request [:b]}
-                                              {:request [:c]}])})
+                                                  {:request [:b]}
+                                                  {:request [:c]}])})
                  [:a :c])
     :pavlov/event e/type)
 ;=> :c
 
 (-> (pnav/follow (pnav/root {:linear (b/scenario [{:request [:a]}
-                                              {:request [:b]}
-                                              {:request [:c]}])})
+                                                  {:request [:b]}
+                                                  {:request [:c]}])})
                  [:a :d])
     :pavlov/event)
 ;=> nil  ; no matching branch at that decision point
@@ -175,4 +177,4 @@ Tip: If you want a single bthread to offer multiple alternatives at once, use a 
 - Navigator construction and state snapshotting: `tech.thomascothran.pavlov.search`
 - Navigation helpers: `tech.thomascothran.pavlov.nav`
 - Bthread construction: `tech.thomascothran.pavlov.bthread`
-- Examples and expectations: `test/tech/thomascothran/pavlov/nav_test.clj`
+- Examples and expectations: `modules/pavlov-devtools/test/tech/thomascothran/pavlov/nav_test.clj`

@@ -1,13 +1,13 @@
 # Designing Business Programs with Bthreads
 
-This tutorial explains how to design business programs using the behavioral programming paradigm. It serves both as a tutorial for writing behavioral programs in pavlov, and as a guide to writing real-world applications with complex business logic.
+This tutorial explains how to design business programs using the behavioral programming paradigm. It serves both as a tutorial for writing behavioral programs in Pavlov, and as a guide to writing real-world applications with complex business logic.
 
 The core challenge we will be addressing is that business processes are rife with implicit branching, cross-cutting rules, and environment-driven alternatives (credit checks, fraud flags, supervisor overrides). We will see how behavioral programming is a simple approach that lets us:
 
 - Write business rules as isolated, composable units
 - Create branching scenarios automatically
 - Visualize those branching scenarios with a point-and-click UI
-  + You can use this for visualizing your application as you are developing it, for demoing to a domain expert, or for letting an LLM explore the behavior of the your application (via `nav`)
+  + You can use this for visualizing your application as you are developing it, for demoing to a domain expert, or for letting an LLM explore the behavior of your application (via `nav`)
 - Run a model checker to verify your program.
 
 You may even be convinced that model-checker-driven development is superior to REPL-driven development!
@@ -16,7 +16,7 @@ You may even be convinced that model-checker-driven development is superior to R
 
 Behavioral programming maximizes loose coupling. We use independent behavioral threads (bthreads) for each individual behavior. Bthreads communicate via events: they are notified of the events to which they subscribe, and they communicate by returning bids that request, wait for, and block events.
 
-Behavioral programs (bprograms) compose bthreads, wire up the events so that each bthread is notified when an event to which it is subscribed occurs. Then the bprogram selects the next event, notifying all the bthreads subscribed to those events.
+Behavioral programs (bprograms) compose bthreads and wire up the events so that each bthread is notified when an event to which it is subscribed occurs. Then the bprogram selects the next event, notifying all the bthreads subscribed to those events.
 
 ### Selection Algorithm
 
@@ -59,7 +59,7 @@ Most of the time, you do not need a priority order. By making requests for event
 
 ### Program Lifecycle
 
-The behavioral program will continue to select the next event and then notify each subscribed bthread until
+The behavioral program will continue to select the next event and then notify each subscribed bthread until:
 
 1. there are no requested, unblocked events, or
 2. an event is selected that has `:terminal` set to `true`
@@ -68,32 +68,32 @@ At that point, if you used `tech.thomascothran.pavlov.bprogram.ephemeral/execute
 
 Generally, you want to use a `:terminal` event to close the bprogram. Bprograms may be executed as a function call.
 
-Bprograms may be run in other ways: as a long-running process that listens for events, as a durable program that parks and is serialized to disk, until the next event occurs. Those options are outside the scope of this tutorial.
+Bprograms may be run in other ways, such as a long-running process that listens for events. Bthread state can also be saved with `b/state` and restored with `b/set-state`, which lets a program be persisted between events. Those options are outside the scope of this tutorial.
 
 ## Domain
 
 Quality business applications need to express the domain. Imagine building a banking application, and using event storming to identify the following events that occur when a new customer wants to open an account.
 
 - `:application-submitted` - the event that starts the process
-- `:request-cip-verification` - verify the identity of the applicant. This can result in:
+- `:request-cip-verification` - verify the identity of the applicant (Customer Identification Program, or CIP). This can result in:
   + `:cip-verified`
   + `:cip-failed`, which should result in the `:application-declined` event
-- `:ofac-screen-requested` - ensure the customer is not on the sanctions list
+- `:ofac-screening-requested` - ensure the customer is not on the OFAC sanctions list
   + `:ofac-hit` should result in the `:application-declined` event
   + `:ofac-clear`
-- `:initial-deposit-requested` after cip verification and clearance through OFAC
+- `:initial-deposit-requested` - after CIP verification and clearance through OFAC
 
 Of course, we know that the business rules are more complex, but this gives us a starting point.
 
 Now we move on to our business rules. Some business rules pertain to order:
 
 1. `:request-cip-verification` must occur (and either succeed or fail) before `:initial-deposit-requested`.
-2. `:ofac-screen-requested` must be done before account creation.
+2. `:ofac-screening-requested` must be done before account creation.
 
 Other business rules regard necessary relationships between events:
 
 1. If `:cip-failed` happens, then `:application-declined` must follow
-2. If `:ofac-hit` happens, then `:application-declined` must follow,
+2. If `:ofac-hit` happens, then `:application-declined` must follow.
 
 
 ### Domain Rules Bthreads
@@ -143,7 +143,7 @@ We can't forget to request our initial deposit:
 
 But wait! Don't we have rules about when to request that deposit?
 
-We do, but these rules should be decoupled. Some policies about when the initial deposit may be mandatory. Others may change. The rules about when the initial deposit should be requested should be able to change independently as policies and regulations change.
+We do, but these rules should be decoupled. Some policies about when to request the initial deposit may be mandatory. Others may change. The rules about when the initial deposit should be requested should be able to change independently as policies and regulations change.
 
 So we add separate rules:
 
@@ -154,13 +154,13 @@ So we add separate rules:
   (b/scenario [{:block #{:initial-deposit-requested}
                 :wait-on #{:cip-verified}}]))
 
-(defn make-block-opening-until-ofac-cleared
+(defn make-block-deposit-until-ofac-cleared
   []
   (b/scenario [{:block #{:initial-deposit-requested}
                 :wait-on #{:ofac-clear}}]))
 ```
 
-We *block* the request for an initial deposit until the CIP verification event and OFAC clearance event occurs. The bank policy could change to permit requesting the initial deposit before the OFAC screen clears, so long as the account is not opened first.
+We *block* the request for an initial deposit until the CIP verification and OFAC clearance events occur. The bank policy could change to permit requesting the initial deposit before the OFAC screen clears, so long as the account is not opened first.
 
 Note that we can change this business rule in one place, without complecting rules in a `cond` expression.
 
@@ -182,7 +182,7 @@ Environment bthreads request events that come from the environment (i.e., from a
 Crucially, this lets us introduce branches:
 
 ```clojure
-(defn make-environment-bthreads
+(defn make-environment-bthreads-v1
   []
   {::application-submitted
    (b/scenario [{:request #{{:type :application-submitted}}}])
@@ -195,7 +195,7 @@ We request events that happen when the customer submits their application and wh
 
 Note that we are using these environment bthreads to *simulate* events; we would not use these bthreads outside of a test context.
 
-By requesting *both* alternatives in an unordered collection, we indicate that either event can occur. This lets us use Pavlov's bthread explorer to click through the execution paths of our application.
+Because the bthreads are in an unordered map, they have equal priority, so their requests compete: either event can happen first. Each such choice is a branch, which lets us use Pavlov's bthread explorer to click through the execution paths of our application.
 
 #### Pavlov Bprogram Visualizer
 
@@ -203,7 +203,7 @@ Pavlov has a built-in visualizer for bprograms that lets us see the bthreads and
 
 ![bprogram visualizer](./assets/cytoscape-viz.png)
 
-The visualizer exports as an html file:
+The visualizer exports an HTML file. This snippet and the next one use `make-bthreads-v1` and `safety-bthreads-v1`, which are defined in the [Model Checking](#model-checking) section below.
 
 ```clojure
 (do (require '[tech.thomascothran.pavlov.viz.cytoscape-html :as ch])
@@ -252,7 +252,7 @@ By leveraging Portal's nav support, we can select an event and move the applicat
 
 We can use the back button to go back, and then follow a different execution path.
 
-If you are observant, you might notice that we have a bug. We can find these automatically, using pavlov's model checking.
+If you are observant, you might notice that we have a bug. We can find bugs like this automatically, using Pavlov's model checking.
 
 For that, we will need to introduce another way we can use bthreads: as expressing invariants.
 
@@ -260,30 +260,30 @@ For that, we will need to introduce another way we can use bthreads: as expressi
 
 Safety bthreads are used to detect things that should not happen.
 
-For example, we might have a rule that says that an account should not be opened unless the ofac screen has cleared.
+For example, we might have a rule that says that an account should not be opened unless the OFAC screen has cleared.
 
 ```clojure
 (defn make-account-opening-requires-ofac-screening-bthread
   []
   (b/scenario [{:wait-on #{:account-opened}}
-               {:wait-on #{:ofac-clear}
-                :request #{{:type :account-opened
-                            :invariant-violated true}}}]))
+               {:request #{{:type :account-opened
+                            :invariant-violated true}}}]
+              {:until #{:ofac-clear}}))
 ```
 
 This bthread can be read as:
 
 - When the account is opened
-- Try to open the account
-- Until the OFAC screen clears.
+- Request an `:account-opened` event that marks an invariant violation
+- Unless the OFAC screen has already cleared.
 
 The `:invariant-violated` property tells our model checker that this specific event should not be selected.
 
-If the `:ofac-clear` event occurs, then this bthread will no longer request the account-opened event with an invariant violation. Another bthread may request the `account-opened` event, but (so long as that event does not have `:invariant-violated` set to true) the model checker will accept it as valid.
+The `:until` option shuts the bthread down as soon as `:ofac-clear` occurs, whether before or after the account is opened. Once it has shut down, it will no longer request the `:account-opened` event with an invariant violation. Another bthread may request the `:account-opened` event, but (so long as that event does not have `:invariant-violated` set to true) the model checker will accept it as valid.
 
 ### Model Checking
 
-We're going to wrap our bthreads into function calls to construct the domain, environment, and safety bthreads:
+We're going to wrap our bthreads into function calls to construct the domain and safety bthreads. The environment bthreads come from `make-environment-bthreads-v1`, defined above:
 
 ```clojure
 (defn make-bthreads-v1
@@ -306,19 +306,11 @@ We're going to wrap our bthreads into function calls to construct the domain, en
    ::block-deposit-until-cip-verified
    (make-block-deposit-until-cip-verified)
 
-   ::block-opening-until-ofac-cleared
-   (make-block-opening-until-ofac-cleared)
+   ::block-deposit-until-ofac-cleared
+   (make-block-deposit-until-ofac-cleared)
 
    ::open-on-funding
    (make-open-on-funding-bthread)})
-
-(defn make-environment-bthreads-v1
-  []
-  {::application-submitted
-   (b/scenario
-    [{:request #{{:type :application-submitted}}}])
-   ::pay-deposit
-   (b/scenario [{:request #{{:type :initial-deposit-paid}}}])})
 
 (defn safety-bthreads-v1
   []
@@ -331,11 +323,11 @@ Now, let's see what our model checker has to say. If it returns `nil`, then no v
 ```clojure
 (comment
   (-> {:bthreads (make-bthreads-v1)
-                :environment-bthreads (make-environment-bthreads-v1)
-                :safety-bthreads (safety-bthreads-v1)
-                :check-deadlock? false}
-     (check/check)
-     tap>))
+       :environment-bthreads (make-environment-bthreads-v1)
+       :safety-bthreads (safety-bthreads-v1)
+       :check-deadlock? false}
+      (check/check)
+      tap>))
 ```
 
 Here, however, we see there was a violation, and we know the exact execution path:
@@ -346,10 +338,8 @@ The model checker provides not only the path, but the state of the bthreads, whi
 
 To get our model to pass the check, we add another bthread and re-run the model checker. This becomes our iterative cycle: add safety properties, run the model checker, and the model checker will indicate the next bthread to be written.
 
-# Append-Only Programming
+## Append-Only Programming
 
 Because our business rules are naturally decoupled, we are free to compose them as we like. For example, some domain bthreads may be used both by consumer and business account openings. Again, some rules apply to both initial deposits and ordinary deposits.
 
 Further, we would append other types of bthreads that do IO, such as read or write to a database or make API calls. Because bthreads are composed, during unit testing we can simply use environment bthreads to simulate the possible results from a database call, and only use the IO bthread in QA and production environments.
-
-Check the examples directory for the full code.

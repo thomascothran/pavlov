@@ -6,7 +6,7 @@ Bthreads never talk to each other directly—coordination happens exclusively th
 
 Bthreads can be composed with each other freely. Different behavioral programs can use the same bthreads in different combinations to achieve different overall behavior.
 
-This document describes how to create an individual bthread and explore its behavior in isolation at the REPL or in a test -- without needing to start up a full behavioral program.
+This document describes how to create an individual bthread and explore its behavior in isolation at the REPL or in a test—without needing to start up a full behavioral program.
 
 ## Creating bthreads
 
@@ -27,9 +27,11 @@ Each time the bthread runs it returns a *bid*, a map that can contain any combin
 - `:block` — event types that should be prevented from running while this bid is active
 - `:bthreads` — child bthreads to spawn, keyed by name
 
-Spawned bthreads are initialized with `nil`. If they are spawned during startup they can observe the first event; if they are spawned in response to an event they will only observe subsequent events.
+Spawned bthreads are initialized by being notified with a `nil` event. If they are spawned during startup they can observe the first event; if they are spawned in response to an event they will only observe subsequent events.
 
 ```clojure
+(require '[tech.thomascothran.pavlov.bthread :as b])
+
 (defn make-parent
   []
   (b/scenario
@@ -39,7 +41,9 @@ Spawned bthreads are initialized with `nil`. If they are spawned during startup 
                                                  :terminal true}}}])}}]))
 ```
 
-The behavioral program collects the bids from every active bthread, filters out any events that are currently blocked, and then selects the highest-priority unblocked event. Bthreads have priority amongst themselves when they are in an ordered collection:
+The behavioral program collects the bids from every active bthread, filters out any events that are currently blocked, and then selects the highest-priority unblocked event.
+
+Bthreads have priority amongst themselves when they are provided in an ordered collection of name/bthread pairs:
 
 ```clojure
 (def bthreads
@@ -47,7 +51,7 @@ The behavioral program collects the bids from every active bthread, filters out 
    [:bthread-b (make-bthread-b)]])
 ```
 
-Bthreads that supplied an *ordered* request collection (typically a vector or list) set an explicit priority for the events inside the bid—the earliest element wins. If bthreads are provided in an unordered collection (a set or map), their priority is non-deterministic:
+If bthreads are provided in a map, they have equal priority and one is selected non-deterministically:
 
 ```clojure
 (def bthreads
@@ -55,7 +59,7 @@ Bthreads that supplied an *ordered* request collection (typically a vector or li
    :bthread-b (make-bthread-b)})
 ```
 
-The first selected bthread with an unblocked request will result in one of its requested events being selected. If the request is unordered (a set), one of the requested events is selected non-deterministically. If the request is ordered (a vector or list), the first unblocked event in the request is selected.
+Requests have a priority order too. Once the highest-priority bthread with an unblocked request is chosen, one of its requested events is selected. If the request is unordered (a set), one of the requested events is selected non-deterministically. If the request is ordered (a vector or list), the first unblocked event in the request is selected.
 
 ```clojure
 (defn make-bthread-a
@@ -70,7 +74,7 @@ The first selected bthread with an unblocked request will result in one of its r
 ## The step function is the core
 At the heart of Pavlov’s bthread story is the step function. This is not a feature of standard behavioral programming but a Pavlov-specific convention that enables a number of capabilities.
 
-A step function is a pure function that receives the previous state of the bthread and the event selected by the bprogram's algorithm, and returns the new state plus the next bid (the `:request`, `:wait-on`, and `:blocked`) map.
+A step function is a pure function that receives the previous state of the bthread and the event selected by the bprogram's algorithm, and returns the new state plus the next bid (a map with `:request`, `:wait-on`, and `:block`).
 
 `tech.thomascothran.pavlov.bthread/step` wraps such a function with the plumbing the behavioral program expects.
 
