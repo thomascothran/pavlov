@@ -31,8 +31,13 @@
     :block   #{:dangerous-operation}}     ; prevent this while active
    ```
 
-  The bthread is notified for its next bid when an event of the type
-  it has requested or waited upon occurs.
+  The bthread is notified for its next bid when an event it requested is
+  selected, or when an event of a type it waits on occurs. A request is
+  satisfied only by an equal (`=`) event: a request for
+  `{:type :order-food :entree :steak}` is not satisfied by
+  `{:type :order-food :entree :vegan-salad}`, and `:x` is not satisfied by
+  `{:type :x}`. A `:wait-on` or `:block` entry stands for its whole event
+  type, even if it carries data.
 
   Spawn child bthreads by returning `:bthreads` on a bid:
 
@@ -102,8 +107,8 @@
   ```clojure
   (def my-bthread (b/scenario [{:request #{:a}} {:request #{:b}}]))
   (b/notify! my-bthread nil)        ;=> {:request #{:a}}
-  (b/notify! my-bthread {:type :a}) ;=> {:request #{:b}}
-  (b/notify! my-bthread {:type :b}) ;=> nil
+  (b/notify! my-bthread :a)         ;=> {:request #{:b}}
+  (b/notify! my-bthread :b)         ;=> nil
   ```"
   [bthread event]
   #?(:squint (proto/notify! bthread event)
@@ -244,8 +249,8 @@
                  {:request #{:step-2}}
                  {:request #{:step-3}}]))
   (let [workflow (make-workflow)]
-    (b/notify! workflow nil)              ;=> {:request #{:step-1}}
-    (b/notify! workflow {:type :step-1})) ;=> {:request #{:step-2}}
+    (b/notify! workflow nil)     ;=> {:request #{:step-1}}
+    (b/notify! workflow :step-1)) ;=> {:request #{:step-2}}
   ```
 
   Scenario example with a dynamic function:
@@ -425,10 +430,10 @@
   With two arguments, repeats `n` times then returns nil:
   ```clojure
   (def ping (b/repeat 3 {:request #{:ping}}))
-  (b/notify! ping nil)           ;=> {:request #{:ping}}
-  (b/notify! ping {:type :ping}) ;=> {:request #{:ping}}
-  (b/notify! ping {:type :ping}) ;=> {:request #{:ping}}
-  (b/notify! ping {:type :ping}) ;=> nil
+  (b/notify! ping nil)   ;=> {:request #{:ping}}
+  (b/notify! ping :ping) ;=> {:request #{:ping}}
+  (b/notify! ping :ping) ;=> {:request #{:ping}}
+  (b/notify! ping :ping) ;=> nil
   ```"
   ([x] (repeat nil x))
   ([n x]
@@ -549,7 +554,7 @@
   (b/notify! order-ready {:type :payment/authorized :order-id 42})
   ;=> {:request #{{:type :order/ready :order-id 42}}}
 
-  (b/notify! order-ready {:type :anything})
+  (b/notify! order-ready {:type :order/ready :order-id 42})
   ;=> nil  ; terminated
   ```"
   [event-types f]

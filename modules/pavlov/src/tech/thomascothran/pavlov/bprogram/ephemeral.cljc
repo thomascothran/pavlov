@@ -15,7 +15,8 @@
    At each step of the bprogram, the bpgrogram:
 
    1. Notifies all bthreads that are subscribed to the previous event:
-      those that have either requested or waited-on that event type.
+      those that requested that exact event (by `=`), or waited on its
+      event type.
    2. Those bthreads submit new bids
    3. Those bids are added into the previous bids from all the other
       bthreads that are active and were not subscribed to the previous event

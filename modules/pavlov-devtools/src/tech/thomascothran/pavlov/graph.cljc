@@ -190,9 +190,9 @@
     :bthread->bid        - Map of bthread name to current bid
     :bthreads-by-priority - Ordered collection of bthread names
     :saved-bthread-states - Internal bthread state snapshots
-    :requests            - Map of event -> requesting bthreads
-    :waits               - Map of event -> waiting bthreads
-    :blocks              - Map of event -> blocking bthreads
+    :requests            - Map of requested event -> requesting bthreads
+    :waits               - Map of event type -> waiting bthreads
+    :blocks              - Map of event type -> blocking bthreads
     :hot                 - True when any active bthread is hot
 
   Options:

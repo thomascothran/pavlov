@@ -37,8 +37,10 @@
                        [:bid-b bid-b]
                        [:bid-c bid-c]])]
 
-    (is (= {:a #{:bid-a}}
-           (:requests state)))
+    (is (= #?(:squint {:a #{:bid-a}}
+              :default {{:type :a} #{:bid-a}})
+           (:requests state))
+        "Requests are indexed by the requested event (by type on squint)")
 
     (is (= {:b #{:bid-b}}
            (:waits state)))
@@ -102,7 +104,7 @@
                        [:wait-bthread-d wait-bthread-d]])
 
         result
-        (notification/notify-bthreads! state {:type :a})]
+        (notification/notify-bthreads! state :a)]
 
     (is (= {:request-bthread-ab {:request #{:b}}
             :wait-bthread-d {:request #{:d}}}
@@ -115,7 +117,7 @@
 (deftest test-step-removes-requests
   (let [bthread-a (b/bids [{:request #{:a}}])
         state (s/init [[:bthread-a bthread-a]])
-        next-state (s/step state {:type :a})]
+        next-state (s/step state :a)]
     (is (not (contains? (:requests next-state) :a))
         "Empty event memberships should be removed."))
 
@@ -124,7 +126,7 @@
                            {:request #{:b}}])
         state (s/init [[:bthread-a bthread-a]
                        [:bthread-b bthread-b]])
-        next-state (s/step state {:type :a})]
+        next-state (s/step state :a)]
     (is (not (identical? bthread-a bthread-b)))
     (is (not (contains? (:requests next-state) :a)))
     (is (= #{:bthread-b}
@@ -179,11 +181,193 @@
     (is (= #{:custom} (get-in next-state [:waits :watched])))
     (is (= #{:custom} (get-in next-state [:blocks :blocked])))))
 
+(defn- order [entree]
+  {:type :order-food :entree entree})
+
+(defn- customer [entree]
+  (b/bids [{:request #{(order entree)}}
+           {:request #{{:type :served :entree entree}}}]))
+
+(defn- recording-bthread
+  "A bthread that keeps the same bid and records every event it is notified of."
+  [!seen bid]
+  (b/step (fn [_ event]
+            (when event (swap! !seen conj event))
+            [nil bid])))
+
+(defn- run-events
+  [state]
+  (loop [state state
+         events []]
+    (if-some [event (:next-event state)]
+      (recur (s/step state event) (conj events event))
+      events)))
+
+(deftest same-type-request-is-not-notified-by-a-different-event
+  (let [init-state #(s/init [[:alice (customer :steak)]
+                             [:bob (customer :vegan-salad)]])
+        state (init-state)
+        next-state (s/step state (order :steak))]
+    (is (= (order :steak) (:next-event state)))
+    (is (= {:request #{{:type :served :entree :steak}}}
+           (get-in next-state [:bthread->bid :alice]))
+        "The bthread whose request was selected advances")
+    (is (= {:request #{(order :vegan-salad)}}
+           (get-in next-state [:bthread->bid :bob]))
+        "A same-type request with different data does not advance")
+    (is (= [(order :steak)
+            {:type :served :entree :steak}
+            (order :vegan-salad)
+            {:type :served :entree :vegan-salad}]
+           (run-events (init-state)))
+        "Both orders are placed and served")))
+
+(deftest equal-requests-are-all-notified
+  (let [state (s/init [[:alice (customer :steak)]
+                       [:carol (customer :steak)]])
+        next-state (s/step state (order :steak))]
+    (is (= {:request #{{:type :served :entree :steak}}}
+           (get-in next-state [:bthread->bid :alice])
+           (get-in next-state [:bthread->bid :carol])))))
+
+(deftest bthread-requesting-several-same-type-events-is-notified-once
+  (let [!seen (atom [])
+        indecisive (b/step (fn [_ event]
+                             (when event (swap! !seen conj event))
+                             [nil (if event
+                                    {:request #{:done}}
+                                    {:request #{(order :steak)
+                                                (order :vegan-salad)}})]))
+        state (s/init [[:indecisive indecisive]])
+        next-state (s/step state (order :steak))]
+    (is (= [(order :steak)] @!seen))
+    (is (= {:done #{:indecisive}}
+           (:requests next-state))
+        "Every old request entry is removed from the index")))
+
+(deftest bare-type-and-map-requests-are-different-events
+  (let [bids-after (fn [event]
+                     (-> (s/init [[:keyword-requester (b/bids [{:request #{:x}}
+                                                               {:request #{:after-keyword}}])]
+                                  [:map-requester (b/bids [{:request #{{:type :x}}}
+                                                           {:request #{:after-map}}])]])
+                         (s/step event)
+                         :bthread->bid))]
+    (is (= {:keyword-requester {:request #{:after-keyword}}
+            :map-requester {:request #{{:type :x}}}}
+           (bids-after :x))
+        "`:x` does not satisfy a request for `{:type :x}`")
+    (is (= {:keyword-requester {:request #{:x}}
+            :map-requester {:request #{:after-map}}}
+           (bids-after {:type :x}))
+        "`{:type :x}` does not satisfy a request for `:x`")))
+
+(deftest waits-match-every-event-of-the-type
+  (let [!type-seen (atom [])
+        !data-seen (atom [])
+        state (s/init [[:type-auditor (recording-bthread !type-seen {:wait-on #{:order-food}})]
+                       [:data-auditor (recording-bthread !data-seen {:wait-on #{(order :steak)}})]
+                       [:alice (customer :steak)]
+                       [:bob (customer :vegan-salad)]])]
+    (run-events state)
+    (is (= [(order :steak) (order :vegan-salad)] @!type-seen))
+    (is (= [(order :steak) (order :vegan-salad)] @!data-seen)
+        "A data-bearing wait entry stands for its whole event type")))
+
+(deftest blocks-match-every-event-of-the-type
+  (is (= [:done]
+         (run-events (s/init [[:no-orders {:block #{:order-food}}]
+                              [:bob (customer :vegan-salad)]
+                              [:fallback (b/bids [{:request #{:done}}])]]))))
+  (is (= [:done]
+         (run-events (s/init [[:no-steak {:block #{(order :steak)}}]
+                              [:bob (customer :vegan-salad)]
+                              [:fallback (b/bids [{:request #{:done}}])]])))
+      "A data-bearing block entry blocks its whole event type"))
+
+(deftest unchanged-request-bid-keeps-its-index-entries
+  (let [repeater (b/step (fn [_ _] [nil {:request #{(order :steak)}}]))
+        state (s/init [[:repeater repeater]
+                       [:bob (customer :vegan-salad)]])
+        next-state (s/step state (order :steak))]
+    (is (= (:requests state) (:requests next-state)))
+    (is (= #{:repeater :bob} (indexed-bthreads (:requests next-state))))))
+
+(defn- rebuilt-indexes
+  "Build the event indexes from scratch for the bids currently in `state`."
+  [state]
+  (-> (s/init (into [] (:bthread->bid state)))
+      (select-keys [:requests :waits :blocks])))
+
+(defn- indexes
+  [state]
+  (select-keys state [:requests :waits :blocks]))
+
+(deftest unsatisfied-same-type-requesters-stay-indexed
+  (let [state (s/init [[:alice (customer :steak)]
+                       [:bob (customer :vegan-salad)]
+                       [:carol (customer :vegan-salad)]])
+        next-state (s/step state (order :steak))]
+    (is (= #{:alice :bob :carol} (indexed-bthreads (:requests next-state))))
+    (is (= (rebuilt-indexes next-state) (indexes next-state)))
+    (is (= #{:bob :carol}
+           (get-in next-state [:requests #?(:squint :order-food
+                                            :default (order :vegan-salad))]))
+        "Unsatisfied requesters stay indexed (under their type on squint)")))
+
+(deftest same-type-wait-wakes-a-requester-for-a-different-event
+  (let [bob (b/bids [{:request #{(order :vegan-salad)}
+                      :wait-on #{:order-food}}
+                     {:request #{:bob-gives-up}}])
+        state (s/init [[:alice (customer :steak)]
+                       [:bob bob]])
+        next-state (s/step state (order :steak))]
+    (is (= {:request #{:bob-gives-up}}
+           (get-in next-state [:bthread->bid :bob]))
+        "Bob's type-level wait is triggered by Alice's order")
+    (is (= (rebuilt-indexes next-state) (indexes next-state))
+        "Bob's old request entry is removed even though his request was not selected")))
+
+(deftest spawned-children-are-notified-by-their-requested-event
+  (let [parent (b/bids [{:bthreads {:alice (customer :steak)
+                                    :bob (customer :vegan-salad)}}])
+        state (s/init [[:parent parent]])
+        next-state (s/step state (order :vegan-salad))]
+    (is (= {:request #{(order :steak)}}
+           (get-in next-state [:bthread->bid :alice])))
+    (is (= {:request #{{:type :served :entree :vegan-salad}}}
+           (get-in next-state [:bthread->bid :bob])))
+    (is (= (rebuilt-indexes next-state) (indexes next-state)))))
+
+(deftest retired-requesters-leave-same-type-requesters-indexed
+  (let [state (s/init [[:alice (b/bids [{:request #{(order :steak)}}])]
+                       [:bob (customer :vegan-salad)]])
+        next-state (s/step state (order :steak))]
+    (is (not (contains? (:bthread->bid next-state) :alice)))
+    (is (= {:request #{(order :vegan-salad)}}
+           (get-in next-state [:bthread->bid :bob])))
+    (is (= (rebuilt-indexes next-state) (indexes next-state)))))
+
+(deftest replaced-requester-loses-its-data-bearing-request
+  (let [replacement (b/bids [{:request #{(order :vegan-salad)}}])
+        state (s/init [[:manager (b/bids [{:request #{:change-order}}
+                                          {:bthreads {:worker replacement}}])]
+                       [:worker {:request #{(order :steak)}}]])
+        next-state (s/step state :change-order)]
+    (is (identical? replacement (get-in next-state [:name->bthread :worker])))
+    (is (= {:request #{(order :vegan-salad)}}
+           (get-in next-state [:bthread->bid :worker])))
+    (is (= (rebuilt-indexes next-state) (indexes next-state)))
+    (is (= (order :vegan-salad) (:next-event next-state)))))
+
 (deftest test-step-removes-terminated-bthreads
   (let [bthread-a (b/bids [{:request #{:a}}])
         state (s/init [[:bthread-a bthread-a]])
-        next-state (s/step state {:type :a})]
-    (is (nil? (get-in next-state [:bthread->bid bthread-a])))))
+        next-state (s/step state :a)]
+    (is (contains? (:bthread->bid state) :bthread-a))
+    (is (not (contains? (:bthread->bid next-state) :bthread-a)))
+    (is (not (contains? (:name->bthread next-state) :bthread-a)))
+    (is (empty? (:requests next-state)))))
 
 (deftest init-deregisters-bthread-that-returns-nil
   (let [state (s/init [[:worker (b/bids [nil])]])]
@@ -198,7 +382,7 @@
 (deftest step-deregisters-bthread-that-returns-nil-after-event
   (let [worker (b/bids [{:request #{:go}} nil])
         state (s/init [[:worker worker]])
-        next-state (s/step state {:type :go})]
+        next-state (s/step state :go)]
     (is (not (contains? (:name->bthread next-state) :worker)))
     (is (not-any? #{:worker} (:bthreads-by-priority next-state)))
     (is (not (contains? (:bthread->bid next-state) :worker)))
@@ -239,13 +423,17 @@
     (is (= #{:child} (get-in state [:waits :new-event])))))
 
 (deftest respawning-same-child-name-does-not-duplicate-priority-entry
-  (let [mk-child (fn [] (b/bids [{:wait-on #{:go}}]))
+  (let [first-child (b/bids [{:wait-on #{:go}}])
+        second-child (b/bids [{:wait-on #{:go}}])
         parent (b/bids [{:request #{:tick}
-                         :bthreads {:child (mk-child)}}
+                         :bthreads {:child first-child}}
                         {:request #{:tick}
-                         :bthreads {:child (mk-child)}}])
+                         :bthreads {:child second-child}}])
         state (s/init [[:parent parent]])
-        next-state (s/step state {:type :tick})]
+        next-state (s/step state :tick)]
+    (is (identical? first-child (get-in state [:name->bthread :child])))
+    (is (identical? second-child (get-in next-state [:name->bthread :child]))
+        "The parent advanced and respawned the child")
     (is (= 1
            (count (filter #{:child}
                           (:bthreads-by-priority next-state)))))))
@@ -265,12 +453,14 @@
         "Spawned child and existing sibling should both remain selectable at equal priority")))
 
 (deftest test-step
-  (let [bid-a {:request #{:a}}
-        bid-b (b/step (constantly {:request #{:b}}))
+  (let [bid-a (b/bids [{:request #{:a}}])
+        bid-b (b/step (constantly [nil {:request #{:b}}]))
         state (s/init [[:bid-a bid-a]
                        [:bid-b bid-b]])
-        next-state (s/step state {:type :a})]
-    (is (= :a (:next-event next-state)))))
+        next-state (s/step state :a)]
+    (is (= :a (:next-event state)))
+    (is (not (contains? (:bthread->bid next-state) :bid-a)))
+    (is (= :b (:next-event next-state)))))
 
 (deftest retiring-a-name-does-not-retire-its-replacement
   (doseq [ordered? [true false]]

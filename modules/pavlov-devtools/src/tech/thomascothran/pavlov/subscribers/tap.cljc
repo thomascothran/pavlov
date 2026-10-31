@@ -5,6 +5,8 @@
             [tech.thomascothran.pavlov.bid.proto :as bid]))
 
 (defn- event->bthreads
+  "Index bids the way the bprogram matches them: requests by the requested
+  event itself, waits and blocks by event type."
   [bthread->bid]
   (reduce (fn [acc [bthread-name bid]]
             (let [wait-on (bid/wait-on bid)
@@ -13,7 +15,9 @@
 
                   reducer-fn
                   (fn [bid-type acc' event]
-                    (update-in acc' [bid-type (event/type event)]
+                    (update-in acc' [bid-type (if (= bid-type :request)
+                                                event
+                                                (event/type event))]
                                #(into #{bthread-name} %)))
 
                   update-bid-bthreads
@@ -42,7 +46,8 @@
            waiting-on (into #{} (keys (get event->bthreads' :wait-on)))
            requested  (into #{} (keys (get event->bthreads' :request)))
            blocked    (into #{} (keys (get event->bthreads' :block)))
-           unblocked  (into #{} (remove (into #{} blocked)) requested)]
+           unblocked  (into #{} (remove #(contains? blocked (event/type %)))
+                            requested)]
 
        (tap> {:subscriber-name prefix
               :event event

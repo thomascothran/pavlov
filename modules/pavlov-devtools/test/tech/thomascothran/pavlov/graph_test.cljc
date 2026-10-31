@@ -478,3 +478,18 @@
                                 (:edges lts))]
       (is (= 2 (count root-successors))
           "after :x a [::child :x] runs; after :y a [::child :y] runs"))))
+
+(deftest lts-interleaves-same-type-requests-with-different-data
+  (testing "Selecting one order advances only the customer who requested it"
+    (let [customer (fn [i] (b/bids [{:request #{{:type :order-food :customer i}}}
+                                    {:request #{{:type :served :customer i}}}]))
+          lts (graph/->lts (into {} (map (juxt identity customer)) (range 3)) {})
+          root-events (into #{} (comp (filter #(= (:root lts) (:from %)))
+                                      (map :event))
+                            (:edges lts))]
+      (is (= #{{:type :order-food :customer 0}
+               {:type :order-food :customer 1}
+               {:type :order-food :customer 2}}
+             root-events))
+      (is (= 27 (count (:nodes lts)))
+          "Each of 3 customers is independently waiting, ordered, or served"))))

@@ -373,20 +373,35 @@
 
 (defn- sample [n coll] (vec (take n coll)))
 
+(defn- requests-by-type
+  "Re-key a `:requests` index by event type, merging the bthread sets."
+  [requests]
+  (reduce-kv (fn [m requested-event bthreads]
+               (update m (e/type requested-event) (fnil into #{}) bthreads))
+             {}
+             requests))
+
 (defn normalize-payload
-  "Node payload with spawned bthread objects reduced to their names. Bids
-  that spawn hold fresh bthread instances, which compare by identity, so
-  payloads from separate runs would otherwise never be equal."
+  "Node payload with spawned bthread objects reduced to their names and the
+  `:requests` index keyed by event type.
+
+  Bids that spawn hold fresh bthread instances, which compare by identity, so
+  payloads from separate runs would otherwise never be equal.
+
+  The live scheduler keys `:requests` by the requested event, while the frozen
+  baseline keys it by type. The index is derived from `:bthread->bid`, so
+  re-keying by type loses no information the comparison needs."
   [payload]
-  (if (and (map? payload) (map? (:bthread->bid payload)))
-    (update payload :bthread->bid
-            (fn [bthread->bid]
-              (-> bthread->bid
-                      (update-vals (fn [bid]
-                                     (if (and (map? bid) (:bthreads bid))
-                                       (update bid :bthreads #(set (keys %)))
-                                       bid))))))
-    payload))
+  (cond-> payload
+    (and (map? payload) (map? (:bthread->bid payload)))
+    (update :bthread->bid
+            update-vals (fn [bid]
+                          (if (and (map? bid) (:bthreads bid))
+                            (update bid :bthreads #(set (keys %)))
+                            bid)))
+
+    (and (map? payload) (map? (:requests payload)))
+    (update :requests requests-by-type)))
 
 (defn- normalize-witness-state
   [witness]

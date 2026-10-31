@@ -4,23 +4,60 @@
             [tech.thomascothran.pavlov.bid.proto :as bid]
             [tech.thomascothran.pavlov.event :as event]))
 
+(defn index-key-fn
+  "Return the function from a bid entry to its key in the `index` event index,
+  where `index` is one of `:requests`, `:waits`, or `:blocks`.
+
+  Requests are keyed by the requested event itself, so that two same-type
+  requests carrying different data are distinguishable. Waits and blocks are
+  keyed by event type.
+
+  Squint maps are JS objects and cannot key a map by value, so squint keys
+  requests by type as well and filters candidates in `requesting-bthreads`."
+  [index]
+  #?(:squint event/type
+     :default (if (= index :requests) identity event/type)))
+
+(defn requesting-bthreads
+  "Return the set of bthreads that requested `event`.
+
+  A request is satisfied only by an equal event (`=`), whatever its Event
+  implementation. A request for `{:type :order-food :entree :steak}` is not
+  satisfied by `{:type :order-food :entree :vegan-salad}`, and `:x` is not
+  satisfied by `{:type :x}`. Waits and blocks are not affected: they match by
+  event type.
+
+  The `:requests` index is keyed by the requested event, so the lookup itself
+  applies `=` (via `hash` and equality). On squint it is keyed by type, and
+  the candidates are filtered with `=`."
+  [state event]
+  #?(:squint
+     (let [bthread->bid (get state :bthread->bid)]
+       (into #{}
+             (filter (fn [bthread-name]
+                       (some #(= % event)
+                             (bid/request (get bthread->bid bthread-name)))))
+             (get-in state [:requests (event/type event)])))
+     :default
+     (get (get state :requests) event)))
+
 (defn bthreads-to-notify
   "Returns the set of bthread names that should be notified for a given event.
 
-  A bthread should be notified if it is either waiting on or requesting
-  the event type.
+  A bthread should be notified if it waits on the event type, or if the event
+  equals one of its requests (see `requesting-bthreads`).
 
   Parameters:
   - state: The current state map containing :waits and :requests indices
   - event: The event to check (must have a type via event/type)
 
   Returns:
-  A vector of bthread names that are interested in this event type.
-  Returns an empty vector if event is nil."
+  A vector of bthread names that are interested in this event.
+  Returns nil if event is nil."
   [state event]
   (when event
     (let [event-type (event/type event)
-          requesting-bthreads (get-in state [:requests event-type])
+          requesting-bthreads (requesting-bthreads state event)
           requesting? (if (set? requesting-bthreads)
                         requesting-bthreads
                         (set requesting-bthreads))]
@@ -30,10 +67,12 @@
           (into requesting-bthreads)))))
 
 (defn index-bid-events
-  "Indexes events from a bid by adding the bthread to the appropriate event-type sets.
+  "Indexes events from a bid by adding the bthread to the appropriate key sets.
 
-  Creates an inverted index that maps event types to sets of interested bthreads,
+  Creates an inverted index that maps keys to sets of interested bthreads,
   enabling fast lookup of which bthreads should be notified when an event occurs.
+  The `:requests` index is keyed by the requested event itself; the `:waits`
+  and `:blocks` indexes are keyed by event type (see `index-key-fn`).
 
   Parameters:
   - state: The current state map containing event indices
@@ -42,26 +81,32 @@
   - request-type: One of :requests, :waits, or :blocks
 
   Returns:
-  Updated state with the bthread-name added to the sets for each event type
-  in the bid under the path [request-type event-type].
+  Updated state with the bthread-name added to the set for each event in the
+  bid under the path [request-type ((index-key-fn request-type) event)].
 
   Example:
-  (index-bid-events {:requests {:click #{}}}
+  (index-bid-events {}
                     :my-bthread
-                    {:request #{{:type :click} {:type :hover}}}
+                    {:request #{{:type :click :id 1} :hover}}
                     :requests)
-  => {:requests {:click #{:my-bthread}
-                 :hover #{:my-bthread}}}"
+  => {:requests {{:type :click :id 1} #{:my-bthread}
+                 :hover #{:my-bthread}}}
+
+  (index-bid-events {}
+                    :my-bthread
+                    {:wait-on #{{:type :scroll :id 2}}}
+                    :waits)
+  => {:waits {:scroll #{:my-bthread}}}"
   [state bthread-name bid request-type]
   (let [event-fn (case request-type
                    :requests bid/request
                    :waits bid/wait-on
                    :blocks bid/block)
+        key-of (index-key-fn request-type)
         event-types (event-fn bid)]
     (if (seq event-types)
       (reduce (fn [state requested-event]
-                (update-in state [request-type
-                                  (event/type requested-event)]
+                (update-in state [request-type (key-of requested-event)]
                            (fnil conj #{})
                            bthread-name))
               state
@@ -144,13 +189,13 @@
   - state: The current BP state containing:
     - :name->bthread - map of bthread names to bthread instances
     - :waits - index of event types to waiting bthreads
-    - :requests - index of event types to requesting bthreads
+    - :requests - index of requested events to requesting bthreads
   - event: The event that occurred (optional - if not provided, notifies ALL bthreads with nil event)
 
   Returns:
   A map containing only the updates from notified bthreads:
   - :bthread->bid - map of bthread names to their new bids
-  - :requests - index of requested event types to bthread names
+  - :requests - index of requested events to bthread names
   - :waits - index of waited event types to bthread names
   - :blocks - index of blocked event types to bthread names
   - :bthreads - newly spawned child bthreads

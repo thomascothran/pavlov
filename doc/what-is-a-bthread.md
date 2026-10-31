@@ -18,7 +18,7 @@ A bthread is always invoked through `tech.thomascothran.pavlov.bthread/notify!`.
 
 However, `notify!` is very useful at the REPL and in tests.
 
-The behavioral program first notifies a bthread with a `nil` event so it can initialize its state and announce the events it cares about: events that are either requested or waited on. Afterwards the bthread is only reactivated when the behavioral program dispatches an event that matches one of the event types it waited on or requested.
+The behavioral program first notifies a bthread with a `nil` event so it can initialize its state and announce the events it cares about: events that are either requested or waited on. Afterwards the bthread is only reactivated when the behavioral program dispatches an event it requested, or an event whose type it waited on.
 
 Each time the bthread runs it returns a *bid*, a map that can contain any combination of:
 
@@ -26,6 +26,53 @@ Each time the bthread runs it returns a *bid*, a map that can contain any combin
 - `:wait-on` — event types that should wake this bthread up the next time they occur
 - `:block` — event types that should be prevented from running while this bid is active
 - `:bthreads` — child bthreads to spawn, keyed by name
+
+### How events are matched
+
+Requests are concrete events. Waits and blocks are event *types*.
+
+- A request is satisfied only by an event equal (`=`) to the requested event. If one bthread requests `{:type :order-food :entree :steak}` and another requests `{:type :order-food :entree :vegan-salad}`, selecting the steak order resumes only the first bthread.
+- A `:wait-on` or `:block` entry stands for its whole event type, as returned by `tech.thomascothran.pavlov.event/type`. `{:wait-on #{:order-food}}` wakes on every order, and so does `{:wait-on #{{:type :order-food :entree :steak}}}`. Likewise `{:block #{{:type :order-food :entree :steak}}}` blocks every `:order-food` event, not just steak orders.
+- `:x` and `{:type :x}` are different events. They have the same type, so they match the same waits and blocks, but a request for one is not satisfied by the other.
+
+This works for any implementation of the `tech.thomascothran.pavlov.event.proto/Event` protocol. On the JVM and in ClojureScript, the bprogram looks requested events up in a hash map, so:
+
+- Requested events must be hashable. For example, a requested event holding an infinite lazy sequence throws when the bprogram indexes it.
+- `=` and `hash` must agree. If two events are `=` but hash differently, whether one satisfies a request for the other can depend on how many events are currently requested.
+- An event without its own equality, such as a `reify` or a `deftype` that does not implement `equals`/`IEquiv`, uses identity. It satisfies only a request for that same instance.
+
+On Squint, `=` compares objects without their own equality by their fields, not by identity. Maps, vectors, keywords, records, and types that define their own equality behave the same on every platform; only objects without their own equality differ:
+
+```clojure
+(require '[tech.thomascothran.pavlov.event.proto :as event-proto])
+
+(deftype Order [entree]          ; no equals / IEquiv
+  event-proto/Event
+  (type [_] :order-food)
+  (terminal? [_] false))
+
+(= (->Order :steak) (->Order :steak))
+;; JVM, CLJS: false (different instances)
+;; Squint:    true  (same fields)
+
+(defn order [entree]
+  (reify event-proto/Event
+    (type [_] :order-food)
+    (terminal? [_] false)))
+
+(= (order :steak) (order :vegan-salad))
+;; JVM, CLJS: false (different instances)
+;; Squint:    true  (a reify has no fields to compare)
+```
+
+So on Squint, if two bthreads request events made by `order`, selecting either one resumes both. When targeting Squint, use maps or records for events, or give custom event types their own equality with `IEquiv`.
+
+If a bthread requests an event but should also react when some other event of the same type is selected, it must also wait on that type:
+
+```clojure
+{:request #{{:type :order/placed :order-id 42}}
+ :wait-on #{:order/placed}}
+```
 
 Spawned bthreads are initialized by being notified with a `nil` event. If they are spawned during startup they can observe the first event; if they are spawned in response to an event they will only observe subsequent events.
 
@@ -166,9 +213,9 @@ A scenario without function steps is simply a finite sequence of bids:
 
 (let [staged-requests (make-staged-requests)]
   [(b/notify! staged-requests nil)
-   (b/notify! staged-requests {:type :prep/begin})
-   (b/notify! staged-requests {:type :prep/finish})
-   (b/notify! staged-requests {:type :ship})])
+   (b/notify! staged-requests :prep/begin)
+   (b/notify! staged-requests :prep/finish)
+   (b/notify! staged-requests :ship)])
 ;; => [{:request #{:prep/begin}}
 ;;     {:request #{:prep/finish}}
 ;;     {:request #{:ship}}

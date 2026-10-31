@@ -56,11 +56,21 @@ Note that you normally will want a namespaced event that only exists in your tes
 ```clojure
 (defn order-done-scenario-complete []
   (b/scenario [{:request #{{:type :order/placed :order-id 42}}}
+               ;; The system answers with an :order/decided event.
+               {:wait-on #{:order/decided}}
                (fn [{:keys [event]}]
-                 {:bid (if (:order-accepted event)
-                         {:request #{{:type :order/paid
-                                      :order-id (:order-id event)}}}
-                         {})}) ;; parks if the order wasn't accepted
+                 (cond
+                   ;; Waits match every event of the type, so skip decisions
+                   ;; about other orders and keep waiting.
+                   (not= 42 (:order-id event))
+                   {:bid {:wait-on #{:order/decided}}
+                    :next-step :current}
+
+                   (:order-accepted event)
+                   {:bid {:request #{{:type :order/paid :order-id 42}}}}
+
+                   :else
+                   {:bid {}})) ;; parks if the order wasn't accepted
                {:request #{{:type :order/done}}}
                {:request #{{:type ::order-done-scenario-complete}}}]))
 
@@ -72,6 +82,8 @@ Note that you normally will want a namespaced event that only exists in your tes
 ```
 
 The function approach lets you add a bit more logic. However, these should still be linear.
+
+A request is satisfied only by the exact event requested, so read the outcome of a request from a separate event, as `:order/decided` does here, not from extra data on the requested event. Waits and blocks match by event type: `{:wait-on #{:order/decided}}` wakes on every decision, which is why the function checks `:order-id`.
 
 ### 2) Turn scenario completion into possibility checks
 

@@ -170,7 +170,7 @@ Sequences passed to `scenario` will be realized, so do not pass infinite sequenc
 Scenario has a few more capabilities (such as restarting at its first step). See its docstring for details.
 
 ## Bprograms
-Bthreads are assembled into bprograms. The main purpose of a behavioral program is to select the next event, and notify all bthreads subscribed to that event type. Bthreads only subscribe to events if they request them or are waiting on them.
+Bthreads are assembled into bprograms. The main purpose of a behavioral program is to select the next event, and notify all bthreads subscribed to that event. A bthread is subscribed to an event if it requested that exact event (compared with `=`), or if it is waiting on the event's type. See [What is a bthread?](doc/what-is-a-bthread.md#how-events-are-matched) for the matching rules.
 
 To run an ephemeral bprogram, use one of the two main API functions in `tech.thomascothran.pavlov.bprogram.ephemeral`:
 
@@ -293,10 +293,12 @@ Perhaps you just want to request `:a` once.
 
 
 ```clojure
-(b/scenario [{:request #{{:type :a}}}])
+(b/scenario [{:request #{:a}}])
 ```
 
-This bthread requests an event of type `:a` once. Then the bthread terminates.
+This bthread requests `:a` once. Then the bthread terminates.
+
+Note that `:a` and `{:type :a}` are different events. They share the type `:a`, so they match the same waits and blocks, but a request for one is not satisfied by the other.
 
 ### Add more data to an event
 
@@ -443,11 +445,11 @@ The functions in `subscribers` are invoked with two arguments: the selected even
 A `tap` subscriber is implemented in `tech.thomascothran.pavlov.subscribers.tap` (devtools module). This subscriber shows, on each sync:
 
 - What event was selected
-- What events are blocked
-- What events were requested
-- What events are being waited on
+- What event types are blocked
+- What events were requested, and which of them are not blocked
+- What event types are being waited on
 - A map of bthreads to bids
-- A map of events to bthreads
+- A map of requested events, waited-on types, and blocked types to bthreads
 
 
 Here is an example of how the tap subscriber can be used with [portal](https://github.com/djblue/portal).
@@ -501,6 +503,11 @@ than Clojars JARs. A consuming monorepo can configure paths directly:
 Support remains experimental and currently inherits Pavlov core's primitive
 string/keyword bthread-name and event-type profile. Collection-valued names or
 event types are not yet guaranteed under Squint.
+
+Squint's `=` compares objects without their own equality, such as `reify`
+events, by their fields rather than by identity, which affects which requests
+an event satisfies. See
+[How events are matched](doc/what-is-a-bthread.md#how-events-are-matched).
 
 
 ## Further Reading

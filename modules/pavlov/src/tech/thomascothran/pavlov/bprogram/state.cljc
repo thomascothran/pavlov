@@ -89,25 +89,26 @@
      :blocks bid/block)
    bid))
 
-(defn- remove-bthread-from-event-type
-  "Remove one bthread from one event-type membership set.
+(defn- remove-bthread-from-index-key
+  "Remove one bthread from one index key's membership set.
 
   Empty memberships are removed so the blocks index can also serve directly as
   the set of currently blocked event types. Unaffected keys remain structurally
   shared."
-  [event->bthreads event-type bthread-name]
-  (if-let [bthread-names (get event->bthreads event-type)]
+  [event->bthreads k bthread-name]
+  (if-let [bthread-names (get event->bthreads k)]
     (let [remaining (disj bthread-names bthread-name)]
       (if (seq remaining)
-        (assoc event->bthreads event-type remaining)
-        (dissoc event->bthreads event-type)))
+        (assoc event->bthreads k remaining)
+        (dissoc event->bthreads k)))
     event->bthreads))
 
 (defn- remove-bthread-bids-from-event-index
   "Remove names only from keys named by their old bids.
 
   This is the incremental replacement for scanning and reconstructing every
-  key in an event index on each transition."
+  key in an event index on each transition. `cleared-key` is skipped when
+  `clear-key?` is true, because the caller has already removed it."
   ([event->bthreads bthread->bid bthread-names index-key]
    (remove-bthread-bids-from-event-index event->bthreads
                                          bthread->bid
@@ -116,22 +117,22 @@
                                          nil
                                          false))
   ([event->bthreads bthread->bid bthread-names index-key
-    cleared-event-type clear-event-type?]
+    cleared-key clear-key?]
    (if (seq event->bthreads)
-     (reduce (fn [index bthread-name]
-               (if-let [old-bid (get bthread->bid bthread-name)]
-                 (reduce (fn [index requested-event]
-                           (let [event-type (event/type requested-event)]
-                             (if (and clear-event-type?
-                                      (= cleared-event-type event-type))
-                               index
-                               (remove-bthread-from-event-type
-                                index event-type bthread-name))))
-                         index
-                         (bid-events old-bid index-key))
-                 index))
-             event->bthreads
-             bthread-names)
+     (let [key-of (notification/index-key-fn index-key)]
+       (reduce (fn [index bthread-name]
+                 (if-let [old-bid (get bthread->bid bthread-name)]
+                   (reduce (fn [index entry]
+                             (let [k (key-of entry)]
+                               (if (and clear-key? (= cleared-key k))
+                                 index
+                                 (remove-bthread-from-index-key
+                                  index k bthread-name))))
+                           index
+                           (bid-events old-bid index-key))
+                   index))
+               event->bthreads
+               bthread-names))
      event->bthreads)))
 
 (defn- update-bthread-registry
@@ -299,44 +300,44 @@
   (let [event-type (event/type event)
         waiting (get-in state [:waits event-type])]
     (into (if (set? waiting) waiting (set waiting))
-          (get-in state [:requests event-type]))))
+          (notification/requesting-bthreads state event))))
 
-(defn- reindex-at-event-type
-  "Add each of `bthread-names` back under `event-type` when its bid lists an
-  event of that type for `index-key`."
-  [event->bthreads bthread->bid bthread-names index-key event-type]
-  (reduce (fn [index bthread-name]
-            (if (some #(= event-type (event/type %))
-                      (bid-events (get bthread->bid bthread-name) index-key))
-              (update index event-type (fnil conj #{}) bthread-name)
-              index))
-          event->bthreads
-          bthread-names))
+(defn- reindex-at-key
+  "Add each of `bthread-names` back under `k` when one of its `index-key` bid
+  entries is indexed under `k`."
+  [event->bthreads bthread->bid bthread-names index-key k]
+  (let [key-of (notification/index-key-fn index-key)]
+    (reduce (fn [index bthread-name]
+              (if (some #(= k (key-of %))
+                        (bid-events (get bthread->bid bthread-name) index-key))
+                (update index k (fnil conj #{}) bthread-name)
+                index))
+            event->bthreads
+            bthread-names)))
 
 (defn- update-event-index
   "Update one event index for a step.
 
   `changed-bthreads` have their old memberships replaced by
-  `notification-index`. `unchanged-bthreads` keep theirs. When the triggered event type's key is
-  cleared, unchanged bthreads are added back under it."
-  [event->bthreads bthread->bid changed-bthreads unchanged-bthreads
-   notification-index index-key triggered-event-type clear-triggered-event-type?]
-  (let [event->bthreads (if clear-triggered-event-type?
-                          (dissoc event->bthreads triggered-event-type)
+  `notification-index`. `kept-bthreads` keep theirs. When the triggered key is
+  cleared, kept bthreads are added back under it."
+  [event->bthreads bthread->bid changed-bthreads kept-bthreads
+   notification-index index-key triggered-key clear-triggered-key?]
+  (let [event->bthreads (if clear-triggered-key?
+                          (dissoc event->bthreads triggered-key)
                           event->bthreads)]
     (cond-> (remove-bthread-bids-from-event-index
              event->bthreads
              bthread->bid
              changed-bthreads
              index-key
-             triggered-event-type
-             clear-triggered-event-type?)
+             triggered-key
+             clear-triggered-key?)
       (seq notification-index)
       (merge-event->bthreads notification-index)
 
-      (and clear-triggered-event-type? (seq unchanged-bthreads))
-      (reindex-at-event-type bthread->bid unchanged-bthreads index-key
-                             triggered-event-type))))
+      (and clear-triggered-key? (seq kept-bthreads))
+      (reindex-at-key bthread->bid kept-bthreads index-key triggered-key))))
 
 (defn- next-event-indexes
   "Incrementally update only event keys affected by triggered bthreads.
@@ -344,12 +345,23 @@
   Old memberships come from the triggered bthreads' previous bids, replacement
   memberships come from the notification delta, and every unrelated index key
   remains structurally shared. Triggered bthreads whose bid did not change
-  keep their memberships, apart from the triggered event type's key, which is
-  rebuilt."
+  keep their memberships, apart from the triggered key, which is rebuilt:
+  the event type for `:waits`, and the event itself for `:requests`.
+
+  Every bthread under a triggered key was triggered, so clearing the key
+  cannot drop a bthread that was not notified. On squint, where requests are
+  keyed by type, that does not hold, and the requesters the event did not
+  satisfy are kept explicitly."
   [state event triggered-bthreads unchanged-bthreads
    notification-waits notification-requests notification-blocks]
   (let [bthread->bid (get state :bthread->bid)
-        triggered-event-type (event/type event)
+        triggered-type (event/type event)
+        triggered-request-key #?(:squint triggered-type
+                                 :default event)
+        unsatisfied-requesters #?(:squint (reduce disj
+                                                  (set (get-in state [:requests triggered-type]))
+                                                  triggered-bthreads)
+                                  :default nil)
         changed-bthreads (if (seq unchanged-bthreads)
                            (reduce disj triggered-bthreads unchanged-bthreads)
                            triggered-bthreads)]
@@ -359,15 +371,18 @@
                                 unchanged-bthreads
                                 notification-waits
                                 :waits
-                                triggered-event-type
+                                triggered-type
                                 true)
      :requests (update-event-index (get state :requests)
                                    bthread->bid
                                    changed-bthreads
-                                   unchanged-bthreads
+                                   (if (seq unsatisfied-requesters)
+                                     (into (set unchanged-bthreads)
+                                           unsatisfied-requesters)
+                                     unchanged-bthreads)
                                    notification-requests
                                    :requests
-                                   triggered-event-type
+                                   triggered-request-key
                                    true)
      :blocks (update-event-index (get state :blocks)
                                  bthread->bid
@@ -375,7 +390,7 @@
                                  unchanged-bthreads
                                  notification-blocks
                                  :blocks
-                                 triggered-event-type
+                                 triggered-type
                                  false)}))
 
 (defn- assemble-next-state
