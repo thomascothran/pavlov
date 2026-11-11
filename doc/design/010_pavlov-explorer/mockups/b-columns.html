@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Pavlov Explorer · Candidate B · Columns</title>
+  <link rel="stylesheet" href="theme.css"/>
+  <style>
+    .crumbline { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-bottom: 14px; font-size: 12px; }
+    .crumbline button { padding: 3px 8px; background: var(--high); border: 1px solid var(--line); }
+    .crumbline button:hover { border-color: var(--cyan); }
+    .crumbline button.here { border-color: var(--cyan); box-shadow: 0 0 10px rgba(143,245,255,.4); }
+    .crumbline .ev-type { font-size: 12px; font-weight: 400; }
+    .cols { display: flex; gap: 0; overflow-x: auto; padding-bottom: 14px; align-items: stretch; }
+    .col { flex: none; width: 270px; padding: 0 12px; border-right: 1px dashed rgba(72,72,71,.6); }
+    .col.next { width: 360px; border-right: 0; background: linear-gradient(90deg, rgba(143,245,255,.05), transparent); padding-top: 8px; }
+    .col h4 { margin: 0 0 10px; font-family: var(--head); font-size: 10px; letter-spacing: .2em; text-transform: uppercase; color: var(--dim); }
+    .col.next h4 { color: var(--cyan); }
+    .opt { display: block; width: 100%; padding: 8px 10px; margin-bottom: 6px; background: var(--low); border-left: 2px solid var(--line); opacity: .7; }
+    .opt:hover { opacity: 1; border-left-color: var(--pink); background: var(--high); }
+    .opt .ev-type { font-size: 12px; font-weight: 400; }
+    .opt .ev-data { display: block; margin: 2px 0 0; font-size: 11px; }
+    .opt.taken { opacity: 1; background: var(--high); border-left-color: var(--cyan); position: relative; }
+    .opt.taken .ev-type { font-weight: 700; color: var(--cyan); }
+    .opt.taken::after { content: "▶"; position: absolute; right: -19px; top: 50%; transform: translateY(-50%); color: var(--cyan); font-size: 10px; }
+    .opt.taken.last { box-shadow: 0 0 16px rgba(143,245,255,.3); }
+    .then { margin-top: 8px; padding-top: 7px; border-top: 1px solid rgba(72,72,71,.5); font-size: 11px; color: var(--dim); }
+    .then .chip { font-size: 10px; color: var(--muted); }
+  </style>
+</head>
+<body>
+<div id="app"></div>
+<script src="data.js"></script>
+<script src="core.js"></script>
+<script>
+  PX.candidate = {
+    id: "b-",
+    render(m) {
+      const n = m.steps.length;
+      const crumbs = [`<button class="${n ? "" : "here"}" data-nav="${PX.navTo(m, 0)}"><span class="ev-type">START</span></button>`]
+        .concat(m.steps.map((s, k) => `<span class="dim">›</span><button class="${k === n - 1 ? "here" : ""}" data-nav="${PX.navTo(m, k + 1)}">${PX.eventHtml(s.edge)}</button>`)).join("");
+
+      const cols = m.steps.map((s, k) => `<div class="col"><h4>Step ${k + 1}${s.options.length > 1 ? ` · 1 of ${s.options.length}` : " · only choice"}</h4>
+        ${s.options.map((e, j) => j === s.i
+          ? `<button class="opt taken ${k === n - 1 ? "last" : ""}" data-nav="${PX.navTo(m, k + 1)}" title="Go back to this point">${PX.eventHtml(e)}</button>`
+          : `<button class="opt" data-nav="${PX.navTo(m, k, j)}" title="Switch to this instead">${PX.eventHtml(e)}</button>`).join("")}</div>`).join("");
+
+      const next = m.choices.map((e, j) => {
+        const after = PX.out(m.p, e.to);
+        const then = `<div class="then">then: ${after.length
+          ? after.map((a) => `<span class="chip">${PX.esc(a.type)}</span>`).join("")
+          : "nothing further"}</div>`;
+        return PX.choiceHtml(m, e, PX.navTo(m, n, j), n + ":" + j, then);
+      }).join("");
+
+      return `<div class="crumbline"><span class="label" style="margin-right:6px">Trace</span>${crumbs}</div>
+        ${PX.bannersHtml(m)}
+        <section class="panel bracket"><div class="cols" id="cols">${cols}
+          <div class="col next"><h4>${m.choices.length ? `What can happen next · ${m.choices.length}` : "What can happen next"}</h4>
+            ${next || `<p class="dim">No choices.</p>`}</div></div></section>
+        <p class="dim" style="font-size:12px">Each column is one step: the highlighted event is the one you took, the dimmed ones are what could have happened instead. Click a dimmed event to switch to it.</p>`;
+    },
+    after() { const c = document.getElementById("cols"); if (c) c.scrollLeft = c.scrollWidth; },
+  };
+  PX.start();
+</script>
+</body>
+</html>

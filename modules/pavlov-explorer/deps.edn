@@ -1,0 +1,10 @@
+{:paths ["src" "resources"]
+ :deps {tech.thomascothran/pavlov {:local/root "../pavlov"}
+        tech.thomascothran/pavlov-devtools {:local/root "../pavlov-devtools"}
+        info.sunng/ring-jetty9-adapter {:mvn/version "0.39.2"}
+        metosin/reitit-ring {:mvn/version "0.10.1"}
+        dev.onionpancakes/chassis {:mvn/version "1.0.365"}}
+ :aliases
+ {:build {:deps {io.github.clojure/tools.build {:mvn/version "0.9.6"}
+                 slipset/deps-deploy {:mvn/version "0.2.0"}}
+          :ns-default build}}}

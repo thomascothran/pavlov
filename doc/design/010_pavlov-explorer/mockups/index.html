@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Pavlov Explorer · UI candidates</title>
+  <link rel="stylesheet" href="theme.css"/>
+  <style>
+    table { border-collapse: collapse; width: 100%; margin-top: 28px; }
+    th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid rgba(72,72,71,.4); }
+    td a { margin-right: 12px; font-family: var(--head); font-size: 11px; letter-spacing: .1em; }
+  </style>
+</head>
+<body>
+<div class="catalogue">
+  <div class="label" style="color:var(--green)">■ Design step 1</div>
+  <h1>EXPLORER <span>UI CANDIDATES</span></h1>
+  <p class="muted">Three clickable mock-ups. They share everything except how much of the program's shape is on screen.
+    The data is real (generated from the model checker's states and transitions for three small programs) but the pages are static.</p>
+
+  <div class="cards">
+    <div class="card"><h3>A · Trail</h3><p>Local view only. The trace runs down the left with alternatives tucked under each step; the centre shows where you are and what can happen next.</p>
+      <a class="btn primary" style="align-self:flex-start;text-decoration:none" href="a-trail.html">Open</a></div>
+    <div class="card"><h3>B · Columns</h3><p>Local view plus one step of lookahead. One column per step shows what you took beside what you could have taken; each next choice previews what follows it.</p>
+      <a class="btn primary" style="align-self:flex-start;text-decoration:none" href="b-columns.html">Open</a></div>
+    <div class="card"><h3>C · Map</h3><p>Local view plus a map of the whole program. Your route and your next choices are lit up; click any point to go there.</p>
+      <a class="btn primary" style="align-self:flex-start;text-decoration:none" href="c-map.html">Open</a></div>
+  </div>
+
+  <table id="try"></table>
+</div>
+<script src="data.js"></script>
+<script>
+  const cases = window.EXPLORER_CASES.map((c) => [c.label, c.hash]);
+  document.getElementById("try").innerHTML = "<tr><th class='label'>Things to try</th><th></th></tr>" + cases.map(([what, h]) =>
+    `<tr><td>${what}</td><td><a href="a-trail.html${h}">A</a><a href="b-columns.html${h}">B</a><a href="c-map.html${h}">C</a></td></tr>`).join("") +
+    "<tr><td colspan='2' class='muted'>In every candidate: <b>Bthreads</b> (top right) opens the bthread view, a bthread opens to show its details and its code, <b>details</b> on a choice shows the whole event, and the browser's back and forward buttons work.</td></tr>";
+</script>
+</body>
+</html>
