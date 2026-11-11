@@ -28,6 +28,7 @@ Differences from existing behavioral programming libraries:
 | devtools | beta | [![Clojars Project](https://img.shields.io/clojars/v/tech.thomascothran/pavlov-devtools.svg)](https://clojars.org/tech.thomascothran/pavlov-devtools) |
 | skills | pre-alpha | [![Clojars Project](https://img.shields.io/clojars/v/tech.thomascothran/pavlov-skills.svg)](https://clojars.org/tech.thomascothran/pavlov-skills) |
 | web | pre-alpha | [![Clojars Project](https://img.shields.io/clojars/v/tech.thomascothran/pavlov-web.svg)](https://clojars.org/tech.thomascothran/pavlov-web) |
+| explorer | pre-alpha | not yet released |
 
 
 ## Getting Started
@@ -418,6 +419,14 @@ See the namespace `tech.thomascothran.pavlov.subscribers.tap` in the devtools mo
 It may seem that behavioral programming makes programs both harder to reason about and harder to visualize as they execute. In fact, the opposite is the case.
 
 The pavlov devtools module is provided to help you visualize and understand program execution.
+
+### Pavlov Explorer
+
+Pavlov Explorer is a browser tool for walking a behavioral program one event at a time. It is meant for people who do not read the code, such as product managers. At each step you see what can happen next, the trace that led there, and the alternatives you could have taken instead. You can go back, switch to an alternative, and open a view of what each bthread is requesting, waiting for and blocking, including its source code.
+
+![Walking through the Order fulfilment demo program in Pavlov Explorer](./doc/assets/pavlov-explorer-demo.gif)
+
+The explorer explores programs the same way the model checker does: you give it a catalogue of programs, each described by a model-check config. See the [explorer module README](./modules/pavlov-explorer/README.md) to get started.
 
 ### Pavlov Program Navigator (Portal Integration)
 

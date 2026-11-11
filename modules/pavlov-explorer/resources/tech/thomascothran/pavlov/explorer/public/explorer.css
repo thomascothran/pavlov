@@ -120,8 +120,6 @@ code, pre, .mono { font-family: var(--mono); }
 .choice:hover { background: #2f2f2f; transform: translateX(3px); box-shadow: 0 0 18px rgba(143, 245, 255, 0.15); }
 .choice .by { display: flex; gap: 6px; align-items: center; margin-top: 6px; font-size: 11px; color: var(--muted); flex-wrap: wrap; }
 .choice-wrap { position: relative; }
-.more { position: absolute; top: 10px; right: 10px; font-family: var(--head); font-size: 9px; letter-spacing: 0.15em; color: var(--dim); text-transform: uppercase; }
-.more:hover { color: var(--cyan); }
 .edn { margin: -4px 0 10px; padding: 8px 12px; background: #000; border-left: 2px solid var(--amber); font-family: var(--mono); font-size: 12px; color: var(--amber); white-space: pre; overflow-x: auto; }
 
 /* ---- banners ---- */
