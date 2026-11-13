@@ -6,7 +6,8 @@
             [nrepl.server :as nrepl]
             [shadow.cljs.devtools.server.nrepl :as shadow-nrepl]
             [shadow.cljs.devtools.server :as server]
-            [shadow.cljs.devtools.api :as shadow]))
+            [shadow.cljs.devtools.api :as shadow]
+            [tech.thomascothran.pavlov.explorer :as explorer]))
 
 (comment
   (require '[clojure.repl.deps :as d])
@@ -52,6 +53,25 @@
   (shadow-go!)
   (web-browser-only!)
   @(promise))
+
+(defn explorer-demo!
+  "Start Pavlov Explorer with the demo catalogue and return its address.
+
+  The demo lives in `modules/pavlov-explorer/test`, so the REPL needs the
+  `:test` alias."
+  ([] (explorer-demo! {}))
+  ([opts]
+   (explorer/start!
+    (merge {:catalogue (requiring-resolve
+                        'tech.thomascothran.pavlov.explorer.demo/catalogue)}
+           opts))))
+
+(comment
+  ;; Requires the :test alias, e.g. `clj -M:dev:test`
+  (explorer-demo!) ;; => "http://localhost:4990/"
+  (explorer-demo! {:port 4991})
+  (explorer/reload!)
+  (explorer/stop!))
 
 (defn run-plain-repl
   []
