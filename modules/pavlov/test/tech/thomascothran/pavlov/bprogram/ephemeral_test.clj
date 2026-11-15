@@ -480,3 +480,84 @@
         (is (= true (deref completed 1000 :timeout)) (str "Replies to " requests))
         (is (= reply-types @seen))
         (finally (bp/kill! program))))))
+
+;; External events (issue #24): an event submitted from outside the program is
+;; requested by a low-priority bthread, so it is selected like any other
+;; request. A blocked external event waits until it is unblocked.
+
+(defn- run-external-events!
+  "Submit `events` to a program made of `bthreads`, wait until `last-event` is
+  selected, stop the program, and return the events seen by a subscriber."
+  [bthreads events last-event]
+  (let [!seen (atom [])
+        done (promise)
+        program (bpe/make-program!
+                 bthreads
+                 {:subscribers {:log (fn [e _]
+                                       (swap! !seen conj e)
+                                       (when (= last-event e)
+                                         (deliver done true))
+                                       nil)}})]
+    (try
+      (doseq [e events]
+        (bp/submit-event! program e))
+      (deref done 1000 :timeout)
+      @(bp/stop! program)
+      (vec (butlast @!seen))
+      (finally (bp/kill! program)))))
+
+(deftest blocked-external-event-waits-until-unblocked
+  (is (= [:unblock :x :after-x]
+         (run-external-events!
+          [[:block-x-until-unblock (b/bids [{:wait-on #{:unblock}
+                                             :block #{:x}}])]
+           [:waiter (b/bids [{:wait-on #{:x}}
+                             {:request #{:after-x}}])]]
+          [:x :unblock]
+          :after-x))))
+
+(deftest pending-external-events-keep-submission-order-and-duplicates
+  (is (= [:unblock :b :a :b]
+         (run-external-events!
+          [[:block-until-unblock (b/bids [{:wait-on #{:unblock}
+                                           :block #{:a :b}}])]]
+          [:b :a :b :unblock]
+          :b))
+      "Wait for the second :b, which proves the duplicate was not lost"))
+
+(deftest external-events-have-lower-priority-than-internal-requests
+  (is (= [:unblock :x1 :internal :x2]
+         (run-external-events!
+          [[:block-until-unblock (b/bids [{:wait-on #{:unblock}
+                                           :block #{:x1 :x2}}])]
+           [:after-x1 (b/bids [{:wait-on #{:x1}}
+                               {:request #{:internal}}])]]
+          [:x1 :x2 :unblock]
+          :x2))))
+
+(deftest blocked-subscriber-event-waits-until-unblocked
+  (let [!seen (atom [])
+        done (promise)
+        program (bpe/make-program!
+                 [[:block-reply-until-unblock
+                   (b/bids [{:wait-on #{:unblock} :block #{:reply}}])]
+                  [:start (b/bids [{:request #{:start}}])]]
+                 {:subscribers {:reply (fn [e _]
+                                         (when (= :start e) {:event :reply}))
+                                :log (fn [e _]
+                                       (swap! !seen conj e)
+                                       (when (= :reply e) (deliver done true))
+                                       nil)}})]
+    (try
+      (Thread/sleep 50)
+      (is (= [:start] @!seen) ":reply is blocked, so it must not be selected")
+      (bp/submit-event! program :unblock)
+      (is (= true (deref done 1000 :timeout)))
+      (is (= [:start :unblock :reply] @!seen))
+      (finally (bp/kill! program)))))
+
+(deftest stop-cannot-be-blocked
+  (let [program (bpe/make-program!
+                 {:block-terminate {:block #{:pavlov/terminate}}})]
+    (is (= {:type :pavlov/terminate :terminal true}
+           (deref (bp/stop! program) 1000 :timeout)))))

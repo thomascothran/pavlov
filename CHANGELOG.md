@@ -3,7 +3,39 @@
 Versions are `MAJOR.MINOR.COMMITS`, where `COMMITS` is the repository's
 commit count at release time. All modules share the same version.
 
-## 5.0 (unreleased)
+## 5.1 (unreleased)
+
+### Breaking change: external events can be blocked (#24)
+
+Previously, an event given to `submit-event!`, or returned by a subscriber as
+`{:event ...}` (including IO results), was processed immediately, even if a
+bthread blocked it.
+
+Now `make-program!` and `execute!` add a bthread at the lowest priority (just
+above `execute!`'s deadlock detector) that requests each submitted event until
+it is selected. External events therefore go through normal event selection:
+
+- A blocked external event waits, and is selected once it is unblocked.
+- Internal requests that can be selected go before external events.
+- Pending external events are requested in submission order. A blocked event
+  does not hold back the ones behind it, and a duplicate submission is
+  selected once per submission.
+- `stop!` still cannot be blocked.
+
+#### What can break
+
+1. **Timing.** An external event no longer happens as soon as it is
+   submitted if an internal request can be selected first.
+2. **Map bthreads in `make-program!`** now run in the map's order, as they
+   already did in `execute!`, because the external events bthread needs a
+   fixed position.
+3. **`bthread->bids`** (and `subscribers/tap`) include the
+   `:tech.thomascothran.pavlov.bprogram.ephemeral/external-events` bthread.
+
+Subscribers do not see the `:pavlov/external-event-submitted` event that
+records a submission, only the submitted event once it is selected.
+
+## 5.0
 
 ### Breaking change: a request is satisfied only by an equal event
 

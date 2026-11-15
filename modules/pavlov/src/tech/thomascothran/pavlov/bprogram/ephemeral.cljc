@@ -65,6 +65,13 @@
    ;; => {:type :done, :terminal true}
    ```
 
+   ## External events
+
+   An event submitted with `submit-event!`, or returned by a subscriber as
+   `{:event ...}` (including IO results), is requested by a bthread at the
+   lowest priority (just above `execute!`'s deadlock detector). It is
+   selected like any other request
+
    ## Requested event priority
 
    Within a bid, the request set can either be an ordered sequence or
@@ -99,6 +106,49 @@
 
 (def ^:private kill-signal
   ::kill-signal)
+
+;; =================|
+;; external events  |
+;; =================|
+
+(def external-event-submitted
+  "Type of the event that carries an externally submitted event, under
+  `:event`, to the external events bthread."
+  :pavlov/external-event-submitted)
+
+(defn- remove-first
+  [v x]
+  (let [i (reduce-kv (fn [_ i y] (when (= x y) (reduced i))) nil v)]
+    (if i
+      (into (subvec v 0 i) (subvec v (inc i)))
+      v)))
+
+(defn- make-external-events-bthread
+  "Requests every externally submitted event until it is selected.
+
+  Pending events are kept in a vector, so they are requested in submission
+  order, a blocked event does not hold back the ones behind it, and a
+  duplicate submission is selected once per submission."
+  []
+  (b/step
+   (fn [pending event]
+     (let [pending' (cond (nil? event)
+                          []
+
+                          (= external-event-submitted (event/type event))
+                          (conj pending (get event :event))
+
+                          :else
+                          (remove-first pending event))]
+       [pending'
+        {:wait-on #{external-event-submitted}
+         :request pending'}]))))
+
+(defn- with-external-events
+  "Add the external events bthread at the lowest priority."
+  [named-bthreads]
+  (conj (into [] named-bthreads)
+        [::external-events (make-external-events-bthread)]))
 
 #?(:clj
    ;; Shared daemon scheduler for execute! :kill-after timeouts so repeated runs
@@ -163,7 +213,8 @@
             recur? (and next-event (not terminate?))
 
             notification-result
-            (pub/notify! publisher event' bprogram)
+            (when-not (= external-event-submitted (event/type event'))
+              (pub/notify! publisher event' bprogram))
 
             subscriber-requested-events
             (into subscriber-requested-events'
@@ -245,6 +296,47 @@
   #?(:clj (get program-opts :stopped)
      :cljs (get-in program-opts [:stopped :promise])))
 
+(defn- make-program*
+  [named-bthreads opts]
+  (let [initial-state (state/init named-bthreads)
+        !state (atom initial-state)
+        in-queue (get opts :in-queue #?(:clj (LinkedBlockingQueue.)))
+        subscribers (get opts :subscribers {})
+        publisher (get opts :publisher
+                       (pub-default/make-publisher! {:subscribers subscribers}))
+
+        stopped #?(:clj (promise)
+                   :cljs (deferred-promise))
+
+        program-opts
+        {:!state !state
+         :in-queue in-queue
+         :stopped stopped
+         :killed #?(:clj (promise)
+                    :cljs (deferred-promise))
+         :publisher publisher}
+
+        bprogram (reify
+                   bprogram/BProgram
+                   (stop! [this] (stop! this program-opts))
+                   (kill! [_] (kill! program-opts))
+                   (stopped [_] stopped)
+                   (subscribe! [_ k f]
+                     (pub/subscribe! publisher k f))
+                   (submit-event! [this event]
+                     (submit-event! this program-opts
+                                    {:type external-event-submitted
+                                     :event event}))
+
+                   bprogram/BProgramIntrospectable
+                   (bthread->bids [_]
+                     (get @!state :bthread->bid)))]
+
+    #?(:clj (future (run-event-loop! bprogram program-opts))
+       :cljs (when-let [next-event (get initial-state :next-event)]
+               (submit-event! bprogram program-opts next-event)))
+    bprogram))
+
 (defn make-program!
   "Create a long-running behavioral program from bthreads.
 
@@ -265,7 +357,8 @@
     + `:in-queue` - custom input queue (advanced, CLJ only)
 
   Returns the bprogram, which implements:
-  - `(bprogram/submit-event! program event)` - send an external event
+  - `(bprogram/submit-event! program event)` - send an external event (see
+    \"External events\" in the namespace docstring)
   - `(bprogram/subscribe! program key f)` - add a subscriber
   - `(bprogram/stop! program)` - gracefully terminate, returns promise
   - `(bprogram/kill! program)` - force terminate, returns promise
@@ -296,42 +389,7 @@
   ```"
   ([named-bthreads] (make-program! named-bthreads nil))
   ([named-bthreads opts]
-   (let [initial-state (state/init named-bthreads)
-         !state (atom initial-state)
-         in-queue (get opts :in-queue #?(:clj (LinkedBlockingQueue.)))
-         subscribers (get opts :subscribers {})
-         publisher (get opts :publisher
-                        (pub-default/make-publisher! {:subscribers subscribers}))
-
-         stopped #?(:clj (promise)
-                    :cljs (deferred-promise))
-
-         program-opts
-         {:!state !state
-          :in-queue in-queue
-          :stopped stopped
-          :killed #?(:clj (promise)
-                     :cljs (deferred-promise))
-          :publisher publisher}
-
-         bprogram (reify
-                    bprogram/BProgram
-                    (stop! [this] (stop! this program-opts))
-                    (kill! [_] (kill! program-opts))
-                    (stopped [_] stopped)
-                    (subscribe! [_ k f]
-                      (pub/subscribe! publisher k f))
-                    (submit-event! [this event]
-                      (submit-event! this program-opts event))
-
-                    bprogram/BProgramIntrospectable
-                    (bthread->bids [_]
-                      (get @!state :bthread->bid)))]
-
-     #?(:clj (future (run-event-loop! bprogram program-opts))
-        :cljs (when-let [next-event (get initial-state :next-event)]
-                (submit-event! bprogram program-opts next-event)))
-     bprogram)))
+   (make-program* (with-external-events named-bthreads) opts)))
 
 (defn execute!
   "Execute a behavioral program and return a promise of the terminal event.
@@ -405,11 +463,14 @@
            requested-event-bthread
            (conj [::requested-event requested-event-bthread])
 
+           true
+           with-external-events
+
            (get opts :terminate-on-deadlock true)
            (conj [::deadlock {:request #{{:type ::deadlock
                                           :terminal true}}}]))
 
-         bprogram (make-program! bthreads' opts)
+         bprogram (make-program* bthreads' opts)
          stopped #?(:clj (bprogram/stopped bprogram)
                     :cljs (:promise (bprogram/stopped bprogram)))]
      (when kill-after
