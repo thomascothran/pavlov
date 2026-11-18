@@ -111,10 +111,15 @@
 ;; external events  |
 ;; =================|
 
-(def external-event-submitted
-  "Type of the event that carries an externally submitted event, under
-  `:event`, to the external events bthread."
-  :pavlov/external-event-submitted)
+(def external-events-submitted
+  "Type of the event that carries externally submitted events, in order under
+  `:events`, to the external events bthread."
+  :pavlov/external-events-submitted)
+
+(defn- external-events-submission
+  [events]
+  {:type external-events-submitted
+   :events events})
 
 (defn- remove-first
   [v x]
@@ -135,13 +140,13 @@
      (let [pending' (cond (nil? event)
                           []
 
-                          (= external-event-submitted (event/type event))
-                          (conj pending (get event :event))
+                          (= external-events-submitted (event/type event))
+                          (into pending (get event :events))
 
                           :else
                           (remove-first pending event))]
        [pending'
-        {:wait-on #{external-event-submitted}
+        {:wait-on #{external-events-submitted}
          :request pending'}]))))
 
 (defn- with-external-events
@@ -201,23 +206,19 @@
 
 (defn- handle-event!
   [bprogram program-opts event]
-  (loop [event' event
-         subscriber-requested-events' []]
+  (loop [event' event]
     (when-not (stopped? program-opts)
       (let [!state (get program-opts :!state)
             publisher (get program-opts :publisher)
-            state @!state
-            next-state (reset! !state (state/step state event'))
-            next-event (get next-state :next-event)
+            _ (swap! !state state/step event')
             terminate? (event/terminal? event')
-            recur? (and next-event (not terminate?))
 
             notification-result
-            (when-not (= external-event-submitted (event/type event'))
+            (when-not (= external-events-submitted (event/type event'))
               (pub/notify! publisher event' bprogram))
 
-            subscriber-requested-events
-            (into subscriber-requested-events'
+            replies
+            (into []
                   (comp (map :event)
                         (filter identity))
                   notification-result)]
@@ -225,15 +226,18 @@
         (cond (stopped? program-opts)
               nil
 
-              recur?
-              (recur next-event subscriber-requested-events)
-
               terminate?
               (set-stopped! program-opts event')
 
               :else
-              (doseq [requested-event subscriber-requested-events]
-                (bprogram/submit-event! bprogram requested-event)))))))
+              ;; Hand the replies over before the next event is selected,
+              ;; so they are requested ahead of the deadlock detector.
+              (let [next-state (if (seq replies)
+                                 (swap! !state state/step
+                                        (external-events-submission replies))
+                                 @!state)]
+                (when-let [next-event (get next-state :next-event)]
+                  (recur next-event))))))))
 
 #?(:clj
    (defn- submit-event!
@@ -325,8 +329,7 @@
                      (pub/subscribe! publisher k f))
                    (submit-event! [this event]
                      (submit-event! this program-opts
-                                    {:type external-event-submitted
-                                     :event event}))
+                                    (external-events-submission [event])))
 
                    bprogram/BProgramIntrospectable
                    (bthread->bids [_]

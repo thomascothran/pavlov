@@ -72,3 +72,95 @@
                 (fn [result]
                   (is (= terminal-event result))
                   (done)))))))
+
+;; Subscriber replies under the deadlock detector: an event a subscriber
+;; returns as `{:event ...}` is requested before the next event is selected,
+;; so `::deadlock` cannot pre-empt it unless it is blocked.
+
+(defn- run-with-reply-subscriber
+  "Run `bthreads` with `execute!` and a subscriber that replies to each event in
+  `replies` (a map of event to reply). Calls `check` with the terminal event and
+  the events the subscriber saw."
+  [bthreads replies check]
+  (let [!seen (atom [])
+        stopped (bpe/execute!
+                 bthreads
+                 {:kill-after 1000
+                  :subscribers
+                  {:reply (fn [e _]
+                            (swap! !seen conj e)
+                            (when-let [r (get replies e)]
+                              {:event r}))}})]
+    #?(:clj (check (deref stopped 2000 ::timeout) @!seen)
+       :cljs (async done
+               (.then stopped
+                      (fn [result]
+                        (check result @!seen)
+                        (done)))))))
+
+(deftest execute-selects-subscriber-reply-before-deadlock
+  (let [reply {:type :reply :terminal true}]
+    (run-with-reply-subscriber
+     [[:start (b/bids [{:request #{:start}}])]]
+     {:start reply}
+     (fn [result _]
+       (is (= reply result))))))
+
+(deftest execute-selects-subscriber-replies-after-internal-requests-in-order
+  (run-with-reply-subscriber
+   [[:producer (b/bids [{:request #{:start}}
+                        {:request #{:middle}}
+                        {:request #{:last}}])]]
+   {:start :start-reply
+    :middle :middle-reply
+    :last :last-reply}
+   (fn [result seen]
+     (is (= deadlock-event result))
+     (is (= [:start :middle :last :start-reply :middle-reply :last-reply
+             deadlock-event]
+            seen)))))
+
+(deftest execute-deadlocks-when-subscriber-reply-is-blocked
+  (run-with-reply-subscriber
+   [[:block-reply {:block #{:reply}}]
+    [:start (b/bids [{:request #{:start}}])]]
+   {:start :reply}
+   (fn [result seen]
+     (is (= deadlock-event result))
+     (is (= [:start deadlock-event] seen)))))
+
+(deftest execute-hands-over-all-replies-to-an-event-in-one-submission
+  (let [submitted :pavlov/external-events-submitted
+        ;; Records each submission it sees, and ends the program with them
+        ;; once the last reply is selected.
+        recorder (b/step
+                  (fn [submissions e]
+                    (cond (nil? e)
+                          [[] {:wait-on #{submitted :r2}}]
+
+                          (= :r2 e)
+                          [submissions {:request #{{:type :done
+                                                    :terminal true
+                                                    :submissions submissions}}}]
+
+                          :else
+                          [(conj submissions e) {:wait-on #{submitted :r2}}])))
+        !seen (atom [])
+        stopped (bpe/execute!
+                 [[:recorder recorder]
+                  [:start (b/bids [{:request #{:start}}])]]
+                 {:kill-after 1000
+                  :subscribers
+                  {:first (fn [e _] (when (= :start e) {:event :r1}))
+                   :second (fn [e _] (when (= :start e) {:event :r2}))
+                   :log (fn [e _] (swap! !seen conj e) nil)}})
+        check (fn [result]
+                (is (= [{:type submitted :events [:r1 :r2]}]
+                       (:submissions result)))
+                (is (= [:start :r1 :r2] (pop @!seen))))]
+    #?(:clj (check (deref stopped 2000 ::timeout))
+       :cljs (async done
+               (.then stopped
+                      (fn [result]
+                        (check result)
+                        (done)))))))

@@ -32,8 +32,24 @@ it is selected. External events therefore go through normal event selection:
 3. **`bthread->bids`** (and `subscribers/tap`) include the
    `:tech.thomascothran.pavlov.bprogram.ephemeral/external-events` bthread.
 
-Subscribers do not see the `:pavlov/external-event-submitted` event that
-records a submission, only the submitted event once it is selected.
+Subscribers do not see the `:pavlov/external-events-submitted` event that
+records a submission, only each submitted event once it is selected.
+
+### Fix: `execute!` no longer drops subscriber replies at deadlock
+
+Previously, an event a subscriber returned as `{:event ...}` was held until no
+event could be selected. In `execute!` the deadlock detector can always be
+selected, so the program ended with `::deadlock` and the reply was dropped.
+
+Now the replies to an event are handed to the external events bthread, in one
+`:pavlov/external-events-submitted` event, before the next event is selected. It is requested from then on, so it goes after
+selectable internal requests but before the deadlock detector. A blocked reply
+still waits, and `execute!` deadlocks if nothing unblocks it.
+
+Because a reply is now handed over at once, it goes before events submitted
+with `submit-event!` that are still waiting in the input queue. Asynchronous
+replies, such as IO results sent through `on-complete!`, still arrive through
+`submit-event!`. Use `:terminate-on-deadlock false` to wait for them.
 
 ## 5.0
 
